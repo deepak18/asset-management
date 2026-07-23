@@ -20,6 +20,7 @@ To prevent context window bloat and code regressions, the coding agent MUST stri
    - **Surface trade-offs and alternatives.** When a choice was made (FIFO vs. LIFO, one module vs. a package split, Newton–Raphson vs. bisection), state what was chosen and why, and what the alternative would cost.
    - **Answer conceptual questions inline.** Treat "why is this named this?" / "shouldn't we do X?" as first-class work, not a distraction — clear up misconceptions explicitly.
    - **Keep explanations proportional.** Deep on new/unfamiliar concepts; brief on routine repetition. Never dump prose in place of doing the work — explanation accompanies the implementation, it does not replace it.
+7. **Logical, One-Line Conventional Commits:** Work is committed in small, logically-scoped slices — never one monolithic "did everything" commit. Each commit is independently reviewable and leaves the tree in a coherent, test-green state, and ships executable logic together with its tests (per rule 5). Messages are a **single line** following Conventional Commits (`type(scope): summary`, imperative mood, lower-case, no trailing period). Allowed `type`s: `feat`, `fix`, `docs`, `chore`, `test`, `refactor`, `perf`, `build`, `ci`. Order commits by dependency (tooling → shared seams → schemas → logic → docs) so each builds on a working state. Avoid committing unrelated line-ending/whitespace churn.
 
 ---
 
