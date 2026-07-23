@@ -41,15 +41,18 @@ backend/
 ├── migrations/                # ⬜ Alembic versioned migrations
 │   └── versions/
 ├── tests/                     # 🟡 pytest suites — mirrors app/ layout one-to-one (see AGENTS.md §11)
-│   ├── conftest.py            # ✅ Shared fixtures (injected FX rate tables; fake providers later)
+│   ├── conftest.py            # ✅ Shared fixtures (FX rate tables + in-memory async SQLite session)
 │   ├── factories/             # ⬜ Fixture builders (portfolios, transactions, filings, documents)
 │   ├── unit/                  # 🟡 Pure/isolated tests — all provider boundaries mocked
-│   │   ├── core/             # ✅ currency (FX normalization) edge cases
-│   │   │   └── test_currency.py   # ✅ base/identity, dated rates, missing-rate, cross-currency
+│   │   ├── core/             # ✅ currency (FX normalization) + config edge cases
+│   │   │   ├── test_currency.py   # ✅ base/identity, dated rates, missing-rate, cross-currency
+│   │   │   └── test_config.py     # ✅ defaults, CSV currencies, env override + cache_clear
 │   │   ├── portfolio/         # ✅ calculators (XIRR, P&L, allocation) — exhaustive edge cases
 │   │   │   ├── test_allocation.py # ✅ weights by ticker/sector/industry, empty/zero-total
 │   │   │   ├── test_cost_basis.py # ✅ FIFO realized/unrealized, splits, dividends, fees, mixed-ccy
 │   │   │   └── test_xirr.py       # ✅ pinned XIRR (10%/20%/neg, Excel ref), mixed-ccy, error paths
+│   │   ├── providers/         # ✅ SQLAlchemy portfolio provider round-trip (in-memory SQLite)
+│   │   │   └── test_portfolio_provider.py # ✅ ORM→schema mapping, exact Decimals, feeds calculators
 │   │   ├── marketdata/        # ⬜ cache hit/miss, TTL/stale fallback, throttling, as_of stamping
 │   │   ├── research/          # ⬜ competitor matrix assembly, news linking (mocked providers)
 │   │   ├── documents/         # ⬜ PDF/TXT/MD parsing + citation anchors (mocked embeddings)
@@ -60,8 +63,8 @@ backend/
 └── app/
     ├── main.py                # ⬜ FastAPI app factory, router registration, lifespan hooks
     ├── core/                  # 🟡 Cross-cutting infra (NOT business logic)
-    │   ├── config.py          # ⬜ Pydantic Settings — loads env, no secrets in code
-    │   ├── database.py        # ⬜ Async engine, session factory, pgvector setup
+    │   ├── config.py          # ✅ Pydantic Settings — env-driven (base/supported currency, DB URL, AI provider)
+    │   ├── database.py        # ✅ Async engine + session factory + declarative Base (pgvector setup later)
     │   ├── logging.py         # ⬜ Structured logging config
     │   ├── security.py        # ⬜ Single-user local gate (optional API_ACCESS_KEY) — no multi-tenant
     │   ├── currency.py        # ✅ FX normalization seam (Money/FxRate/FxRateTable) — USD now, INR-ready
@@ -71,17 +74,17 @@ backend/
     │   └── v1/
     │       ├── router.py      # ⬜ Aggregates all v1 routes
     │       └── routes/        # ⬜ portfolio.py, research.py, documents.py, marketdata.py, workspace.py
-    ├── providers/             # ⬜ Strongly-typed abstraction interfaces (§2) — the ONLY I/O boundary
-    │   ├── base.py            # ⬜ Protocol/ABC base definitions
-    │   ├── portfolio_provider.py
+    ├── providers/             # 🟡 Strongly-typed abstraction interfaces (§2) — the ONLY I/O boundary
+    │   ├── base.py            # ✅ PortfolioProvider Protocol (structural typing)
+    │   ├── portfolio_provider.py  # ✅ SqlAlchemyPortfolioProvider — ORM rows → typed domain objects
     │   ├── marketdata_provider.py
     │   ├── competitor_matrix_engine.py
     │   ├── sec_provider.py
     │   ├── news_streaming_engine.py
     │   └── document_provider.py
     ├── portfolio/             # 🟡 Ledger, allocation weights, investor returns (XIRR), valuations (pure Python)
-    │   ├── models.py          # ⬜ SQLAlchemy 2.0 mapped: Portfolio, Holding, Transaction, Cash (currency-aware)
-    │   ├── schemas.py         # ✅ Pydantic typed inputs/outputs (Transaction, CashFlow, results) — no dict/Any
+    │   ├── models.py          # ✅ SQLAlchemy 2.0 mapped: Portfolio, Holding, Transaction, Cash (exact Decimal, currency-aware)
+    │   ├── schemas.py         # ✅ Pydantic typed inputs/outputs (Transaction, CashFlow, PortfolioSummary, HoldingInfo) — no dict/Any
     │   ├── service.py         # ⬜ Orchestration for the portfolio domain
     │   └── calculators.py     # ✅ Pure math: FIFO cost-basis P&L, realized/unrealized, allocation, XIRR (unit-tested)
     ├── research/              # ⬜ Competitor matrix (manual peer seed), news streaming, evaluation workspaces
