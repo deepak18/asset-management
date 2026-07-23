@@ -1,0 +1,17 @@
+# Enforce LF line endings for all text files across every platform.
+# `text=auto` lets Git detect text vs binary; `eol=lf` checks text out as LF
+# on Windows too, so the working tree matches the repo and no CRLF creeps back
+# (core.autocrlf is false in this repo, so this file is the single source of truth).
+* text=auto eol=lf
+
+# Explicit binary types: never touch their bytes / never normalize EOL.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.gguf binary
+*.woff binary
+*.woff2 binary
+
