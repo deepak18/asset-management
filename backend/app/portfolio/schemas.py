@@ -1,4 +1,4 @@
-"""Typed inputs/outputs for the portfolio calculators (AGENTS.md §8).
+"""Typed inputs/outputs for the portfolio calculators.
 
 No ``dict`` or ``Any`` structural payloads: every transfer object is a Pydantic
 model or an ``Enum``. These are pure data carriers — they contain no business
@@ -74,6 +74,30 @@ class PositionValue(BaseModel):
 
     ticker: str = Field(min_length=1)
     market_value: Decimal
+    sector: str | None = None
+    industry: str | None = None
+
+
+class PortfolioSummary(BaseModel):
+    """Lightweight portfolio identity + reporting base currency (provider output)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: int
+    name: str
+    base_currency: str = Field(min_length=3, max_length=3)
+
+
+class HoldingInfo(BaseModel):
+    """A tracked security's classification metadata (provider output).
+
+    Grouping keys for allocation roll-ups; the market value is joined in later once
+    the market-data layer (§1.3) can price the position.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    ticker: str = Field(min_length=1)
     sector: str | None = None
     industry: str | None = None
 
