@@ -18,7 +18,7 @@ asset-management/
 ├── .gitignore                 # ✅ Ignore rules (secrets, envs, build artifacts)
 ├── .env.example               # ✅ Documented template of ALL environment variables
 ├── docker-compose.yml         # ⬜ Local orchestration: api, db (pgvector), mcp-gateway, frontend, ollama
-├── backend/                   # ⬜ Python FastAPI service (see below)
+├── backend/                   # 🟡 Python FastAPI service — deterministic portfolio core built (see below)
 ├── frontend/                  # ⬜ Next.js app (see below)
 ├── mcp/                       # ⬜ MCP server orchestration + configs (see below)
 └── infra/                     # ⬜ Deployment manifests (compose overrides, k8s, ECS)
@@ -33,17 +33,23 @@ Cross-module access happens **only** through the `providers/` interfaces (§2).
 
 ```
 backend/
-├── pyproject.toml             # ⬜ Deps + tooling (ruff, mypy, pytest, pytest-asyncio, pytest-cov) — managed via uv
-├── uv.lock                    # ⬜ uv-locked dependency graph
+├── pyproject.toml             # ✅ Deps + tooling (ruff, mypy, pytest, pytest-asyncio, pytest-cov) — managed via uv
+├── uv.lock                    # ✅ uv-locked dependency graph
+├── README.md                  # ✅ Backend dev/runbook (uv sync, pytest commands)
 ├── alembic.ini                # ⬜ Alembic migration config
 ├── Dockerfile                 # ⬜ API container image
 ├── migrations/                # ⬜ Alembic versioned migrations
 │   └── versions/
-├── tests/                     # ⬜ pytest suites — mirrors app/ layout one-to-one (see AGENTS.md §11)
-│   ├── conftest.py            # ⬜ Shared fixtures (test db/session, fake providers, app client)
+├── tests/                     # 🟡 pytest suites — mirrors app/ layout one-to-one (see AGENTS.md §11)
+│   ├── conftest.py            # ✅ Shared fixtures (injected FX rate tables; fake providers later)
 │   ├── factories/             # ⬜ Fixture builders (portfolios, transactions, filings, documents)
-│   ├── unit/                  # ⬜ Pure/isolated tests — all provider boundaries mocked
-│   │   ├── portfolio/         # ⬜ calculators (XIRR, P&L, allocation), service, currency edge cases
+│   ├── unit/                  # 🟡 Pure/isolated tests — all provider boundaries mocked
+│   │   ├── core/             # ✅ currency (FX normalization) edge cases
+│   │   │   └── test_currency.py   # ✅ base/identity, dated rates, missing-rate, cross-currency
+│   │   ├── portfolio/         # ✅ calculators (XIRR, P&L, allocation) — exhaustive edge cases
+│   │   │   ├── test_allocation.py # ✅ weights by ticker/sector/industry, empty/zero-total
+│   │   │   ├── test_cost_basis.py # ✅ FIFO realized/unrealized, splits, dividends, fees, mixed-ccy
+│   │   │   └── test_xirr.py       # ✅ pinned XIRR (10%/20%/neg, Excel ref), mixed-ccy, error paths
 │   │   ├── marketdata/        # ⬜ cache hit/miss, TTL/stale fallback, throttling, as_of stamping
 │   │   ├── research/          # ⬜ competitor matrix assembly, news linking (mocked providers)
 │   │   ├── documents/         # ⬜ PDF/TXT/MD parsing + citation anchors (mocked embeddings)
@@ -53,12 +59,12 @@ backend/
 │   └── integration/           # ⬜ @pytest.mark.integration — real Postgres/pgvector + MCP wiring (opt-in)
 └── app/
     ├── main.py                # ⬜ FastAPI app factory, router registration, lifespan hooks
-    ├── core/                  # ⬜ Cross-cutting infra (NOT business logic)
+    ├── core/                  # 🟡 Cross-cutting infra (NOT business logic)
     │   ├── config.py          # ⬜ Pydantic Settings — loads env, no secrets in code
     │   ├── database.py        # ⬜ Async engine, session factory, pgvector setup
     │   ├── logging.py         # ⬜ Structured logging config
     │   ├── security.py        # ⬜ Single-user local gate (optional API_ACCESS_KEY) — no multi-tenant
-    │   ├── currency.py        # ⬜ FX normalization helper (USD base now, INR next)
+    │   ├── currency.py        # ✅ FX normalization seam (Money/FxRate/FxRateTable) — USD now, INR-ready
     │   └── exceptions.py      # ⬜ App-wide error types + handlers
     ├── api/                   # ⬜ HTTP layer only (thin controllers, no business logic)
     │   ├── deps.py            # ⬜ Shared FastAPI dependencies (db session, auth, providers)
@@ -73,11 +79,11 @@ backend/
     │   ├── sec_provider.py
     │   ├── news_streaming_engine.py
     │   └── document_provider.py
-    ├── portfolio/             # ⬜ Ledger, allocation weights, investor returns (XIRR), valuations (pure Python)
-    │   ├── models.py          # SQLAlchemy 2.0 mapped: Portfolio, Holding, Transaction, Cash (currency-aware)
-    │   ├── schemas.py         # Pydantic request/response models
-    │   ├── service.py         # Orchestration for the portfolio domain
-    │   └── calculators.py     # Pure, deterministic math: cost-basis P&L, realized/unrealized, XIRR (unit-tested)
+    ├── portfolio/             # 🟡 Ledger, allocation weights, investor returns (XIRR), valuations (pure Python)
+    │   ├── models.py          # ⬜ SQLAlchemy 2.0 mapped: Portfolio, Holding, Transaction, Cash (currency-aware)
+    │   ├── schemas.py         # ✅ Pydantic typed inputs/outputs (Transaction, CashFlow, results) — no dict/Any
+    │   ├── service.py         # ⬜ Orchestration for the portfolio domain
+    │   └── calculators.py     # ✅ Pure math: FIFO cost-basis P&L, realized/unrealized, allocation, XIRR (unit-tested)
     ├── research/              # ⬜ Competitor matrix (manual peer seed), news streaming, evaluation workspaces
     ├── documents/             # ⬜ Ingestion pipeline, PDF/TXT/MD parsing, pgvector embeddings
     ├── marketdata/            # ⬜ Pricing + fundamental normalization + read-through Postgres cache (free-tier)
@@ -164,5 +170,3 @@ mcp/
   - Run: `uv run pytest` · integration: `uv run pytest -m integration` · coverage: `uv run pytest --cov=app`.
 - **Frontend:** Vitest + React Testing Library, specs co-located under `src/__tests__/`. Run: `npm run test`.
 - **What to assert for AI code:** structured output schemas, tool routing, LangGraph state transitions, and citation presence/shape — never exact LLM wording.
-
-
