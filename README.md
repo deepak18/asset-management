@@ -2,8 +2,8 @@
 
 Local AI-powered **Investment Research Platform** — an analytical terminal (think Bloomberg / Koyfin / NotebookLM), **not** a chatbot. Runs locally on Ollama, with the frontend, backend API, and MCP servers deployable independently.
 
-> 📐 **Architecture rules:** see [`AGENTS.md`](./AGENTS.md)
-> 🗺️ **Build roadmap:** see [`PLAN.md`](./PLAN.md)
+> 📐 **Architecture rules:** see [`AGENTS.md`](./AGENTS.md) \
+> 🗺️ **Build roadmap:** see [`PLAN.md`](./PLAN.md) \
 > 🧭 **Directory source of truth:** see [`STRUCTURE.md`](./STRUCTURE.md) — read before writing code.
 
 ---
