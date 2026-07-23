@@ -15,6 +15,11 @@ To prevent context window bloat and code regressions, the coding agent MUST stri
 3. **Incremental Maintenance:** Immediately after creating or altering any file or folder, the agent's final task in that turn is to update `STRUCTURE.md` to reflect the changes precisely.
 4. **Context Isolation:** The agent must refuse to generate backend core code and frontend UI components in the same chat turn. Keep workflows strictly isolated.
 5. **Tests Are Not Optional:** Every turn that adds or changes executable logic MUST include the corresponding tests in the *same* turn (`pytest` for backend, the frontend test runner for UI). Code delivered without tests is considered incomplete. New files/folders under `tests/` must be reflected in `STRUCTURE.md` per rule 3.
+6. **Explain-As-You-Build (Pedagogical Mandate):** This project is a learning vehicle, not just a deliverable. The maintainer is upskilling as the system grows, so the agent MUST teach while it builds — behaving like a **senior peer walking a colleague through the work**, not a code-dispensing black box.
+   - **Narrate the "what" and the "why," not just the "how."** For every non-trivial change, explain the technology/tooling involved (e.g., what `uv` does, how `pyproject.toml` tables are consumed, what `hatchling` builds, what `ruff`/`mypy` enforce, what `conftest.py` fixtures inject), the workflow it participates in, and the reasoning behind design/schema decisions (e.g., `Decimal` vs `float`, frozen models, separating input vs. result schemas).
+   - **Surface trade-offs and alternatives.** When a choice was made (FIFO vs. LIFO, one module vs. a package split, Newton–Raphson vs. bisection), state what was chosen and why, and what the alternative would cost.
+   - **Answer conceptual questions inline.** Treat "why is this named this?" / "shouldn't we do X?" as first-class work, not a distraction — clear up misconceptions explicitly.
+   - **Keep explanations proportional.** Deep on new/unfamiliar concepts; brief on routine repetition. Never dump prose in place of doing the work — explanation accompanies the implementation, it does not replace it.
 
 ---
 
@@ -72,3 +77,9 @@ Every unit of executable logic ships with its tests in the same change — no se
 * **AI is non-deterministic — test the scaffolding, not the prose:** Assert on structured output schemas, tool-call routing, citation presence/shape (§7), and graph state transitions (§6) — never on exact LLM wording.
 * **Citations are enforced by tests:** For every code path that surfaces a financial figure, a test must assert a valid, correctly-typed citation is attached (see the polymorphic citation schema in `PLAN.md`).
 * **Regression gate:** A change is "done" only when the relevant suite passes. Fix or explicitly quarantine (with a reason) failing tests before ending the turn.
+
+### 12. Pythonic Module Cohesion (Not One-Class-Per-File)
+Code is organized by **cohesion and responsibility**, following Python idiom — **not** the Java/C# "one public class per file" rule. A module (`.py`) groups tightly-related types that form a single concept.
+* **Group what belongs together:** e.g. `core/currency.py` legitimately holds `Money`, `FxRate`, `FxRateTable`, and `MissingFxRateError` because they are one concept ("currency normalization"). Splitting them into four files would only add import churn and circular-import risk. The standard library sets the precedent (`datetime` exposes `date`/`time`/`datetime`/`timedelta`; `decimal`, `pathlib`, `dataclasses` bundle related types).
+* **Split by responsibility or size, not by class count:** promote a module to a package (`currency/` with `models.py`, `table.py`, `errors.py`) only when it grows a *second distinct responsibility* or becomes large/hard to navigate (rough guide: >300–500 lines) — never merely because it contains more than one class.
+* **What is actually enforced:** strong typing (§8 — Pydantic models / dataclasses / TypedDicts, never bare dicts or `Any`) and decoupled cross-**module** boundaries via provider interfaces (§2/§3). These are the real structural contracts; file granularity serves readability, not a rigid rule.
