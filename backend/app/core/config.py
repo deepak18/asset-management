@@ -13,17 +13,24 @@ re-read after monkeypatching env vars.
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Annotated
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+# The .env used by `docker compose` lives at the repo root. Resolve it from this
+# file's location so the backend loads the same file whether commands run from the
+# repo root or from backend/. A local ./.env (relative to CWD) is layered on top,
+# and missing files are silently ignored by pydantic-settings.
+_ROOT_ENV = Path(__file__).resolve().parents[3] / ".env"
 
 
 class Settings(BaseSettings):
     """Typed application settings loaded from the environment / ``.env`` file."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(_ROOT_ENV, ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

@@ -7,8 +7,12 @@ import pytest
 from app.core.config import Settings, get_settings
 
 
-def test_defaults_are_usd_and_ollama() -> None:
-    settings = Settings()
+def test_defaults_are_usd_and_ollama(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Assert true CODE defaults: isolate from any ambient env var or .env file so
+    # this passes regardless of a developer's shell or a present repo-root .env.
+    for var in ("DATABASE_URL", "BASE_CURRENCY", "SUPPORTED_CURRENCIES", "AI_PROVIDER"):
+        monkeypatch.delenv(var, raising=False)
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
     assert settings.base_currency == "USD"
     assert settings.supported_currencies == ["USD"]
     assert settings.ai_provider == "ollama"
