@@ -30,4 +30,3 @@ class LLMUnavailableError(LLMError):
 
 class LLMResponseError(LLMError):
     """The provider replied, but with an HTTP error or an unparseable body."""
-

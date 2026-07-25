@@ -46,4 +46,3 @@ def build_llm_client(settings: Settings) -> LLMClient:
         f"Unknown AI_PROVIDER='{settings.ai_provider}'. "
         "Expected one of: ollama, openai, anthropic, gemini."
     )
-

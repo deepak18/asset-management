@@ -235,4 +235,3 @@ async def test_aclose_is_noop_for_injected_client() -> None:
     request = ChatRequest(messages=(ChatMessage(role=Role.USER, content="hi"),))
     response = await client.complete(request)
     assert response.content == "Revenue rose 12% YoY."
-

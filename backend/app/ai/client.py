@@ -4,18 +4,18 @@ Like ``providers/base.py``, this is a ``typing.Protocol`` (structural typing):
 an adapter "is" an ``LLMClient`` simply by exposing the right async methods, with
 no inheritance required. Agents, RAG pipelines, and the workspace panel depend on
 this abstraction, never on ``OllamaClient`` (or a future ``OpenAIClient``) — which
-is what makes provider swapping a config-only change (§4).
+is what makes provider swapping a config-only change.
 
 Three capabilities cover Phase 1–2 needs:
 
 * ``complete`` — free-text chat/completion (summaries, explanations).
 * ``complete_structured`` — same call but constrained to a Pydantic schema, so the
   model must return JSON we can validate into a typed object. This is the backbone
-  of citation-anchored, strongly-typed AI output (§7/§8): we assert on the *schema*,
+  of citation-anchored, strongly-typed AI output: we assert on the *schema*,
   never on prose.
-* ``embed`` — turn text into a vector for ``pgvector`` retrieval (PLAN.md §2.1).
+* ``embed`` — turn text into a vector for ``pgvector`` retrieval.
 
-Note the boundary carries **no business logic** (§1): it moves typed data in and
+Note the boundary carries **no business logic**: it moves typed data in and
 typed data out. All financial math stays in the deterministic core.
 """
 
@@ -53,4 +53,3 @@ class LLMClient(Protocol):
     async def embed(self, request: EmbeddingRequest) -> EmbeddingResponse:
         """Return an embedding vector for ``request.text``."""
         ...
-

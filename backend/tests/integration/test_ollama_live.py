@@ -40,4 +40,3 @@ async def test_live_ollama_completion_and_embedding() -> None:
         aclose = getattr(client, "aclose", None)
         if aclose is not None:
             await aclose()
-

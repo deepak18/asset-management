@@ -1,9 +1,9 @@
-"""Ollama adapter — the default local ``LLMClient`` (AGENTS.md §4, PLAN.md §1.1).
+"""Ollama adapter — the default local ``LLMClient``.
 
 Talks to a running Ollama daemon over its HTTP API (``OLLAMA_BASE_URL``) using
 ``httpx``. This module is deliberately thin: shape a typed request into Ollama's
 wire format, POST it, and parse the reply back into our typed schemas. There is
-**no business logic** here (§1) — only transport.
+**no business logic** here — only transport.
 
 Design choices worth calling out:
 
@@ -208,4 +208,3 @@ class OllamaClient:
             return model.model_validate(response.json())
         except (ValueError, ValidationError) as exc:
             raise LLMResponseError(f"Malformed Ollama response body: {exc}") from exc
-
