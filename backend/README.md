@@ -35,6 +35,31 @@ uv run uvicorn app.main:app --reload   # http://localhost:8000/docs
 
 Config comes from the repo-root `.env` (see the main [README](../README.md)); `DATABASE_URL` selects the database. With no `.env`/env override, the app falls back to a local SQLite file for zero-infra runs.
 
+## Point at a remote or slow (GPU-less) Ollama
+
+The AI provider is config-only (`AGENTS.md` §4). To use an Ollama daemon on another
+machine, set in the root `.env`:
+
+```dotenv
+OLLAMA_BASE_URL=http://192.168.1.42:11434   # that machine's LAN IP
+AI_MODEL=llama3.2:3b                         # a small model for CPU-only boxes
+AI_REQUEST_TIMEOUT_SECONDS=300               # generous READ budget for slow inference
+AI_CONNECT_TIMEOUT_SECONDS=5                 # stays short: unreachable host fails fast
+```
+
+On the Ollama machine: set `OLLAMA_HOST=0.0.0.0` (so it listens on the network),
+open TCP `11434` in the firewall, and `ollama pull <model>` the model you configured.
+
+Diagnose the connection (reachability, installed models, real latency):
+
+```bash
+uv run python scripts/ollama_healthcheck.py
+# or override ad hoc:
+uv run python scripts/ollama_healthcheck.py --url http://192.168.1.42:11434 --model llama3.2:3b
+```
+
+The opt-in live smoke test uses the same config: `uv run pytest -m integration -k ollama`.
+
 ## Regenerate the OpenAPI contract
 
 ```bash
