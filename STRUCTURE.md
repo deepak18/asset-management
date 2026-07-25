@@ -18,7 +18,7 @@ asset-management/
 ├── .gitignore                 # ✅ Ignore rules (secrets, envs, build artifacts)
 ├── .env.example               # ✅ Documented template of ALL environment variables
 ├── docker-compose.yml         # ⬜ Local orchestration: api, db (pgvector), mcp-gateway, frontend, ollama
-├── backend/                   # 🟡 Python FastAPI service — deterministic portfolio core built (see below)
+├── backend/                   # 🟡 Python FastAPI service — deterministic core + REST API built (see below)
 ├── frontend/                  # ⬜ Next.js app (see below)
 ├── mcp/                       # ⬜ MCP server orchestration + configs (see below)
 └── infra/                     # ⬜ Deployment manifests (compose overrides, k8s, ECS)
@@ -35,6 +35,7 @@ Cross-module access happens **only** through the `providers/` interfaces (§2).
 backend/
 ├── pyproject.toml             # ✅ Deps + tooling (ruff, mypy, pytest, pytest-asyncio, pytest-cov) — managed via uv
 ├── uv.lock                    # ✅ uv-locked dependency graph
+├── openapi.json               # ✅ Generated OpenAPI contract (the frontend-track seam; regen from app.main:app)
 ├── README.md                  # ✅ Backend dev/runbook (uv sync, pytest commands)
 ├── alembic.ini                # ⬜ Alembic migration config
 ├── Dockerfile                 # ⬜ API container image
@@ -50,6 +51,7 @@ backend/
 │   │   ├── portfolio/         # ✅ calculators (XIRR, P&L, allocation) — exhaustive edge cases
 │   │   │   ├── test_allocation.py # ✅ weights by ticker/sector/industry, empty/zero-total
 │   │   │   ├── test_cost_basis.py # ✅ FIFO realized/unrealized, splits, dividends, fees, mixed-ccy
+│   │   │   ├── test_service.py    # ✅ service orchestration (grouping, roll-ups, XIRR wiring, missing) — faked provider
 │   │   │   └── test_xirr.py       # ✅ pinned XIRR (10%/20%/neg, Excel ref), mixed-ccy, error paths
 │   │   ├── providers/         # ✅ SQLAlchemy portfolio provider round-trip (in-memory SQLite)
 │   │   │   └── test_portfolio_provider.py # ✅ ORM→schema mapping, exact Decimals, feeds calculators
@@ -58,10 +60,12 @@ backend/
 │   │   ├── documents/         # ⬜ PDF/TXT/MD parsing + citation anchors (mocked embeddings)
 │   │   ├── citations/         # ⬜ polymorphic citation schema validation + enforcement
 │   │   └── ai/                # ⬜ tool-routing, graph state transitions, citation presence (no prose asserts)
-│   ├── api/                   # ⬜ Route contract tests via httpx ASGITransport (incl. /workspace/ask SSE)
+│   ├── api/                   # ✅ Route contract tests via httpx ASGITransport (in-process app)
+│   │   ├── conftest.py        # ✅ Seeded in-memory SQLite + get_session override + AsyncClient fixture
+│   │   └── test_portfolio_routes.py # ✅ health, summary/txns/holdings/analytics, 200 + 404 paths
 │   └── integration/           # ⬜ @pytest.mark.integration — real Postgres/pgvector + MCP wiring (opt-in)
 └── app/
-    ├── main.py                # ⬜ FastAPI app factory, router registration, lifespan hooks
+    ├── main.py                # ✅ FastAPI app factory + lifespan (DB engine on state) + /health; mounts v1 router
     ├── core/                  # 🟡 Cross-cutting infra (NOT business logic)
     │   ├── config.py          # ✅ Pydantic Settings — env-driven (base/supported currency, DB URL, AI provider)
     │   ├── database.py        # ✅ Async engine + session factory + declarative Base (pgvector setup later)
@@ -69,11 +73,12 @@ backend/
     │   ├── security.py        # ⬜ Single-user local gate (optional API_ACCESS_KEY) — no multi-tenant
     │   ├── currency.py        # ✅ FX normalization seam (Money/FxRate/FxRateTable) — USD now, INR-ready
     │   └── exceptions.py      # ⬜ App-wide error types + handlers
-    ├── api/                   # ⬜ HTTP layer only (thin controllers, no business logic)
-    │   ├── deps.py            # ⬜ Shared FastAPI dependencies (db session, auth, providers)
+    ├── api/                   # 🟡 HTTP layer only (thin controllers, no business logic)
+    │   ├── deps.py            # ✅ Shared FastAPI dependencies (session → provider → service DI chain)
     │   └── v1/
-    │       ├── router.py      # ⬜ Aggregates all v1 routes
-    │       └── routes/        # ⬜ portfolio.py, research.py, documents.py, marketdata.py, workspace.py
+    │       ├── router.py      # ✅ Aggregates all v1 routes
+    │       └── routes/        # 🟡 portfolio.py ✅; research.py, documents.py, marketdata.py, workspace.py ⬜
+    │           └── portfolio.py   # ✅ GET portfolio/transactions/holdings/analytics (thin controllers + 404)
     ├── providers/             # 🟡 Strongly-typed abstraction interfaces (§2) — the ONLY I/O boundary
     │   ├── base.py            # ✅ PortfolioProvider Protocol (structural typing)
     │   ├── portfolio_provider.py  # ✅ SqlAlchemyPortfolioProvider — ORM rows → typed domain objects
@@ -84,8 +89,8 @@ backend/
     │   └── document_provider.py
     ├── portfolio/             # 🟡 Ledger, allocation weights, investor returns (XIRR), valuations (pure Python)
     │   ├── models.py          # ✅ SQLAlchemy 2.0 mapped: Portfolio, Holding, Transaction, Cash (exact Decimal, currency-aware)
-    │   ├── schemas.py         # ✅ Pydantic typed inputs/outputs (Transaction, CashFlow, PortfolioSummary, HoldingInfo) — no dict/Any
-    │   ├── service.py         # ⬜ Orchestration for the portfolio domain
+    │   ├── schemas.py         # ✅ Pydantic typed inputs/outputs (Transaction, CashFlow, PortfolioSummary, HoldingInfo, PortfolioAnalytics) — no dict/Any
+    │   ├── service.py         # ✅ Orchestration: provider I/O × pure calculators → PortfolioAnalytics (no math, no I/O)
     │   └── calculators.py     # ✅ Pure math: FIFO cost-basis P&L, realized/unrealized, allocation, XIRR (unit-tested)
     ├── research/              # ⬜ Competitor matrix (manual peer seed), news streaming, evaluation workspaces
     ├── documents/             # ⬜ Ingestion pipeline, PDF/TXT/MD parsing, pgvector embeddings
