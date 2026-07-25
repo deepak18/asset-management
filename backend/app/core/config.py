@@ -58,8 +58,18 @@ class Settings(BaseSettings):
     # Single local user (PLAN.md decision #1): optional local gate, no multi-tenant.
     api_access_key: str | None = None
 
-    # AI provider is config-only switchable (§4); business logic never changes.
+    # AI provider is config-only switchable; business logic never changes.
     ai_provider: str = "ollama"
+
+    # Model + inference-hub knobs consumed by app/ai/. The wrapper is pure I/O
+    # behind the LLMClient interface, so changing provider/model/timeout is a
+    # config-only edit — no business or agent code changes. Defaults mirror
+    # .env.example so a fresh clone talks to a local Ollama out of the box.
+    ai_model: str = "qwen2.5"
+    ai_embedding_model: str = "nomic-embed-text"
+    # `float` (not Decimal) is correct here: this is an httpx timeout, not money.
+    ai_request_timeout_seconds: float = 120.0
+    ollama_base_url: str = "http://localhost:11434"
 
     @field_validator("supported_currencies", mode="before")
     @classmethod
