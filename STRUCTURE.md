@@ -37,12 +37,16 @@ backend/
 ├── uv.lock                    # ✅ uv-locked dependency graph
 ├── openapi.json               # ✅ Generated OpenAPI contract (the frontend-track seam; regen from app.main:app)
 ├── README.md                  # ✅ Backend dev/runbook (uv sync, pytest commands)
-├── alembic.ini                # ⬜ Alembic migration config
+├── alembic.ini                # ✅ Alembic config (URL sourced from Settings at runtime, not hardcoded)
 ├── Dockerfile                 # ⬜ API container image
-├── migrations/                # ⬜ Alembic versioned migrations
+├── migrations/                # ✅ Alembic versioned migrations (async env)
+│   ├── env.py                 # ✅ Async migration runner — reuses app engine, target_metadata=Base.metadata
+│   ├── script.py.mako         # ✅ Revision script template
 │   └── versions/
+│       └── 0001_initial_portfolio_schema.py  # ✅ Creates portfolios/holdings/transactions/cash_balances
 ├── tests/                     # 🟡 pytest suites — mirrors app/ layout one-to-one (see AGENTS.md §11)
 │   ├── conftest.py            # ✅ Shared fixtures (FX rate tables + in-memory async SQLite session)
+│   ├── test_migrations.py     # ✅ Alembic upgrade/downgrade + model-vs-migration column drift guard
 │   ├── factories/             # ⬜ Fixture builders (portfolios, transactions, filings, documents)
 │   ├── unit/                  # 🟡 Pure/isolated tests — all provider boundaries mocked
 │   │   ├── core/             # ✅ currency (FX normalization) + config edge cases
