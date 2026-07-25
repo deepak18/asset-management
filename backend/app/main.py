@@ -29,7 +29,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Create the DB engine/session factory on startup; dispose on shutdown."""
 
     settings = get_settings()
-    engine = create_engine(settings.database_url)
+    engine = create_engine(
+        settings.database_url,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+    )
     app.state.engine = engine
     app.state.session_factory = create_session_factory(engine)
     try:

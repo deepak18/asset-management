@@ -28,13 +28,31 @@ class Base(DeclarativeBase):
     """Declarative base shared by every ORM model (single metadata registry)."""
 
 
-def create_engine(database_url: str, *, echo: bool = False) -> AsyncEngine:
+def create_engine(
+    database_url: str,
+    *,
+    echo: bool = False,
+    pool_size: int = 5,
+    max_overflow: int = 10,
+) -> AsyncEngine:
     """Create an async engine for the given URL.
 
     ``echo=True`` logs emitted SQL — handy when debugging, off by default.
+
+    Connection pooling is applied only to **server** databases
+    (Postgres): ``pool_size`` keeps a warm set of connections, ``max_overflow``
+    allows temporary bursts, and ``pool_pre_ping`` cheaply checks a connection is
+    still alive before handing it out (recovering transparently from ones the DB
+    dropped after an idle period). SQLite ignores these — it uses its own pooling
+    (NullPool / StaticPool), so passing QueuePool tuning would error.
     """
 
-    return create_async_engine(database_url, echo=echo, future=True)
+    kwargs: dict[str, object] = {"echo": echo, "future": True}
+    if not database_url.startswith("sqlite"):
+        kwargs["pool_size"] = pool_size
+        kwargs["max_overflow"] = max_overflow
+        kwargs["pool_pre_ping"] = True
+    return create_async_engine(database_url, **kwargs)
 
 
 def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:

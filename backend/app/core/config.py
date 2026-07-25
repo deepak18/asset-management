@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     # production overrides this with a postgresql+asyncpg URL (see .env.example).
     database_url: str = "sqlite+aiosqlite:///./asset_management.db"
 
+    # Connection-pool tuning for server DBs (Postgres). Ignored for SQLite.
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
+
     # Currency-aware from day one (PLAN.md decision #8): USD enabled now, INR next.
     # NoDecode: stop pydantic-settings from JSON-parsing the env var so our
     # `_split_csv` validator can accept a plain "USD,INR" string.
