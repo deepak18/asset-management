@@ -17,7 +17,7 @@ asset-management/
 ├── README.md                  # ✅ Human runbook (setup, run, deploy)
 ├── .gitignore                 # ✅ Ignore rules (secrets, envs, build artifacts)
 ├── .env.example               # ✅ Documented template of ALL environment variables
-├── docker-compose.yml         # ⬜ Local orchestration: api, db (pgvector), mcp-gateway, frontend, ollama
+├── docker-compose.yml         # 🟡 Local orchestration: db (pgvector) active; api/mcp-gateway/frontend/ollama pending
 ├── backend/                   # 🟡 Python FastAPI service — deterministic core + REST API built (see below)
 ├── frontend/                  # ⬜ Next.js app (see below)
 ├── mcp/                       # ⬜ MCP server orchestration + configs (see below)
@@ -43,7 +43,8 @@ backend/
 │   ├── env.py                 # ✅ Async migration runner — reuses app engine, target_metadata=Base.metadata
 │   ├── script.py.mako         # ✅ Revision script template
 │   └── versions/
-│       └── 0001_initial_portfolio_schema.py  # ✅ Creates portfolios/holdings/transactions/cash_balances
+│       ├── 0001_initial_portfolio_schema.py  # ✅ Creates portfolios/holdings/transactions/cash_balances
+│       └── 0002_enable_pgvector.py            # ✅ Enables pgvector extension (Postgres-only, no-op on SQLite)
 ├── tests/                     # 🟡 pytest suites — mirrors app/ layout one-to-one (see AGENTS.md §11)
 │   ├── conftest.py            # ✅ Shared fixtures (FX rate tables + in-memory async SQLite session)
 │   ├── test_migrations.py     # ✅ Alembic upgrade/downgrade + model-vs-migration column drift guard
@@ -67,12 +68,13 @@ backend/
 │   ├── api/                   # ✅ Route contract tests via httpx ASGITransport (in-process app)
 │   │   ├── conftest.py        # ✅ Seeded in-memory SQLite + get_session override + AsyncClient fixture
 │   │   └── test_portfolio_routes.py # ✅ health, summary/txns/holdings/analytics, 200 + 404 paths
-│   └── integration/           # ⬜ @pytest.mark.integration — real Postgres/pgvector + MCP wiring (opt-in)
+│   └── integration/           # 🟡 @pytest.mark.integration — real Postgres/pgvector + MCP wiring (opt-in)
+│       └── test_postgres_pgvector.py # ✅ connect + CREATE EXTENSION vector + vector column round-trip
 └── app/
     ├── main.py                # ✅ FastAPI app factory + lifespan (DB engine on state) + /health; mounts v1 router
     ├── core/                  # 🟡 Cross-cutting infra (NOT business logic)
     │   ├── config.py          # ✅ Pydantic Settings — env-driven (base/supported currency, DB URL, AI provider)
-    │   ├── database.py        # ✅ Async engine + session factory + declarative Base (pgvector setup later)
+    │   ├── database.py        # ✅ Async engine (pooled + pre_ping for Postgres) + session factory + declarative Base
     │   ├── logging.py         # ⬜ Structured logging config
     │   ├── security.py        # ⬜ Single-user local gate (optional API_ACCESS_KEY) — no multi-tenant
     │   ├── currency.py        # ✅ FX normalization seam (Money/FxRate/FxRateTable) — USD now, INR-ready
