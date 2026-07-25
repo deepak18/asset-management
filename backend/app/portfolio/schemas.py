@@ -161,3 +161,34 @@ class CashFlow(BaseModel):
     date: date
     amount: Decimal
     currency: str = Field(min_length=3, max_length=3)
+
+
+class PortfolioAnalytics(BaseModel):
+    """Aggregated, base-currency portfolio analytics (the service layer's output).
+
+    This is the single typed envelope the ``/analytics`` endpoint returns. It bundles
+    the portfolio identity, per-position FIFO cost-basis results, whole-portfolio
+    roll-up totals, and the money-weighted return (XIRR).
+
+    ``money_weighted_return`` is ``None`` when XIRR is mathematically undefined
+    (e.g. an empty ledger, or flows that never change sign) — we surface "not
+    computable" honestly rather than emitting a misleading ``0``. It is a *rate*
+    (annualized fraction), not money, but is kept as ``Decimal`` so no ``float``
+    leaks into a financial payload.
+
+    Note (Phase 1.1 scope): market-value-dependent figures — unrealized P&L and
+    allocation weights — are intentionally absent here because they require current
+    prices from the market-data provider (§1.3), which is not wired yet. This schema
+    is additive-friendly: those fields slot in later without breaking consumers.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    portfolio: PortfolioSummary
+    base_currency: str = Field(min_length=3, max_length=3)
+    positions: tuple[CostBasisResult, ...]
+    realized_pnl_base: Decimal
+    dividends_base: Decimal
+    fees_base: Decimal
+    open_cost_basis_base: Decimal
+    money_weighted_return: Decimal | None = None
