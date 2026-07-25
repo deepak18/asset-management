@@ -8,6 +8,10 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.2",
     "sqlalchemy[asyncio]>=2.0.30",
+    # Alembic: versioned, reversible schema migrations (PLAN.md §1.1). The ORM
+    # models describe the schema; Alembic turns changes into ordered, auditable
+    # DDL scripts and tracks what's applied (production can't just create_all()).
+    "alembic>=1.13",
     # Web layer (PLAN.md §1.1): FastAPI is the ASGI framework; uvicorn is the
     # server that runs it. Both are runtime deps because the API is now a
     # first-class way to operate the system (not just tests).
