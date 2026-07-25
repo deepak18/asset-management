@@ -1,0 +1,42 @@
+# Local orchestration for the asset-management stack.
+#
+# Today this stands up PostgreSQL 16 with the pgvector extension. Future services
+# (api, ollama, mcp-gateway, frontend) attach to the same project network and are
+# added here incrementally. Each container/volume is project-scoped (am-/am_) so it
+# never collides with sibling projects on the same machine.
+#
+# Usage:
+#   docker compose up -d           # start Postgres in the background
+#   docker compose ps              # check health
+#   docker compose logs -f db      # follow logs
+#   docker compose down            # stop (keeps data volume)
+#   docker compose down -v         # stop AND delete the data volume (fresh DB)
+
+name: asset-management
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: am-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-asset_management}
+    ports:
+      # Host port is configurable (POSTGRES_PORT) to avoid clashing with a local
+      # Postgres install; container always listens on 5432.
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - am_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready gates dependent services (and `docker compose up --wait`) until
+      # Postgres is actually accepting connections, not just process-started.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-asset_management}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  am_pgdata:
+    name: am_pgdata
