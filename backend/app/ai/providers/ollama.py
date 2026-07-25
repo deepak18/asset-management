@@ -112,12 +112,19 @@ class OllamaClient:
         model: str,
         embedding_model: str,
         timeout_seconds: float,
+        connect_timeout_seconds: float = 5.0,
         client: httpx.AsyncClient | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._embedding_model = embedding_model
+        # Split timeouts on purpose: ``connect`` stays short so an unreachable or
+        # firewalled host fails fast, while ``read`` is generous so slow (e.g.
+        # CPU-only, no-GPU) token generation is NOT aborted mid-response. On such
+        # hardware the first call also pays a one-off model-load cost, which the
+        # read timeout must comfortably cover.
         self._timeout = timeout_seconds
+        self._connect_timeout = connect_timeout_seconds
         # When no client is injected we own the lifecycle and must close it.
         self._client = client
         self._owns_client = client is None
@@ -180,8 +187,20 @@ class OllamaClient:
 
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
-            self._client = httpx.AsyncClient(base_url=self._base_url, timeout=self._timeout)
+            self._client = httpx.AsyncClient(
+                base_url=self._base_url, timeout=self._build_timeout()
+            )
         return self._client
+
+    def _build_timeout(self) -> httpx.Timeout:
+        """Short connect (fail fast if unreachable) + long read (slow generation)."""
+
+        return httpx.Timeout(
+            connect=self._connect_timeout,
+            read=self._timeout,
+            write=self._timeout,
+            pool=self._connect_timeout,
+        )
 
     async def _post(self, path: str, payload: BaseModel) -> httpx.Response:
         client = self._get_client()

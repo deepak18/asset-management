@@ -67,8 +67,14 @@ class Settings(BaseSettings):
     # .env.example so a fresh clone talks to a local Ollama out of the box.
     ai_model: str = "qwen2.5"
     ai_embedding_model: str = "nomic-embed-text"
-    # `float` (not Decimal) is correct here: this is an httpx timeout, not money.
-    ai_request_timeout_seconds: float = 120.0
+    # `float` (not Decimal) is correct here: these are httpx timeouts, not money.
+    # `ai_request_timeout_seconds` is the READ/generation budget — it must be
+    # generous because CPU-only (no-GPU) inference plus a one-off model load can
+    # take minutes; too small a value fails on slowness rather than real errors.
+    # `ai_connect_timeout_seconds` stays short so an unreachable/firewalled host
+    # fails fast instead of hanging for the full generation budget.
+    ai_request_timeout_seconds: float = 300.0
+    ai_connect_timeout_seconds: float = 5.0
     ollama_base_url: str = "http://localhost:11434"
 
     @field_validator("supported_currencies", mode="before")

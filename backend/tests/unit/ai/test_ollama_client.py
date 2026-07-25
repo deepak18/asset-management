@@ -235,3 +235,21 @@ async def test_aclose_is_noop_for_injected_client() -> None:
     request = ChatRequest(messages=(ChatMessage(role=Role.USER, content="hi"),))
     response = await client.complete(request)
     assert response.content == "Revenue rose 12% YoY."
+
+
+def test_timeout_splits_short_connect_and_long_read() -> None:
+    # A slow, GPU-less host must not be aborted mid-generation, yet an unreachable
+    # host should fail fast — so connect is short and read/write are generous.
+    client = OllamaClient(
+        base_url="http://ollama.test:11434",
+        model="qwen2.5",
+        embedding_model="nomic-embed-text",
+        timeout_seconds=300.0,
+        connect_timeout_seconds=5.0,
+    )
+    timeout = client._build_timeout()
+    assert timeout.connect == 5.0
+    assert timeout.read == 300.0
+    assert timeout.write == 300.0
+    assert timeout.pool == 5.0
+

@@ -34,6 +34,7 @@ def build_llm_client(settings: Settings) -> LLMClient:
             model=settings.ai_model,
             embedding_model=settings.ai_embedding_model,
             timeout_seconds=settings.ai_request_timeout_seconds,
+            connect_timeout_seconds=settings.ai_connect_timeout_seconds,
         )
 
     if provider in _FUTURE_PROVIDERS:

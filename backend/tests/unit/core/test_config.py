@@ -25,13 +25,16 @@ def test_ai_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
         "AI_MODEL",
         "AI_EMBEDDING_MODEL",
         "AI_REQUEST_TIMEOUT_SECONDS",
+        "AI_CONNECT_TIMEOUT_SECONDS",
         "OLLAMA_BASE_URL",
     ):
         monkeypatch.delenv(var, raising=False)
     settings = Settings(_env_file=None)  # type: ignore[call-arg]
     assert settings.ai_model == "qwen2.5"
     assert settings.ai_embedding_model == "nomic-embed-text"
-    assert settings.ai_request_timeout_seconds == 120.0
+    # Read/generation budget is generous (slow CPU inference); connect is snappy.
+    assert settings.ai_request_timeout_seconds == 300.0
+    assert settings.ai_connect_timeout_seconds == 5.0
     assert settings.ollama_base_url == "http://localhost:11434"
 
 
