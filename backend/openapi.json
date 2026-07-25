@@ -1,0 +1,575 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Asset Management API",
+    "summary": "Deterministic portfolio analytics over a currency-aware ledger.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/portfolios/{portfolio_id}": {
+      "get": {
+        "tags": [
+          "portfolio"
+        ],
+        "summary": "Get Portfolio",
+        "description": "Return a portfolio's identity + base currency (404 if it doesn't exist).",
+        "operationId": "get_portfolio_api_v1_portfolios__portfolio_id__get",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/transactions": {
+      "get": {
+        "tags": [
+          "portfolio"
+        ],
+        "summary": "List Transactions",
+        "description": "Return the portfolio's full ledger as typed transactions.",
+        "operationId": "list_transactions_api_v1_portfolios__portfolio_id__transactions_get",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Transaction"
+                  },
+                  "title": "Response List Transactions Api V1 Portfolios  Portfolio Id  Transactions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/holdings": {
+      "get": {
+        "tags": [
+          "portfolio"
+        ],
+        "summary": "List Holdings",
+        "description": "Return the portfolio's tracked securities + classification metadata.",
+        "operationId": "list_holdings_api_v1_portfolios__portfolio_id__holdings_get",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HoldingInfo"
+                  },
+                  "title": "Response List Holdings Api V1 Portfolios  Portfolio Id  Holdings Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/analytics": {
+      "get": {
+        "tags": [
+          "portfolio"
+        ],
+        "summary": "Get Analytics",
+        "description": "Return aggregated cost-basis / realized-P&L / XIRR analytics (404 if absent).",
+        "operationId": "get_analytics_api_v1_portfolios__portfolio_id__analytics_get",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioAnalytics"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Health",
+        "description": "Liveness probe \u2014 cheap check that the app is up (no DB touch).",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CostBasisResult": {
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "title": "Ticker"
+          },
+          "open_quantity": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Open Quantity"
+          },
+          "open_cost_basis_base": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Open Cost Basis Base"
+          },
+          "realized_pnl_base": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Realized Pnl Base"
+          },
+          "dividends_base": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Dividends Base"
+          },
+          "fees_base": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Fees Base"
+          },
+          "open_lots": {
+            "items": {
+              "$ref": "#/components/schemas/OpenLot"
+            },
+            "type": "array",
+            "title": "Open Lots"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ticker",
+          "open_quantity",
+          "open_cost_basis_base",
+          "realized_pnl_base",
+          "dividends_base",
+          "fees_base",
+          "open_lots"
+        ],
+        "title": "CostBasisResult",
+        "description": "Outcome of replaying a ticker's ledger under FIFO lot accounting."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HoldingInfo": {
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Ticker"
+          },
+          "sector": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sector"
+          },
+          "industry": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Industry"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ticker"
+        ],
+        "title": "HoldingInfo",
+        "description": "A tracked security's classification metadata (provider output).\n\nGrouping keys for allocation roll-ups; the market value is joined in later once\nthe market-data layer (\u00a71.3) can price the position."
+      },
+      "OpenLot": {
+        "properties": {
+          "trade_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Trade Date"
+          },
+          "quantity": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Quantity"
+          },
+          "cost_per_share_base": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Cost Per Share Base"
+          }
+        },
+        "type": "object",
+        "required": [
+          "trade_date",
+          "quantity",
+          "cost_per_share_base"
+        ],
+        "title": "OpenLot",
+        "description": "An unclosed FIFO purchase lot, valued in the portfolio base currency."
+      },
+      "PortfolioAnalytics": {
+        "properties": {
+          "portfolio": {
+            "$ref": "#/components/schemas/PortfolioSummary"
+          },
+          "base_currency": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Base Currency"
+          },
+          "positions": {
+            "items": {
+              "$ref": "#/components/schemas/CostBasisResult"
+            },
+            "type": "array",
+            "title": "Positions"
+          },
+          "realized_pnl_base": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Realized Pnl Base"
+          },
+          "dividends_base": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Dividends Base"
+          },
+          "fees_base": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Fees Base"
+          },
+          "open_cost_basis_base": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Open Cost Basis Base"
+          },
+          "money_weighted_return": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Money Weighted Return"
+          }
+        },
+        "type": "object",
+        "required": [
+          "portfolio",
+          "base_currency",
+          "positions",
+          "realized_pnl_base",
+          "dividends_base",
+          "fees_base",
+          "open_cost_basis_base"
+        ],
+        "title": "PortfolioAnalytics",
+        "description": "Aggregated, base-currency portfolio analytics (the service layer's output).\n\nThis is the single typed envelope the ``/analytics`` endpoint returns. It bundles\nthe portfolio identity, per-position FIFO cost-basis results, whole-portfolio\nroll-up totals, and the money-weighted return (XIRR).\n\n``money_weighted_return`` is ``None`` when XIRR is mathematically undefined\n(e.g. an empty ledger, or flows that never change sign) \u2014 we surface \"not\ncomputable\" honestly rather than emitting a misleading ``0``. It is a *rate*\n(annualized fraction), not money, but is kept as ``Decimal`` so no ``float``\nleaks into a financial payload.\n\nNote (Phase 1.1 scope): market-value-dependent figures \u2014 unrealized P&L and\nallocation weights \u2014 are intentionally absent here because they require current\nprices from the market-data provider (\u00a71.3), which is not wired yet. This schema\nis additive-friendly: those fields slot in later without breaking consumers."
+      },
+      "PortfolioSummary": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "base_currency": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Base Currency"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "base_currency"
+        ],
+        "title": "PortfolioSummary",
+        "description": "Lightweight portfolio identity + reporting base currency (provider output)."
+      },
+      "Transaction": {
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Ticker"
+          },
+          "type": {
+            "$ref": "#/components/schemas/TransactionType"
+          },
+          "trade_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Trade Date"
+          },
+          "currency": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency"
+          },
+          "quantity": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Quantity",
+            "default": "0"
+          },
+          "price": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Price",
+            "default": "0"
+          },
+          "fees": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Fees",
+            "default": "0"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Amount",
+            "default": "0"
+          },
+          "split_ratio": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Split Ratio",
+            "default": "1"
+          },
+          "sector": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sector"
+          },
+          "industry": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Industry"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ticker",
+          "type",
+          "trade_date",
+          "currency"
+        ],
+        "title": "Transaction",
+        "description": "A single dated ledger event for one ticker, in its native currency.\n\nField usage by ``type``:\n\n* ``BUY`` / ``SELL``: ``quantity`` (> 0) and ``price`` per share; ``fees`` optional.\n* ``DIVIDEND``: ``amount`` = total cash received (native currency).\n* ``FEE``: ``amount`` = total fee paid (native currency).\n* ``SPLIT``: ``split_ratio`` (e.g. ``2`` for a 2-for-1); other fields ignored."
+      },
+      "TransactionType": {
+        "type": "string",
+        "enum": [
+          "BUY",
+          "SELL",
+          "DIVIDEND",
+          "FEE",
+          "SPLIT"
+        ],
+        "title": "TransactionType",
+        "description": "Ledger event kinds supported by the deterministic calculators."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
