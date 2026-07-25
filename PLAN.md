@@ -37,6 +37,25 @@ Every AI-surfaced figure must persist a typed citation. Minimum units:
 
 ---
 
+## Delivery Tracks & Parallelization (Frontend ∥ Backend)
+
+Backend and frontend advance as **two parallel tracks joined by a single seam: the versioned REST API contract (OpenAPI).** Per `AGENTS.md` protocol #4 (context isolation), backend-core and frontend-UI work never share a chat turn — they run in **separate agent sessions**, each scoped to its own directory (`backend/` vs `frontend/`) with no shared code or DB (§9).
+
+**The contract is the seam.** FastAPI auto-generates an OpenAPI schema from its typed route models. The frontend consumes that schema (generated TS types + a mock server), so UI work is **never blocked** on live endpoints — it builds against the contract, then swaps mocks for real calls at each sync point.
+
+* **Track A — Backend (this lane):** Phase 1.1 API → 1.3 MCP market data → Phase 2 ingestion/RAG. Owns and publishes the OpenAPI contract.
+* **Track B — Frontend (parallel agent lane), starts _now_, not at §1.4:**
+  1. Scaffold Next.js (App Router) + TypeScript + Tailwind + shadcn/ui + Vitest/RTL.
+  2. Build the design system, layout shell, and API client layer against **mocked** endpoints (e.g. MSW) derived from the OpenAPI contract.
+  3. Implement §1.4 dashboard views (summary, allocation charts, ledger grid, watchlist) — mocks first, live endpoints as Track A ships them.
+  4. Later: §2.4 research workstation, §3.x workspace side-panel (SSE token streaming).
+* **Sync points:** whenever Track A updates the OpenAPI spec, Track B regenerates types and replaces the matching mock. The tracks integrate **only** through that document.
+
+### Feature traceability — "AI earnings-call / news summary"
+The requested capability (fetch transcripts/news for a holding → summarize sentiment, outlook, bull/bear, beat/miss, with citations) is **not a single phase.** It converges: MCP/RSS retrieval (§2.2 news, §1.3 + SEC filings) + RAG grounding (§2.1 `pgvector` embeddings) + structured, citation-anchored reasoning (§2.4 thesis canvas, §3.2 side-panel). It is deliberately sequenced late in Phase 2 because it depends on every prior seam.
+
+---
+
 ## Testing Strategy (applies to every phase)
 
 Testing is a **build-time discipline, not a phase.** Each task below is only complete when its tests land in the same change (`AGENTS.md` §11).
