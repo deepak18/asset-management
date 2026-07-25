@@ -8,6 +8,7 @@ FastAPI service for the Local AI-powered Investment Research Platform.
 - SQLAlchemy 2.0 async models + `PortfolioProvider` interface + orchestration service.
 - Alembic migrations (portfolio schema + pgvector enablement).
 - REST API: `/health`, `/api/v1/portfolios/{id}` (+ `/transactions`, `/holdings`, `/analytics`).
+- AI provider abstraction (`app/ai/`) — typed `LLMClient` interface + local Ollama adapter (`complete` / `complete_structured` / `embed`); switching provider is config-only (`AI_PROVIDER`), no code changes (§4).
 
 ## Develop (managed with `uv`)
 
@@ -39,5 +40,3 @@ Config comes from the repo-root `.env` (see the main [README](../README.md)); `D
 ```bash
 uv run python -c "import json; from pathlib import Path; from app.main import create_app; Path('openapi.json').write_text(json.dumps(create_app().openapi(), indent=2), encoding='utf-8')"
 ```
-
-

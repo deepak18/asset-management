@@ -64,12 +64,15 @@ backend/
 │   │   ├── research/          # ⬜ competitor matrix assembly, news linking (mocked providers)
 │   │   ├── documents/         # ⬜ PDF/TXT/MD parsing + citation anchors (mocked embeddings)
 │   │   ├── citations/         # ⬜ polymorphic citation schema validation + enforcement
-│   │   └── ai/                # ⬜ tool-routing, graph state transitions, citation presence (no prose asserts)
+│   │   ├── ai/                # ✅ LLMClient factory selection + Ollama adapter (HTTP boundary mocked)
+│   │   │   ├── test_factory.py       # ✅ config-only provider selection, future/unknown seams
+│   │   │   └── test_ollama_client.py # ✅ request shaping, typed parsing, structured JSON, timeout/error translation
 │   ├── api/                   # ✅ Route contract tests via httpx ASGITransport (in-process app)
 │   │   ├── conftest.py        # ✅ Seeded in-memory SQLite + get_session override + AsyncClient fixture
 │   │   └── test_portfolio_routes.py # ✅ health, summary/txns/holdings/analytics, 200 + 404 paths
-│   └── integration/           # 🟡 @pytest.mark.integration — real Postgres/pgvector + MCP wiring (opt-in)
-│       └── test_postgres_pgvector.py # ✅ connect + CREATE EXTENSION vector + vector column round-trip
+│   └── integration/           # 🟡 @pytest.mark.integration — real Postgres/pgvector + MCP/Ollama wiring (opt-in)
+│       ├── test_postgres_pgvector.py # ✅ connect + CREATE EXTENSION vector + vector column round-trip
+│       └── test_ollama_live.py        # ✅ live Ollama completion + embedding smoke (skips if daemon down)
 └── app/
     ├── main.py                # ✅ FastAPI app factory + lifespan (DB engine on state) + /health; mounts v1 router
     ├── core/                  # 🟡 Cross-cutting infra (NOT business logic)
@@ -105,9 +108,13 @@ backend/
     ├── citations/             # ⬜ Polymorphic citation models + persistence (see PLAN.md citation schema)
     │   ├── models.py          # SQLAlchemy: base Citation + Document / Filing / StructuredData variants
     │   └── schemas.py         # Pydantic typed citation payloads
-    ├── ai/                    # ⬜ AI provider abstraction (§4) + orchestration (§6)
-    │   ├── client.py          # ⬜ LLM interface — Ollama default, cloud via config only
-    │   ├── providers/         # ⬜ ollama.py, openai.py, anthropic.py, gemini.py adapters
+    ├── ai/                    # 🟡 AI provider abstraction (§4) built; orchestration (§6) pending
+    │   ├── schemas.py         # ✅ Typed carriers: Role/ChatMessage/ChatRequest/ChatResponse/Embedding* (frozen, no dict/Any)
+    │   ├── errors.py          # ✅ Typed error hierarchy: LLMError → Timeout/Unavailable/Response
+    │   ├── client.py          # ✅ LLMClient Protocol — complete / complete_structured / embed (Ollama default, cloud via config only)
+    │   ├── factory.py         # ✅ build_llm_client(settings) — config-only provider selection (ollama now; cloud = seams)
+    │   ├── providers/         # 🟡 ollama.py ✅ (httpx adapter, mocked in unit tests); openai/anthropic/gemini ⬜
+    │   │   └── ollama.py      # ✅ OllamaClient — /api/chat + /api/embeddings, config-driven timeout, typed error translation
     │   ├── agents/            # ⬜ PydanticAI single-shot tools
     │   ├── graphs/            # ⬜ LangGraph state machines (equity research report, etc.)
     │   └── citations.py       # ⬜ Zero-trust citation enforcement (§7)

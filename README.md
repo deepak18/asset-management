@@ -37,7 +37,7 @@ docker-compose.yml   Local orchestration (Postgres + pgvector today)
 | Alembic migrations (schema + pgvector enablement) | ✅ |
 | REST API (`/health`, portfolio summary/transactions/holdings/analytics) | ✅ |
 | PostgreSQL + pgvector via Docker Compose | ✅ |
-| Ollama AI-client wrapper | 🚧 in progress |
+| Ollama AI-client wrapper (typed `LLMClient`, config-only provider swap) | ✅ interface + Ollama adapter, HTTP boundary unit-tested |
 | Market data (MCP), documents/RAG, research, workspace panel | ⬜ planned |
 | Frontend | ⬜ planned |
 
@@ -110,4 +110,3 @@ Tests are written **side-by-side with code** — a change isn't done until its t
 - Keep business logic deterministic; AI never computes financial figures (see `AGENTS.md` §1, §7).
 - Cross-module access goes through `providers/` interfaces only.
 - Commit in small, logically-scoped, one-line Conventional Commits (`AGENTS.md` protocol #7).
-
