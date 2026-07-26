@@ -63,6 +63,29 @@ async def test_analytics_computes_realized_and_open_cost(api_client: AsyncClient
     assert len(body["positions"]) == 1
     # Two opposite-signed dated flows -> XIRR is defined (present, non-null).
     assert body["money_weighted_return"] is not None
+    # No market-data provider in this client → market-value fields degrade cleanly.
+    assert body["market_value_base"] is None
+    assert body["positions_unrealized"] == []
+    assert body["allocation_by_ticker"] == []
+
+
+async def test_analytics_includes_market_values_when_priced(
+    api_client_priced: AsyncClient,
+) -> None:
+    resp = await api_client_priced.get(f"/api/v1/portfolios/{SEEDED_PORTFOLIO_ID}/analytics")
+    assert resp.status_code == 200
+    body = resp.json()
+
+    # 6 open AAPL shares @ current 150 = 900 market value; cost 600 → +300 unrealized.
+    assert Decimal(body["market_value_base"]) == Decimal("900")
+    assert Decimal(body["unrealized_pnl_base"]) == Decimal("300")
+    assert len(body["positions_unrealized"]) == 1
+    by_ticker = {r["key"]: r for r in body["allocation_by_ticker"]}
+    assert Decimal(by_ticker["AAPL"]["weight"]) == Decimal("1")
+    by_sector = {r["key"]: r for r in body["allocation_by_sector"]}
+    assert Decimal(by_sector["Tech"]["market_value"]) == Decimal("900")
+    assert body["unpriced_tickers"] == []
+    assert body["priced_as_of"] is not None
 
 
 async def test_analytics_missing_returns_404(api_client: AsyncClient) -> None:
