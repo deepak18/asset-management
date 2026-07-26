@@ -15,6 +15,5 @@ class MarketDataUnavailableError(MarketDataError):
     """Upstream could not satisfy a fetch (rate-limited, network down, quota spent).
 
     The read-through cache catches this to decide whether it can serve a *stale*
-    cached value as a graceful fallback (PLAN.md §1.3).
+    cached value as a graceful fallback.
     """
-

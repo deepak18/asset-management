@@ -189,4 +189,3 @@ async def test_symbols_are_cached_independently(async_session: AsyncSession) -> 
     assert outcome.status is CacheStatus.REFRESHED
     assert outcome.value.price == Decimal("410.00")
     assert len(calls) == 2
-

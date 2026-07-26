@@ -41,7 +41,7 @@ The AI provider is config-only (`AGENTS.md` §4). To use an Ollama daemon on ano
 machine, set in the root `.env`:
 
 ```dotenv
-OLLAMA_BASE_URL=http://192.168.1.42:11434   # that machine's LAN IP
+OLLAMA_BASE_URL=http://192.168.1.42:11434    # that machine's LAN IP
 AI_MODEL=llama3.2:3b                         # a small model for CPU-only boxes
 AI_REQUEST_TIMEOUT_SECONDS=300               # generous READ budget for slow inference
 AI_CONNECT_TIMEOUT_SECONDS=5                 # stays short: unreachable host fails fast

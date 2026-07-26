@@ -1,4 +1,4 @@
-"""Provider interface for market data (AGENTS.md §2/§3).
+"""Provider interface for market data.
 
 Business code depends on this ``Protocol``, never on AlphaVantage, MCP, or HTTP
 directly. A concrete adapter (AlphaVantage-over-MCP, wrapped by the read-through
@@ -34,4 +34,3 @@ class MarketDataProvider(Protocol):
     ) -> FinancialStatements | None:
         """Return the multi-period statement set of ``statement_type``, or ``None``."""
         ...
-

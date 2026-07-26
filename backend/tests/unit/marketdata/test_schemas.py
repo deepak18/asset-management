@@ -61,4 +61,3 @@ def test_profile_optional_fields_default_none() -> None:
     profile = CompanyProfile(ticker="AAPL", name="Apple Inc.", provenance=_PROV)
     assert profile.sector is None
     assert profile.industry is None
-

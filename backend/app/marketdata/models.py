@@ -1,12 +1,12 @@
-"""SQLAlchemy model for the read-through market-data cache (PLAN.md §1.3).
+"""SQLAlchemy model for the read-through market-data cache.
 
-One row = one cached fetch, uniquely identified by
-``(provider_code, data_type, symbol)``. The typed object we fetched is stored
-serialized in ``payload`` (JSON text); ``as_of`` records the source's own
-timestamp (provenance) and ``fetched_at`` records when *we* stored it (the basis
-for TTL freshness). Keeping the payload opaque here lets one table cache quotes,
-profiles, and statement sets alike — the typing is enforced when the cache
-service re-validates the payload back into its Pydantic schema on read.
+One row = one cached fetch, uniquely identified by``(provider_code, data_type, symbol)``.
+The typed object we fetched is stored serialized in ``payload`` (JSON text);
+``as_of`` records the source's own timestamp (provenance) and
+``fetched_at`` records when *we* stored it (the basis for TTL freshness).
+Keeping the payload opaque here lets one table cache quotes, profiles, and statement
+sets alike — the typing is enforced when the cache service re-validates the payload
+back into its Pydantic schema on read.
 """
 
 from __future__ import annotations
@@ -34,4 +34,3 @@ class MarketDataCacheEntry(Base):
     payload: Mapped[str] = mapped_column(Text)
     as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-

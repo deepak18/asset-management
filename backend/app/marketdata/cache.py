@@ -1,4 +1,4 @@
-"""Read-through market-data cache — Postgres first, network last (PLAN.md §1.3).
+"""Read-through market-data cache — Postgres first, network last.
 
 Free data providers (AlphaVantage free tier) are heavily rate-limited, so the
 cache is **mandatory**, not an optimization: reads are served from Postgres, and
@@ -8,7 +8,7 @@ app stays usable when quota is exhausted.
 
 Every ``get_or_fetch`` returns a :class:`CacheOutcome` whose ``status`` makes the
 provenance of the answer explicit — was it fresh cache, a fresh network refresh,
-or a stale fallback? The UI/AI layer can surface that honestly (§7).
+or a stale fallback? The UI/AI layer can surface that honestly.
 
 Design notes
 ------------
@@ -42,9 +42,9 @@ from app.marketdata.schemas import MarketDataType
 class CacheStatus(StrEnum):
     """Provenance of a cache answer."""
 
-    HIT = "HIT"            # served fresh from cache; upstream not called
-    REFRESHED = "REFRESHED"  # miss/expiry → fetched upstream and stored
-    STALE = "STALE"        # upstream failed → served an expired cached value
+    HIT = "HIT"                 # served fresh from cache; upstream not called
+    REFRESHED = "REFRESHED"     # miss/expiry → fetched upstream and stored
+    STALE = "STALE"             # upstream failed → served an expired cached value
 
 
 @dataclass(frozen=True)
@@ -122,7 +122,9 @@ class ReadThroughCache:
         return now - _ensure_aware(entry.fetched_at) <= self._ttl
 
     async def _read(
-        self, data_type: MarketDataType, symbol: str
+        self,
+        data_type: MarketDataType,
+        symbol: str
     ) -> MarketDataCacheEntry | None:
         stmt = select(MarketDataCacheEntry).where(
             MarketDataCacheEntry.provider_code == self._provider_code,
@@ -158,7 +160,3 @@ class ReadThroughCache:
             entry.as_of = as_of
             entry.fetched_at = fetched_at
         await self._session.commit()
-
-
-
-

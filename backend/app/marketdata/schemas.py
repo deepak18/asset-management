@@ -1,9 +1,9 @@
-"""Typed carriers for market data — the strongly-typed boundary (§8).
+"""Typed carriers for market data — the strongly-typed boundary.
 
 Every object here is a frozen Pydantic model (immutable recorded fact) and every
 externally-sourced datum carries a :class:`MarketDataProvenance`. That provenance
-is the *structured-data citation* unit from PLAN.md §7 (``Provider_Code`` +
-``Data_Source_Table`` + ``As_Of_Timestamp``): the AI layer may never surface a
+is the *structured-data citation* unit (``Provider_Code`` + ``Data_Source_Table`` +
+``As_Of_Timestamp``): the AI layer may never surface a
 market figure without being able to point back to where it came from and when.
 
 ``Decimal`` (never ``float``) for all money, matching the ledger's exactness rule.
@@ -29,7 +29,7 @@ class MarketDataType(StrEnum):
 
 
 class MarketDataProvenance(BaseModel):
-    """Where a datum came from + as-of when (PLAN.md §7 structured citation unit).
+    """Where a datum came from + as-of when (structured citation unit).
 
     * ``provider_code`` — the source system, e.g. ``"ALPHAVANTAGE"``.
     * ``source_table``  — the logical source within it (e.g. the AlphaVantage
@@ -110,4 +110,3 @@ class FinancialStatements(BaseModel):
     ticker: str = Field(min_length=1)
     statement_type: MarketDataType
     statements: tuple[FinancialStatement, ...]
-
