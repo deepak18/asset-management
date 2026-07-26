@@ -38,7 +38,8 @@ docker-compose.yml   Local orchestration (Postgres + pgvector today)
 | REST API (`/health`, portfolio summary/transactions/holdings/analytics) | ✅ |
 | PostgreSQL + pgvector via Docker Compose | ✅ |
 | Ollama AI-client wrapper (typed `LLMClient`, config-only provider swap) | ✅ interface + Ollama adapter, HTTP boundary unit-tested |
-| Market data (MCP), documents/RAG, research, workspace panel | ⬜ planned |
+| Market data via AlphaVantage MCP (read-through Postgres cache, throttle, stale fallback) | ✅ provider + cache wired; MCP boundary unit-tested (live path opt-in) |
+| Documents/RAG, research, workspace panel | ⬜ planned |
 | Frontend | ⬜ planned |
 
 The generated API contract lives at [`backend/openapi.json`](./backend/openapi.json) (the seam the frontend generates types from).

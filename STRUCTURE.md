@@ -61,9 +61,14 @@ backend/
 │   │   │   └── test_xirr.py       # ✅ pinned XIRR (10%/20%/neg, Excel ref), mixed-ccy, error paths
 │   │   ├── providers/         # ✅ SQLAlchemy portfolio provider round-trip (in-memory SQLite)
 │   │   │   └── test_portfolio_provider.py # ✅ ORM→schema mapping, exact Decimals, feeds calculators
-│   │   ├── marketdata/        # ✅ read-through cache hit/miss, TTL/stale fallback, exact-decimal round-trip
+│   │   ├── marketdata/        # ✅ read-through cache + AlphaVantage provider (mocked MCP) + throttle
 │   │   │   ├── test_schemas.py    # ✅ provenance required, frozen, statement container, optional fields
-│   │   │   └── test_cache.py      # ✅ hit / miss-refresh / TTL-expiry / stale-fallback / per-symbol keys
+│   │   │   ├── test_cache.py      # ✅ hit / miss-refresh / TTL-expiry / stale-fallback / per-symbol keys
+│   │   │   ├── test_throttle.py   # ✅ min-interval spacing with injected clock/sleep
+│   │   │   └── test_alphavantage.py # ✅ tool-JSON → typed mapping, cache-first, throttle, rate-limit/stale, bad symbol
+│   │   ├── mcp/               # ✅ MCP registry + result parsing (no transport opened)
+│   │   │   ├── test_registry.py   # ✅ apikey query construction, disabled-when-no-url
+│   │   │   └── test_client.py     # ✅ extract_text: single/multi block, isError, no-content
 │   │   ├── research/          # ⬜ competitor matrix assembly, news linking (mocked providers)
 │   │   ├── documents/         # ⬜ PDF/TXT/MD parsing + citation anchors (mocked embeddings)
 │   │   ├── citations/         # ⬜ polymorphic citation schema validation + enforcement
@@ -75,7 +80,8 @@ backend/
 │   │   └── test_portfolio_routes.py # ✅ health, summary/txns/holdings/analytics, 200 + 404 paths
 │   └── integration/           # 🟡 @pytest.mark.integration — real Postgres/pgvector + MCP/Ollama wiring (opt-in)
 │       ├── test_postgres_pgvector.py # ✅ connect + CREATE EXTENSION vector + vector column round-trip
-│       └── test_ollama_live.py        # ✅ live Ollama completion + embedding smoke (skips if daemon down)
+│       ├── test_ollama_live.py        # ✅ live Ollama completion + embedding smoke (skips if daemon down)
+│       └── test_alphavantage_live.py  # ✅ live hosted AlphaVantage MCP list_tools + quote (skips if unconfigured)
 └── app/
     ├── main.py                # ✅ FastAPI app factory + lifespan (DB engine on state) + /health; mounts v1 router
     ├── core/                  # 🟡 Cross-cutting infra (NOT business logic)
@@ -106,12 +112,13 @@ backend/
     │   └── calculators.py     # ✅ Pure math: FIFO cost-basis P&L, realized/unrealized, allocation, XIRR (unit-tested)
     ├── research/              # ⬜ Competitor matrix (manual peer seed), news streaming, evaluation workspaces
     ├── documents/             # ⬜ Ingestion pipeline, PDF/TXT/MD parsing, pgvector embeddings
-    ├── marketdata/            # 🟡 Pricing + fundamentals behind MarketDataProvider; read-through cache built, MCP fetch pending
+    ├── marketdata/            # 🟡 Pricing + fundamentals behind MarketDataProvider; AlphaVantage-over-MCP wired
     │   ├── schemas.py         # ✅ Typed Quote/CompanyProfile/FinancialStatement(s) + MarketDataProvenance (citation seam §7)
     │   ├── models.py          # ✅ SQLAlchemy: market_data_cache (one row per provider/data_type/symbol)
     │   ├── cache.py           # ✅ ReadThroughCache — TTL freshness + stale fallback, generic over the payload schema
-    │   ├── errors.py          # ✅ MarketDataError / MarketDataUnavailableError
-    │   └── (mcp adapter)      # ⬜ AlphaVantage-over-MCP MarketDataProvider (next slice)
+    │   ├── throttle.py        # ✅ AsyncRateLimiter — spaces upstream calls for the free tier (injectable clock/sleep)
+    │   ├── alphavantage.py    # ✅ AlphaVantageMarketDataProvider — MCP tool JSON → typed schemas, cache-first, throttled
+    │   └── errors.py          # ✅ MarketDataError / MarketDataUnavailableError
     ├── workspace_panel/       # ⬜ Context-aware AI panel (POST /workspace/ask → SSE token stream)
     ├── citations/             # ⬜ Polymorphic citation models + persistence (see PLAN.md citation schema)
     │   ├── models.py          # SQLAlchemy: base Citation + Document / Filing / StructuredData variants
@@ -126,9 +133,10 @@ backend/
     │   ├── agents/            # ⬜ PydanticAI single-shot tools
     │   ├── graphs/            # ⬜ LangGraph state machines (equity research report, etc.)
     │   └── citations.py       # ⬜ Zero-trust citation enforcement (§7)
-    └── mcp/                   # ⬜ MCP client interfaces used by providers (§5)
-        ├── client.py          # ⬜ Generic MCP client wrapper
-        └── registry.py        # ⬜ Configured server registry (alphavantage, sec-edgar, fs, browser)
+    └── mcp/                    # 🟡 MCP client interfaces used by providers (§5)
+        ├── client.py          # ✅ McpClient Protocol + StreamableHttpMcpClient (hosted HTTP) + extract_text
+        ├── registry.py        # ✅ McpServerConfig + build_alphavantage_config (apikey → query param)
+        └── errors.py          # ✅ McpError / McpUnavailableError / McpToolError
 ```
 
 ---
