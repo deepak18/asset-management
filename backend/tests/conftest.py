@@ -16,6 +16,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
+import app.marketdata.models  # noqa: F401  (registers the cache table on Base.metadata)
 import app.portfolio.models  # noqa: F401  (import registers ORM tables on Base.metadata)
 from app.core.currency import FxRate, FxRateTable
 from app.core.database import Base

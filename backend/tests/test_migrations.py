@@ -16,6 +16,7 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect
 
+import app.marketdata.models  # noqa: F401  (registers the cache table on Base.metadata)
 import app.portfolio.models  # noqa: F401  (registers ORM tables on Base.metadata)
 from app.core.config import get_settings
 from app.core.database import Base
@@ -73,4 +74,4 @@ def test_downgrade_removes_domain_tables(
 
     assert "portfolios" not in tables
     assert "transactions" not in tables
-
+    assert "market_data_cache" not in tables
