@@ -45,16 +45,19 @@ from app.mcp.errors import McpError
 
 PROVIDER_CODE = "ALPHAVANTAGE"
 
-# Tool names mirror AlphaVantage's REST function names. If the hosted server
-# advertises different names, `McpClient.list_tools()` reveals them and only this
-# mapping changes — no consumer is affected.
+# Tool names mirror AlphaVantage's REST function names (verified against the hosted
+# server's advertised tools). The hosted MCP server returns CSV by default, so the
+# tools that support it are called with ``datatype=json`` to get the classic REST
+# JSON shape this module maps. COMPANY_OVERVIEW is JSON-only (no datatype arg).
 _QUOTE_TOOL = "GLOBAL_QUOTE"
-_PROFILE_TOOL = "OVERVIEW"
+_PROFILE_TOOL = "COMPANY_OVERVIEW"
 _STATEMENT_TOOLS: dict[MarketDataType, str] = {
     MarketDataType.INCOME_STATEMENT: "INCOME_STATEMENT",
     MarketDataType.BALANCE_SHEET: "BALANCE_SHEET",
     MarketDataType.CASH_FLOW: "CASH_FLOW",
 }
+# Ask for JSON on the tools that honour a datatype argument.
+_JSON_DATATYPE = {"datatype": "json"}
 
 # Report-level metadata keys that are not financial line items.
 _STATEMENT_META = {"fiscalDateEnding", "reportedCurrency"}
@@ -90,7 +93,7 @@ class AlphaVantageMarketDataProvider:
 
     async def get_quote(self, ticker: str) -> Quote | None:
         async def fetch() -> Quote:
-            data = await self._fetch(_QUOTE_TOOL, {"symbol": ticker})
+            data = await self._fetch(_QUOTE_TOOL, {"symbol": ticker, **_JSON_DATATYPE})
             return self._map_quote(ticker, data)
 
         return await self._cached(MarketDataType.QUOTE, ticker, Quote, fetch)
@@ -110,7 +113,7 @@ class AlphaVantageMarketDataProvider:
             raise ValueError(f"{statement_type} is not a financial-statement type")
 
         async def fetch() -> FinancialStatements:
-            data = await self._fetch(tool, {"symbol": ticker})
+            data = await self._fetch(tool, {"symbol": ticker, **_JSON_DATATYPE})
             return self._map_statements(ticker, statement_type, data)
 
         return await self._cached(statement_type, ticker, FinancialStatements, fetch)
@@ -153,6 +156,16 @@ class AlphaVantageMarketDataProvider:
     def _check_envelope(data: Any, tool: str) -> None:
         if not isinstance(data, dict):
             return
+        # Hosted MCP error envelope: {"error": {"type": ..., "message": ...}}.
+        error = data.get("error")
+        if isinstance(error, dict):
+            etype = str(error.get("type", "")).lower()
+            detail = error.get("message") or error.get("detail") or etype or "unknown error"
+            if "rate" in etype or "limit" in etype:
+                raise MarketDataUnavailableError(f"AlphaVantage rate limit on {tool}: {detail}")
+            # Non-transient error (e.g. invalid symbol) → treat as "no data".
+            raise _NoDataError(f"AlphaVantage error on {tool}: {detail}")
+        # Classic REST envelopes still used by some endpoints.
         if "Note" in data or "Information" in data:
             detail = data.get("Note") or data.get("Information")
             raise MarketDataUnavailableError(f"AlphaVantage rate limit on {tool}: {detail}")
@@ -252,6 +265,3 @@ def _opt_str(raw: Any) -> str | None:
         return None
     text = str(raw).strip()
     return text or None
-
-
-

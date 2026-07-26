@@ -39,6 +39,12 @@ _INCOME_JSON = json.dumps(
     ]}
 )
 _RATE_LIMIT_JSON = json.dumps({"Note": "5 calls per minute limit reached."})
+_ERROR_RATE_LIMIT_JSON = json.dumps(
+    {"error": {"type": "rate_limit", "message": "25 requests per day reached."}}
+)
+_ERROR_OTHER_JSON = json.dumps(
+    {"error": {"type": "invalid_symbol", "message": "Unknown symbol."}}
+)
 _BAD_SYMBOL_JSON = json.dumps({"Error Message": "Invalid API call."})
 
 
@@ -134,6 +140,23 @@ async def test_rate_limit_without_cache_raises(async_session: AsyncSession) -> N
         await provider.get_quote("AAPL")
 
 
+async def test_error_envelope_rate_limit_raises(async_session: AsyncSession) -> None:
+    # The hosted MCP server signals quota via {"error": {"type": "rate_limit"}}.
+    fake = _FakeMcp({"GLOBAL_QUOTE": _ERROR_RATE_LIMIT_JSON})
+    provider = AlphaVantageMarketDataProvider(fake, _cache(async_session, _Clock(_T0)))
+
+    with pytest.raises(MarketDataUnavailableError):
+        await provider.get_quote("AAPL")
+
+
+async def test_error_envelope_non_rate_returns_none(async_session: AsyncSession) -> None:
+    # A non-transient error (e.g. invalid symbol) is "no data", not unavailable.
+    fake = _FakeMcp({"GLOBAL_QUOTE": _ERROR_OTHER_JSON})
+    provider = AlphaVantageMarketDataProvider(fake, _cache(async_session, _Clock(_T0)))
+
+    assert await provider.get_quote("NOPE") is None
+
+
 async def test_rate_limit_falls_back_to_stale_cache(async_session: AsyncSession) -> None:
     fake = _FakeMcp({"GLOBAL_QUOTE": _QUOTE_JSON})
     clock = _Clock(_T0)
@@ -143,7 +166,7 @@ async def test_rate_limit_falls_back_to_stale_cache(async_session: AsyncSession)
     assert first is not None and first.price == Decimal("190.55")
 
     clock.advance(120)  # expire the cache entry
-    fake.responses["GLOBAL_QUOTE"] = _RATE_LIMIT_JSON  # now rate-limited
+    fake.responses["GLOBAL_QUOTE"] = _ERROR_RATE_LIMIT_JSON  # now rate-limited
 
     stale = await provider.get_quote("AAPL")
     assert stale is not None
@@ -151,7 +174,7 @@ async def test_rate_limit_falls_back_to_stale_cache(async_session: AsyncSession)
 
 
 async def test_get_company_profile_maps_fields(async_session: AsyncSession) -> None:
-    fake = _FakeMcp({"OVERVIEW": _OVERVIEW_JSON})
+    fake = _FakeMcp({"COMPANY_OVERVIEW": _OVERVIEW_JSON})
     provider = AlphaVantageMarketDataProvider(fake, _cache(async_session, _Clock(_T0)))
 
     profile = await provider.get_company_profile("AAPL")
@@ -160,7 +183,7 @@ async def test_get_company_profile_maps_fields(async_session: AsyncSession) -> N
     assert profile.name == "Apple Inc"
     assert profile.sector == "TECHNOLOGY"
     assert profile.industry == "ELECTRONIC COMPUTERS"
-    assert profile.provenance.source_table == "OVERVIEW"
+    assert profile.provenance.source_table == "COMPANY_OVERVIEW"
 
 
 async def test_get_financial_statements_maps_periods_and_missing(
@@ -190,4 +213,3 @@ async def test_unknown_statement_type_raises(async_session: AsyncSession) -> Non
 
     with pytest.raises(ValueError, match="financial-statement"):
         await provider.get_financial_statements("AAPL", MarketDataType.QUOTE)
-

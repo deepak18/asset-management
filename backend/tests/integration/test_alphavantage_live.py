@@ -34,12 +34,16 @@ async def test_live_alphavantage_lists_tools_and_quotes() -> None:
     try:
         tools = await client.list_tools()
         assert len(tools) > 0
+        assert "GLOBAL_QUOTE" in tools  # the tool the quote provider binds
 
-        text = await client.call_tool("GLOBAL_QUOTE", {"symbol": "AAPL"})
+        # The hosted server returns CSV by default; ask for JSON explicitly.
+        text = await client.call_tool("GLOBAL_QUOTE", {"symbol": "AAPL", "datatype": "json"})
         payload = json.loads(text)
     except McpError:
         pytest.skip("AlphaVantage MCP server unreachable; skipping live test.")
 
-    quote = payload.get("Global Quote", {})
-    assert Decimal(str(quote.get("05. price", "0"))) > 0
+    # Free tier is 25 req/day; a quota/error envelope is not a failure here.
+    if "Global Quote" not in payload:
+        pytest.skip(f"AlphaVantage returned no quote (likely rate-limited): {payload}")
 
+    assert Decimal(str(payload["Global Quote"]["05. price"])) > 0
