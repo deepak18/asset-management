@@ -57,7 +57,7 @@ backend/
 │   │   ├── portfolio/         # ✅ calculators (XIRR, P&L, allocation) — exhaustive edge cases
 │   │   │   ├── test_allocation.py # ✅ weights by ticker/sector/industry, empty/zero-total
 │   │   │   ├── test_cost_basis.py # ✅ FIFO realized/unrealized, splits, dividends, fees, mixed-ccy
-│   │   │   ├── test_service.py    # ✅ service orchestration (grouping, roll-ups, XIRR wiring, missing) — faked provider
+│   │   │   ├── test_service.py    # ✅ service orchestration (grouping, roll-ups, XIRR, market values/allocation, unpriced) — faked providers
 │   │   │   └── test_xirr.py       # ✅ pinned XIRR (10%/20%/neg, Excel ref), mixed-ccy, error paths
 │   │   ├── providers/         # ✅ SQLAlchemy portfolio provider round-trip (in-memory SQLite)
 │   │   │   └── test_portfolio_provider.py # ✅ ORM→schema mapping, exact Decimals, feeds calculators
@@ -75,9 +75,9 @@ backend/
 │   │   ├── ai/                # ✅ LLMClient factory selection + Ollama adapter (HTTP boundary mocked)
 │   │   │   ├── test_factory.py       # ✅ config-only provider selection, future/unknown seams
 │   │   │   └── test_ollama_client.py # ✅ request shaping, typed parsing, structured JSON, timeout/error translation
-│   ├── api/                   # ✅ Route contract tests via httpx ASGITransport (in-process app)
-│   │   ├── conftest.py        # ✅ Seeded in-memory SQLite + get_session override + AsyncClient fixture
-│   │   └── test_portfolio_routes.py # ✅ health, summary/txns/holdings/analytics, 200 + 404 paths
+│   │   ├── api/                   # ✅ Route contract tests via httpx ASGITransport (in-process app)
+│   │   │   ├── conftest.py        # ✅ Seeded in-memory SQLite + get_session/market-data overrides + AsyncClient fixtures
+│   │   │   └── test_portfolio_routes.py # ✅ health, summary/txns/holdings/analytics (cost-basis + market values), 200 + 404
 │   └── integration/           # 🟡 @pytest.mark.integration — real Postgres/pgvector + MCP/Ollama wiring (opt-in)
 │       ├── test_postgres_pgvector.py # ✅ connect + CREATE EXTENSION vector + vector column round-trip
 │       ├── test_ollama_live.py        # ✅ live Ollama completion + embedding smoke (skips if daemon down)
@@ -92,7 +92,7 @@ backend/
     │   ├── currency.py        # ✅ FX normalization seam (Money/FxRate/FxRateTable) — USD now, INR-ready
     │   └── exceptions.py      # ⬜ App-wide error types + handlers
     ├── api/                   # 🟡 HTTP layer only (thin controllers, no business logic)
-    │   ├── deps.py            # ✅ Shared FastAPI dependencies (session → provider → service DI chain)
+    │   ├── deps.py            # ✅ Shared FastAPI dependencies (session → provider(s) → service DI chain; market data optional)
     │   └── v1/
     │       ├── router.py      # ✅ Aggregates all v1 routes
     │       └── routes/        # 🟡 portfolio.py ✅; research.py, documents.py, marketdata.py, workspace.py ⬜
@@ -108,7 +108,7 @@ backend/
     ├── portfolio/             # 🟡 Ledger, allocation weights, investor returns (XIRR), valuations (pure Python)
     │   ├── models.py          # ✅ SQLAlchemy 2.0 mapped: Portfolio, Holding, Transaction, Cash (exact Decimal, currency-aware)
     │   ├── schemas.py         # ✅ Pydantic typed inputs/outputs (Transaction, CashFlow, PortfolioSummary, HoldingInfo, PortfolioAnalytics) — no dict/Any
-    │   ├── service.py         # ✅ Orchestration: provider I/O × pure calculators → PortfolioAnalytics (no math, no I/O)
+    │   ├── service.py         # ✅ Orchestration: provider I/O × pure calculators → PortfolioAnalytics (+ market values via MarketDataProvider; no math, no I/O)
     │   └── calculators.py     # ✅ Pure math: FIFO cost-basis P&L, realized/unrealized, allocation, XIRR (unit-tested)
     ├── research/              # ⬜ Competitor matrix (manual peer seed), news streaming, evaluation workspaces
     ├── documents/             # ⬜ Ingestion pipeline, PDF/TXT/MD parsing, pgvector embeddings

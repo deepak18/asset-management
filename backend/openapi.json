@@ -9,7 +9,7 @@
     "/api/v1/portfolios/{portfolio_id}": {
       "get": {
         "tags": [
-          "portfolio"
+          "Portfolio"
         ],
         "summary": "Get Portfolio",
         "description": "Return a portfolio's identity + base currency (404 if it doesn't exist).",
@@ -52,7 +52,7 @@
     "/api/v1/portfolios/{portfolio_id}/transactions": {
       "get": {
         "tags": [
-          "portfolio"
+          "Portfolio"
         ],
         "summary": "List Transactions",
         "description": "Return the portfolio's full ledger as typed transactions.",
@@ -99,7 +99,7 @@
     "/api/v1/portfolios/{portfolio_id}/holdings": {
       "get": {
         "tags": [
-          "portfolio"
+          "Portfolio"
         ],
         "summary": "List Holdings",
         "description": "Return the portfolio's tracked securities + classification metadata.",
@@ -146,7 +146,7 @@
     "/api/v1/portfolios/{portfolio_id}/analytics": {
       "get": {
         "tags": [
-          "portfolio"
+          "Portfolio"
         ],
         "summary": "Get Analytics",
         "description": "Return aggregated cost-basis / realized-P&L / XIRR analytics (404 if absent).",
@@ -189,7 +189,7 @@
     "/health": {
       "get": {
         "tags": [
-          "system"
+          "System"
         ],
         "summary": "Health",
         "description": "Liveness probe \u2014 cheap check that the app is up (no DB touch).",
@@ -215,6 +215,32 @@
   },
   "components": {
     "schemas": {
+      "AllocationWeight": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "market_value": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Market Value"
+          },
+          "weight": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Weight"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "market_value",
+          "weight"
+        ],
+        "title": "AllocationWeight",
+        "description": "One row of an allocation breakdown."
+      },
       "CostBasisResult": {
         "properties": {
           "ticker": {
@@ -393,6 +419,82 @@
               }
             ],
             "title": "Money Weighted Return"
+          },
+          "positions_unrealized": {
+            "items": {
+              "$ref": "#/components/schemas/UnrealizedResult"
+            },
+            "type": "array",
+            "title": "Positions Unrealized",
+            "default": []
+          },
+          "market_value_base": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Value Base"
+          },
+          "unrealized_pnl_base": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unrealized Pnl Base"
+          },
+          "allocation_by_ticker": {
+            "items": {
+              "$ref": "#/components/schemas/AllocationWeight"
+            },
+            "type": "array",
+            "title": "Allocation By Ticker",
+            "default": []
+          },
+          "allocation_by_sector": {
+            "items": {
+              "$ref": "#/components/schemas/AllocationWeight"
+            },
+            "type": "array",
+            "title": "Allocation By Sector",
+            "default": []
+          },
+          "allocation_by_industry": {
+            "items": {
+              "$ref": "#/components/schemas/AllocationWeight"
+            },
+            "type": "array",
+            "title": "Allocation By Industry",
+            "default": []
+          },
+          "unpriced_tickers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unpriced Tickers",
+            "default": []
+          },
+          "priced_as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priced As Of"
           }
         },
         "type": "object",
@@ -406,7 +508,7 @@
           "open_cost_basis_base"
         ],
         "title": "PortfolioAnalytics",
-        "description": "Aggregated, base-currency portfolio analytics (the service layer's output).\n\nThis is the single typed envelope the ``/analytics`` endpoint returns. It bundles\nthe portfolio identity, per-position FIFO cost-basis results, whole-portfolio\nroll-up totals, and the money-weighted return (XIRR).\n\n``money_weighted_return`` is ``None`` when XIRR is mathematically undefined\n(e.g. an empty ledger, or flows that never change sign) \u2014 we surface \"not\ncomputable\" honestly rather than emitting a misleading ``0``. It is a *rate*\n(annualized fraction), not money, but is kept as ``Decimal`` so no ``float``\nleaks into a financial payload.\n\nNote (Phase 1.1 scope): market-value-dependent figures \u2014 unrealized P&L and\nallocation weights \u2014 are intentionally absent here because they require current\nprices from the market-data provider (\u00a71.3), which is not wired yet. This schema\nis additive-friendly: those fields slot in later without breaking consumers."
+        "description": "Aggregated, base-currency portfolio analytics (the service layer's output).\n\nThis is the single typed envelope the ``/analytics`` endpoint returns. It bundles\nthe portfolio identity, per-position FIFO cost-basis results, whole-portfolio\nroll-up totals, and the money-weighted return (XIRR).\n\n``money_weighted_return`` is ``None`` when XIRR is mathematically undefined\n(e.g. an empty ledger, or flows that never change sign) \u2014 we surface \"not\ncomputable\" honestly rather than emitting a misleading ``0``. It is a *rate*\n(annualized fraction), not money, but is kept as ``Decimal`` so no ``float``\nleaks into a financial payload.\n\nMarket-value-dependent figures \u2014 per-position unrealized P&L and allocation\nweights \u2014 are populated when the market-data provider supplies current\nprices. When prices are unavailable (no provider configured, quota exhausted,\nor a missing FX rate) those fields degrade gracefully: totals are ``None``,\nallocation lists are empty, and the affected tickers are reported in\n``unpriced_tickers`` so the omission is explicit, never a silent ``0``."
       },
       "PortfolioSummary": {
         "properties": {
@@ -529,6 +631,44 @@
         ],
         "title": "TransactionType",
         "description": "Ledger event kinds supported by the deterministic calculators."
+      },
+      "UnrealizedResult": {
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "title": "Ticker"
+          },
+          "open_quantity": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Open Quantity"
+          },
+          "open_cost_basis_base": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Open Cost Basis Base"
+          },
+          "market_value_base": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Market Value Base"
+          },
+          "unrealized_pnl_base": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Unrealized Pnl Base"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ticker",
+          "open_quantity",
+          "open_cost_basis_base",
+          "market_value_base",
+          "unrealized_pnl_base"
+        ],
+        "title": "UnrealizedResult",
+        "description": "Mark-to-market of open lots against a current price."
       },
       "ValidationError": {
         "properties": {
