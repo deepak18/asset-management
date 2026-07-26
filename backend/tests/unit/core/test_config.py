@@ -48,6 +48,19 @@ def test_ai_settings_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.ollama_base_url == "http://ollama.local:11434"
 
 
+def test_marketdata_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    for var in (
+        "ALPHAVANTAGE_API_KEY",
+        "ALPHAVANTAGE_MCP_URL",
+        "MARKETDATA_MIN_REQUEST_INTERVAL_SECONDS",
+    ):
+        monkeypatch.delenv(var, raising=False)
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert settings.alphavantage_api_key is None
+    assert settings.alphavantage_mcp_url == "https://mcp.alphavantage.co/mcp"
+    assert settings.marketdata_min_request_interval_seconds == 12.0
+
+
 def test_supported_currencies_accepts_csv(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SUPPORTED_CURRENCIES", "usd, inr")
     settings = Settings()

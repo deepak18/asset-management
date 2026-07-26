@@ -55,6 +55,14 @@ class Settings(BaseSettings):
     # Free-tier market data is served from a read-through cache (PLAN.md §1.3).
     marketdata_cache_ttl_seconds: int = 3600
 
+    # AlphaVantage market data via the official hosted MCP server. The API key
+    # and MCP URL are config-only; an empty URL disables the live provider
+    # (unit tests never need it). The min-request interval throttles upstream calls to
+    # respect the free tier (~5 req/min → ~12s spacing); the cache absorbs the rest.
+    alphavantage_api_key: str | None = None
+    alphavantage_mcp_url: str | None = "https://mcp.alphavantage.co/mcp"
+    marketdata_min_request_interval_seconds: float = 12.0
+
     # Single local user (PLAN.md decision #1): optional local gate, no multi-tenant.
     api_access_key: str | None = None
 
