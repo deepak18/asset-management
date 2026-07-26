@@ -44,7 +44,8 @@ backend/
 │   ├── script.py.mako         # ✅ Revision script template
 │   └── versions/
 │       ├── 0001_initial_portfolio_schema.py  # ✅ Creates portfolios/holdings/transactions/cash_balances
-│       └── 0002_enable_pgvector.py            # ✅ Enables pgvector extension (Postgres-only, no-op on SQLite)
+│       ├── 0002_enable_pgvector.py            # ✅ Enables pgvector extension (Postgres-only, no-op on SQLite)
+│       └── 0003_market_data_cache.py          # ✅ Creates market_data_cache (read-through cache table)
 ├── tests/                     # 🟡 pytest suites — mirrors app/ layout one-to-one (see AGENTS.md §11)
 │   ├── conftest.py            # ✅ Shared fixtures (FX rate tables + in-memory async SQLite session)
 │   ├── test_migrations.py     # ✅ Alembic upgrade/downgrade + model-vs-migration column drift guard
@@ -60,7 +61,9 @@ backend/
 │   │   │   └── test_xirr.py       # ✅ pinned XIRR (10%/20%/neg, Excel ref), mixed-ccy, error paths
 │   │   ├── providers/         # ✅ SQLAlchemy portfolio provider round-trip (in-memory SQLite)
 │   │   │   └── test_portfolio_provider.py # ✅ ORM→schema mapping, exact Decimals, feeds calculators
-│   │   ├── marketdata/        # ⬜ cache hit/miss, TTL/stale fallback, throttling, as_of stamping
+│   │   ├── marketdata/        # ✅ read-through cache hit/miss, TTL/stale fallback, exact-decimal round-trip
+│   │   │   ├── test_schemas.py    # ✅ provenance required, frozen, statement container, optional fields
+│   │   │   └── test_cache.py      # ✅ hit / miss-refresh / TTL-expiry / stale-fallback / per-symbol keys
 │   │   ├── research/          # ⬜ competitor matrix assembly, news linking (mocked providers)
 │   │   ├── documents/         # ⬜ PDF/TXT/MD parsing + citation anchors (mocked embeddings)
 │   │   ├── citations/         # ⬜ polymorphic citation schema validation + enforcement
@@ -91,7 +94,7 @@ backend/
     ├── providers/             # 🟡 Strongly-typed abstraction interfaces (§2) — the ONLY I/O boundary
     │   ├── base.py            # ✅ PortfolioProvider Protocol (structural typing)
     │   ├── portfolio_provider.py  # ✅ SqlAlchemyPortfolioProvider — ORM rows → typed domain objects
-    │   ├── marketdata_provider.py
+    │   ├── marketdata_provider.py  # ✅ MarketDataProvider Protocol — quotes/profiles/statements (cache-first)
     │   ├── competitor_matrix_engine.py
     │   ├── sec_provider.py
     │   ├── news_streaming_engine.py
@@ -103,7 +106,12 @@ backend/
     │   └── calculators.py     # ✅ Pure math: FIFO cost-basis P&L, realized/unrealized, allocation, XIRR (unit-tested)
     ├── research/              # ⬜ Competitor matrix (manual peer seed), news streaming, evaluation workspaces
     ├── documents/             # ⬜ Ingestion pipeline, PDF/TXT/MD parsing, pgvector embeddings
-    ├── marketdata/            # ⬜ Pricing + fundamental normalization + read-through Postgres cache (free-tier)
+    ├── marketdata/            # 🟡 Pricing + fundamentals behind MarketDataProvider; read-through cache built, MCP fetch pending
+    │   ├── schemas.py         # ✅ Typed Quote/CompanyProfile/FinancialStatement(s) + MarketDataProvenance (citation seam §7)
+    │   ├── models.py          # ✅ SQLAlchemy: market_data_cache (one row per provider/data_type/symbol)
+    │   ├── cache.py           # ✅ ReadThroughCache — TTL freshness + stale fallback, generic over the payload schema
+    │   ├── errors.py          # ✅ MarketDataError / MarketDataUnavailableError
+    │   └── (mcp adapter)      # ⬜ AlphaVantage-over-MCP MarketDataProvider (next slice)
     ├── workspace_panel/       # ⬜ Context-aware AI panel (POST /workspace/ask → SSE token stream)
     ├── citations/             # ⬜ Polymorphic citation models + persistence (see PLAN.md citation schema)
     │   ├── models.py          # SQLAlchemy: base Citation + Document / Filing / StructuredData variants
