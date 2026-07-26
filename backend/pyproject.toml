@@ -21,6 +21,7 @@ dependencies = [
     # local Ollama HTTP API through it. It also drives the async API contract
     # tests in-process via ASGITransport (no live socket).
     "httpx>=0.28.1",
+    "mcp>=1.28.1",
 ]
 
 [project.optional-dependencies]
