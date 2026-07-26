@@ -21,7 +21,7 @@ Design rationale (the "why" behind the recurring choices here):
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 
@@ -176,10 +176,12 @@ class PortfolioAnalytics(BaseModel):
     (annualized fraction), not money, but is kept as ``Decimal`` so no ``float``
     leaks into a financial payload.
 
-    Note (Phase 1.1 scope): market-value-dependent figures — unrealized P&L and
-    allocation weights — are intentionally absent here because they require current
-    prices from the market-data provider (§1.3), which is not wired yet. This schema
-    is additive-friendly: those fields slot in later without breaking consumers.
+    Market-value-dependent figures — per-position unrealized P&L and allocation
+    weights — are populated when the market-data provider supplies current
+    prices. When prices are unavailable (no provider configured, quota exhausted,
+    or a missing FX rate) those fields degrade gracefully: totals are ``None``,
+    allocation lists are empty, and the affected tickers are reported in
+    ``unpriced_tickers`` so the omission is explicit, never a silent ``0``.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -192,3 +194,13 @@ class PortfolioAnalytics(BaseModel):
     fees_base: Decimal
     open_cost_basis_base: Decimal
     money_weighted_return: Decimal | None = None
+
+    # Market-value-dependent analytics (present only when priced; see §1.3).
+    positions_unrealized: tuple[UnrealizedResult, ...] = ()
+    market_value_base: Decimal | None = None
+    unrealized_pnl_base: Decimal | None = None
+    allocation_by_ticker: tuple[AllocationWeight, ...] = ()
+    allocation_by_sector: tuple[AllocationWeight, ...] = ()
+    allocation_by_industry: tuple[AllocationWeight, ...] = ()
+    unpriced_tickers: tuple[str, ...] = ()
+    priced_as_of: datetime | None = None
