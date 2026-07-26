@@ -3,10 +3,10 @@
 ``McpClient`` is the interface the rest of the app depends on: "call this tool with
 these string arguments, give me back the JSON text of the result." Concrete
 transports (streamable HTTP now; stdio later) implement it without leaking session
-or transport details upward (§2/§3).
+or transport details upward.
 
 Why return *text*? MCP tool results are dynamic JSON. Rather than pass bare dicts
-around (forbidden by §8), the client hands back the raw JSON string and each
+around, the client hands back the raw JSON string and each
 provider validates it into its own typed schema at the edge — the same
 "typed at the boundary" discipline used for the Ollama wire models.
 
@@ -94,10 +94,3 @@ class StreamableHttpMcpClient:
                 f"MCP list_tools to {self._config.name} failed: {exc}"
             ) from exc
         return tuple(tool.name for tool in listing.tools)
-
-
-
-
-
-
-

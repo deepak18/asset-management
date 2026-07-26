@@ -49,4 +49,3 @@ async def test_zero_interval_never_waits() -> None:
     await limiter.acquire()
     await limiter.acquire()
     assert clock.sleeps == []
-
