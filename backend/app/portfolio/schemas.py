@@ -195,7 +195,7 @@ class PortfolioAnalytics(BaseModel):
     open_cost_basis_base: Decimal
     money_weighted_return: Decimal | None = None
 
-    # Market-value-dependent analytics (present only when priced; see §1.3).
+    # Market-value-dependent analytics (present only when priced).
     positions_unrealized: tuple[UnrealizedResult, ...] = ()
     market_value_base: Decimal | None = None
     unrealized_pnl_base: Decimal | None = None
