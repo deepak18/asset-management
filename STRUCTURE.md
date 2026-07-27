@@ -82,6 +82,9 @@ backend/
 │       ├── test_postgres_pgvector.py # ✅ connect + CREATE EXTENSION vector + vector column round-trip
 │       ├── test_ollama_live.py        # ✅ live Ollama completion + embedding smoke (skips if daemon down)
 │       └── test_alphavantage_live.py  # ✅ live hosted AlphaVantage MCP list_tools + quote (skips if unconfigured)
+├── scripts/                   # 🟡 Dev utilities — NOT shipped (hatch builds only app/), excluded from the lint gate
+│   ├── portfolio_demo_1_2.py  # ✅ End-to-end deterministic-core demo: DB → provider → calculators (in-memory, no infra)
+│   └── ollama_healthcheck.py  # ✅ Ollama connectivity/latency diagnostic (reachability, installed models, timed completion)
 └── app/
     ├── main.py                # ✅ FastAPI app factory + lifespan (DB engine on state) + /health; mounts v1 router
     ├── core/                  # 🟡 Cross-cutting infra (NOT business logic)

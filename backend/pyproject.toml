@@ -69,8 +69,8 @@ markers = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-# Demo utilities under scripts/ are not part of the shipped package (hatch builds only app/)
-# and are intentionally untracked — keep them out of the lint gate.
+# Dev utilities under scripts/ are tracked but not part of the shipped package
+# (hatch builds only app/) — keep them out of the lint gate.
 extend-exclude = ["scripts"]
 
 [tool.ruff.lint]
