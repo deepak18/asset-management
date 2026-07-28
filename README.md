@@ -9,7 +9,7 @@ Local AI-powered **Investment Research Platform** — an analytical terminal (th
 ---
 
 ## Tech Stack
-- **Frontend:** Next.js · React · TypeScript · Tailwind · shadcn/ui *(not yet scaffolded)*
+- **Frontend:** Next.js 16 · React 19 · TypeScript (strict) · Tailwind · shadcn/ui-style primitives · Vitest/RTL *(dashboard scaffolded, mocks-first)*
 - **Backend:** Python 3.12+ · FastAPI · SQLAlchemy 2.0 (async) · Alembic
 - **DB / Vectors:** PostgreSQL 16 + `pgvector` (via Docker)
 - **AI:** PydanticAI (single-shot) + LangGraph (state machines); Ollama default, cloud via config *(in progress)*
@@ -19,7 +19,7 @@ Local AI-powered **Investment Research Platform** — an analytical terminal (th
 ## Layout (high level)
 ```
 backend/   FastAPI service — domain modules behind provider interfaces
-frontend/  Next.js app — talks to backend via REST only          (planned)
+frontend/  Next.js app — talks to backend via REST only           (dashboard, mocks-first)
 mcp/       MCP server configs/wrappers                            (planned)
 infra/     Deployment manifests (compose overrides, k8s/ECS)      (planned)
 docker-compose.yml   Local orchestration (Postgres + pgvector today)
@@ -40,7 +40,7 @@ docker-compose.yml   Local orchestration (Postgres + pgvector today)
 | Ollama AI-client wrapper (typed `LLMClient`, config-only provider swap) | ✅ interface + Ollama adapter, HTTP boundary unit-tested |
 | Market data via AlphaVantage MCP (read-through Postgres cache, throttle, stale fallback) | ✅ provider + cache wired; MCP boundary unit-tested (live path opt-in) |
 | Documents/RAG, research, workspace panel | ⬜ planned |
-| Frontend | ⬜ planned |
+| Frontend dashboard (summary, allocation donuts, ledger, watchlist) | ✅ scaffolded, mocks-first (Vitest/RTL green); swaps to live API per contract |
 
 The generated API contract lives at [`backend/openapi.json`](./backend/openapi.json) (the seam the frontend generates types from).
 
@@ -49,6 +49,7 @@ The generated API contract lives at [`backend/openapi.json`](./backend/openapi.j
 ## Prerequisites
 - **[uv](https://docs.astral.sh/uv/getting-started/installation/)** — manages the Python version, virtualenv, lockfile, and command running.
 - **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** — runs PostgreSQL + pgvector. (uv installs Python 3.12+ itself, so a system Python is not required.)
+- **[Node.js ≥ 20](https://nodejs.org/)** + npm — only needed for the `frontend/` app (`winget install OpenJS.NodeJS.LTS` on Windows).
 
 ## Getting Started (fresh clone → running API)
 
@@ -85,6 +86,50 @@ Open **http://localhost:8000/docs** for interactive Swagger UI. `GET /health` wo
 
 ---
 
+## Frontend (dashboard, mocks-first)
+
+The UI builds and tests with **zero live backend** — it runs against MSW mocks
+shaped by the OpenAPI contract, then swaps to the real API by config. See
+[`frontend/README.md`](./frontend/README.md) for the full runbook.
+
+```powershell
+cd frontend
+npm install
+cp .env.local.example .env.local     # NEXT_PUBLIC_API_MOCKING=enabled runs mock-only
+npm run dev                          # http://localhost:3000
+```
+
+Point it at the live API by setting `NEXT_PUBLIC_API_BASE_URL` (default
+`http://localhost:8000`) and leaving `NEXT_PUBLIC_API_MOCKING` unset. When the
+backend republishes `openapi.json`, run `npm run typegen` to regenerate types.
+
+### Run the full stack locally (live mode)
+
+Two terminals — backend on `:8000`, frontend on `:3000`:
+
+```powershell
+# terminal 1 — API (see backend/README.md; SQLite fallback needs no Docker)
+cd backend
+uv run uvicorn app.main:app --reload      # http://localhost:8000/docs
+
+# terminal 2 — UI in live mode (no mocking flag = calls the real API)
+cd frontend
+npm run dev                               # http://localhost:3000
+```
+
+For the browser to actually reach the API, the backend must satisfy two
+prerequisites (owned by the backend lane):
+
+1. **CORS** — allow the dev origin `http://localhost:3000` (browsers block
+   cross-origin `fetch` otherwise). The dashboard issues plain `GET`s, so
+   permitting that origin with `GET`/`OPTIONS` is enough.
+2. **Seeded data** — the dashboard reads portfolio **id `1`**
+   (`GET /api/v1/portfolios/1` + `/transactions`, `/holdings`, `/analytics`).
+   A fresh DB has none, so seed a demo portfolio with that id before loading the
+   page, otherwise every panel shows its (correct) empty/error state.
+
+---
+
 ## Testing
 Tests are written **side-by-side with code** — a change isn't done until its tests pass (see `AGENTS.md` §11).
 - **Backend:** `pytest` + `pytest-asyncio` + `pytest-cov`; `backend/tests/` mirrors `backend/app/`.
@@ -92,7 +137,7 @@ Tests are written **side-by-side with code** — a change isn't done until its t
   - Integration (real Postgres/pgvector, opt-in): `uv run pytest -m integration` *(requires `docker compose up -d`)*
   - Coverage: `uv run pytest --cov=app`
   - Lint & types: `uv run ruff check .` · `uv run mypy`
-- **Frontend:** Vitest + React Testing Library — `cd frontend && npm run test` *(once scaffolded)*.
+- **Frontend:** Vitest + React Testing Library — `cd frontend && npm run test`. Specs co-located under `src/__tests__/`; components are exercised against the typed API client with MSW mocks (no live backend). Also `npm run lint` and `npm run typecheck`.
 - Financial math has exhaustive edge-case coverage; AI tests assert structure/citations, never exact LLM wording.
 
 ---
