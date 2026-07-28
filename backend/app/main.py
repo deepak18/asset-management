@@ -18,6 +18,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
@@ -45,12 +46,26 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     """Build and configure the FastAPI application."""
 
+    settings = get_settings()
+
     app = FastAPI(
         title="Asset Management API",
         version="0.1.0",
         summary="Deterministic portfolio analytics over a currency-aware ledger.",
         lifespan=lifespan,
     )
+
+    # The browser blocks cross-origin fetches from the dev frontend (:3000) to this
+    # API (:8000) unless we opt in here. The allow-list is config-driven so origins
+    # change by environment without touching code.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_allow_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     app.include_router(api_router, prefix="/api/v1")
 
     @app.get("/health", tags=["System"])

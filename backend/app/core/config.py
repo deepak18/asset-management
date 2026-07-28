@@ -66,6 +66,14 @@ class Settings(BaseSettings):
     # Single local user (PLAN.md decision #1): optional local gate, no multi-tenant.
     api_access_key: str | None = None
 
+    # Browser same-origin policy blocks the dev frontend (:3000) from calling this
+    # API (:8000) unless the server opts in via CORS. Env-configurable so prod can
+    # widen/narrow the allow-list without code changes. NoDecode lets the validator
+    # accept a plain "http://a,http://b" CSV as well as a JSON list.
+    cors_allow_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:3000"]
+    )
+
     # AI provider is config-only switchable; business logic never changes.
     ai_provider: str = "ollama"
 
@@ -93,6 +101,19 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return [code.strip().upper() for code in value.split(",") if code.strip()]
         return [code.upper() for code in value]
+
+    @field_validator("cors_allow_origins", mode="before")
+    @classmethod
+    def _split_origins(cls, value: str | list[str]) -> list[str]:
+        """Allow ``CORS_ALLOW_ORIGINS=http://a,http://b`` (CSV) or a JSON list.
+
+        Origins are compared verbatim by the browser, so unlike currency codes
+        they are neither upper-cased nor otherwise normalized — only trimmed.
+        """
+
+        if isinstance(value, str):
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return [origin.strip() for origin in value]
 
     @field_validator("base_currency")
     @classmethod

@@ -72,6 +72,25 @@ def test_base_currency_is_uppercased(monkeypatch: pytest.MonkeyPatch) -> None:
     assert Settings().base_currency == "INR"
 
 
+def test_cors_allow_origins_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CORS_ALLOW_ORIGINS", raising=False)
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert settings.cors_allow_origins == ["http://localhost:3000"]
+
+
+def test_cors_allow_origins_accepts_csv(monkeypatch: pytest.MonkeyPatch) -> None:
+    # CSV of origins, with whitespace; origins are trimmed but NOT upper-cased
+    # (unlike currency codes) because browsers compare them verbatim.
+    monkeypatch.setenv(
+        "CORS_ALLOW_ORIGINS", "http://localhost:3000, https://App.Example.com"
+    )
+    settings = Settings()
+    assert settings.cors_allow_origins == [
+        "http://localhost:3000",
+        "https://App.Example.com",
+    ]
+
+
 def test_env_override_and_cache_clear(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AI_PROVIDER", "openai")
     get_settings.cache_clear()

@@ -53,7 +53,7 @@ backend/
 │   ├── unit/                  # 🟡 Pure/isolated tests — all provider boundaries mocked
 │   │   ├── core/             # ✅ currency (FX normalization) + config edge cases
 │   │   │   ├── test_currency.py   # ✅ base/identity, dated rates, missing-rate, cross-currency
-│   │   │   └── test_config.py     # ✅ defaults, CSV currencies, env override + cache_clear
+│   │   │   └── test_config.py     # ✅ defaults, CSV currencies + CORS origins, env override + cache_clear
 │   │   ├── portfolio/         # ✅ calculators (XIRR, P&L, allocation) — exhaustive edge cases
 │   │   │   ├── test_allocation.py # ✅ weights by ticker/sector/industry, empty/zero-total
 │   │   │   ├── test_cost_basis.py # ✅ FIFO realized/unrealized, splits, dividends, fees, mixed-ccy
@@ -77,7 +77,8 @@ backend/
 │   │   │   └── test_ollama_client.py # ✅ request shaping, typed parsing, structured JSON, timeout/error translation
 │   │   ├── api/                   # ✅ Route contract tests via httpx ASGITransport (in-process app)
 │   │   │   ├── conftest.py        # ✅ Seeded in-memory SQLite + get_session/market-data overrides + AsyncClient fixtures
-│   │   │   └── test_portfolio_routes.py # ✅ health, summary/txns/holdings/analytics (cost-basis + market values), 200 + 404
+│   │   │   ├── test_portfolio_routes.py # ✅ health, summary/txns/holdings/analytics (cost-basis + market values), 200 + 404
+│   │   │   └── test_cors.py        # ✅ config-driven CORS: allowed/disallowed origin headers + preflight (OPTIONS)
 │   └── integration/           # 🟡 @pytest.mark.integration — real Postgres/pgvector + MCP/Ollama wiring (opt-in)
 │       ├── test_postgres_pgvector.py # ✅ connect + CREATE EXTENSION vector + vector column round-trip
 │       ├── test_ollama_live.py        # ✅ live Ollama completion + embedding smoke (skips if daemon down)
@@ -86,9 +87,9 @@ backend/
 │   ├── portfolio_demo_1_2.py  # ✅ End-to-end deterministic-core demo: DB → provider → calculators (in-memory, no infra)
 │   └── ollama_healthcheck.py  # ✅ Ollama connectivity/latency diagnostic (reachability, installed models, timed completion)
 └── app/
-    ├── main.py                # ✅ FastAPI app factory + lifespan (DB engine on state) + /health; mounts v1 router
+    ├── main.py                # ✅ FastAPI app factory + lifespan (DB engine on state) + /health; config-driven CORS; mounts v1 router
     ├── core/                  # 🟡 Cross-cutting infra (NOT business logic)
-    │   ├── config.py          # ✅ Pydantic Settings — env-driven (base/supported currency, DB URL, AI provider)
+    │   ├── config.py          # ✅ Pydantic Settings — env-driven (base/supported currency, DB URL, AI provider, CORS origins)
     │   ├── database.py        # ✅ Async engine (pooled + pre_ping for Postgres) + session factory + declarative Base
     │   ├── logging.py         # ⬜ Structured logging config
     │   ├── security.py        # ⬜ Single-user local gate (optional API_ACCESS_KEY) — no multi-tenant
