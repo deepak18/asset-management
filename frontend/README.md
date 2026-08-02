@@ -91,15 +91,19 @@ cd frontend
 npm run dev                               # http://localhost:3000
 ```
 
-The backend must meet two prerequisites for the browser to reach it (both owned
-by the backend lane, not this app):
+Both backend-side prerequisites are now in place (owned by the backend lane,
+not this app), so live mode works end-to-end:
 
-1. **CORS** must allow the dev origin `http://localhost:3000` — browsers block
-   cross-origin `fetch` without it. The dashboard only issues `GET`s.
-2. **Portfolio id `1` must be seeded** — the dashboard requests
-   `/api/v1/portfolios/1` and its `/transactions`, `/holdings`, `/analytics`.
-   Against an empty DB every panel renders its empty/error state (by design —
-   we never fake a `0`), so seed a demo portfolio first.
+1. **CORS** allows the dev origin `http://localhost:3000` — the backend enables
+   config-driven CORS for it, so the browser's cross-origin `GET`s go through.
+2. **Portfolio id `1` is seeded** — the dashboard requests `/api/v1/portfolios/1`
+   and its `/transactions`, `/holdings`, `/analytics`, and the backend serves a
+   demo portfolio there. (Against an empty DB every panel renders its
+   empty/error state by design — we never fake a `0`.)
+
+> **Deferred (tracked):** containerizing this app (`frontend/Dockerfile` +
+> `.dockerignore`) is intentionally postponed until after local live wiring; see
+> `Dockerfile ⬜` in `STRUCTURE.md`. Local dev runs directly via `npm run dev`.
 
 ## How the money model works (important)
 

@@ -117,16 +117,15 @@ cd frontend
 npm run dev                               # http://localhost:3000
 ```
 
-For the browser to actually reach the API, the backend must satisfy two
-prerequisites (owned by the backend lane):
+Both browser-facing prerequisites are now satisfied by the backend lane, so
+live mode works out of the box:
 
-1. **CORS** — allow the dev origin `http://localhost:3000` (browsers block
-   cross-origin `fetch` otherwise). The dashboard issues plain `GET`s, so
-   permitting that origin with `GET`/`OPTIONS` is enough.
+1. **CORS** — the backend enables config-driven CORS for the dev origin
+   `http://localhost:3000`, so the dashboard's cross-origin `GET`s go through.
 2. **Seeded data** — the dashboard reads portfolio **id `1`**
-   (`GET /api/v1/portfolios/1` + `/transactions`, `/holdings`, `/analytics`).
-   A fresh DB has none, so seed a demo portfolio with that id before loading the
-   page, otherwise every panel shows its (correct) empty/error state.
+   (`GET /api/v1/portfolios/1` + `/transactions`, `/holdings`, `/analytics`), and
+   the backend serves a demo portfolio there. Against a fresh, unseeded DB every
+   panel would show its (correct) empty/error state instead.
 
 ---
 
