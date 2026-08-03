@@ -16,13 +16,20 @@ FastAPI service for the Local AI-powered Investment Research Platform.
 
 ```bash
 cd backend
-uv sync --extra dev                 # create venv + install deps (add --extra postgres for asyncpg)
+uv sync --extra dev --extra postgres   # see the pruning warning below
 uv run pytest                       # fast, offline unit suite (integration excluded)
 uv run pytest -m integration        # opt-in integration suite (needs `docker compose up -d`)
 uv run pytest --cov=app             # coverage
 uv run ruff check .                 # lint
 uv run mypy                         # strict type-check
 ```
+
+> ⚠️ **`uv sync` prunes.** It makes the venv match *exactly* the extras you name, so
+> running `uv sync --extra dev` on its own **uninstalls `asyncpg`** and the app then
+> fails with `ModuleNotFoundError: No module named 'asyncpg'` if `DATABASE_URL`
+> points at Postgres. Always pass both extras (`--extra dev --extra postgres`) unless
+> you deliberately want the SQLite-only environment. The app detects this and tells
+> you the exact command to run.
 
 ## Run against Postgres
 

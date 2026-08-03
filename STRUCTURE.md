@@ -52,9 +52,10 @@ backend/
 │   ├── test_migrations.py     # ✅ Alembic upgrade/downgrade + model-vs-migration column drift guard
 │   ├── factories/             # ⬜ Fixture builders (portfolios, transactions, filings, documents)
 │   ├── unit/                  # 🟡 Pure/isolated tests — all provider boundaries mocked
-│   │   ├── core/             # ✅ currency (FX normalization) + config edge cases
-│   │   │   ├── test_currency.py   # ✅ base/identity, dated rates, missing-rate, cross-currency
-│   │   │   └── test_config.py     # ✅ defaults, CSV currencies + CORS origins, env override + cache_clear
+    │   │   ├── core/             # ✅ currency (FX normalization) + config edge cases + engine factory
+    │   │   │   ├── test_currency.py   # ✅ base/identity, dated rates, missing-rate, cross-currency
+    │   │   │   ├── test_database.py   # ✅ sqlite engine builds; missing driver names the exact `uv sync` extra to install
+    │   │   │   └── test_config.py     # ✅ defaults, CSV currencies + CORS origins, statement-import settings, env override + cache_clear
     │   │   ├── portfolio/         # ✅ calculators (XIRR, P&L, allocation) + write orchestration — exhaustive edge cases
     │   │   │   ├── test_allocation.py # ✅ weights by ticker/sector/industry, empty/zero-total
     │   │   │   ├── test_cost_basis.py # ✅ FIFO realized/unrealized, splits, dividends, fees, mixed-ccy
@@ -98,7 +99,7 @@ backend/
     ├── main.py                # ✅ FastAPI app factory + lifespan (DB engine on state) + /health; config-driven CORS; mounts v1 router
     ├── core/                  # 🟡 Cross-cutting infra (NOT business logic)
     │   ├── config.py          # ✅ Pydantic Settings — env-driven (base/supported currency, DB URL, AI provider, CORS origins)
-    │   ├── database.py        # ✅ Async engine (pooled + pre_ping for Postgres) + session factory + declarative Base
+    │   ├── database.py        # ✅ Async engine (pooled + pre_ping for Postgres) + session factory + declarative Base; missing optional DB drivers raise an actionable "sync this extra" error
     │   ├── logging.py         # ⬜ Structured logging config
     │   ├── security.py        # ⬜ Single-user local gate (optional API_ACCESS_KEY) — no multi-tenant
     │   ├── currency.py        # ✅ FX normalization seam (Money/FxRate/FxRateTable) — USD now, INR-ready
