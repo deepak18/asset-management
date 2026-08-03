@@ -16,12 +16,12 @@ FastAPI service for the Local AI-powered Investment Research Platform.
 
 ```bash
 cd backend
-uv sync --extra dev --extra postgres   # see the pruning warning below
-uv run pytest                       # fast, offline unit suite (integration excluded)
-uv run pytest -m integration        # opt-in integration suite (needs `docker compose up -d`)
-uv run pytest --cov=app             # coverage
-uv run ruff check .                 # lint
-uv run mypy                         # strict type-check
+uv sync --extra dev --extra postgres    # see the pruning warning below
+uv run pytest                           # fast, offline unit suite (integration excluded)
+uv run pytest -m integration            # opt-in integration suite (needs `docker compose up -d`)
+uv run pytest --cov=app                 # coverage
+uv run ruff check .                     # lint
+uv run mypy                             # strict type-check
 ```
 
 > ⚠️ **`uv sync` prunes.** It makes the venv match *exactly* the extras you name, so
@@ -38,8 +38,8 @@ From the **repo root** first: `docker compose up -d --wait` (starts Postgres + p
 ```bash
 cd backend
 uv sync --extra dev --extra postgres
-uv run alembic upgrade head         # create tables + enable pgvector + import-job table
-uv run uvicorn app.main:app --reload   # http://localhost:8000/docs
+uv run alembic upgrade head             # create tables + enable pgvector + import-job table
+uv run uvicorn app.main:app --reload    # http://localhost:8000/docs
 ```
 
 Config comes from the repo-root `.env` (see the main [README](../README.md)); `DATABASE_URL` selects the database. With no `.env`/env override, the app falls back to a local SQLite file for zero-infra runs.
@@ -164,6 +164,9 @@ Quantity, Price, Amount`. Notes:
 - **`Activity Date` is used as the trade date** (settlement doesn't affect cost basis or XIRR).
 - Rows may be newest-first; the calculators sort by date, so order doesn't matter.
 - Money cells are cleaned of `$`, thousands separators, and parenthesized negatives.
+- Fractional share quantities (`0.06725`) are kept exact via `Decimal`.
+- Multi-line quoted `Description` cells, the trailing blank row, and the legal
+  disclaimer row (which carries an extra column) are all handled.
 - If `Price` is blank but `Amount` is present, the per-share price is derived as
   `|Amount| / Quantity` so the lot's cost basis is still correct.
 
@@ -173,7 +176,9 @@ Quantity, Price, Amount`. Notes:
 | `CDIV` | imported as `DIVIDEND` |
 | `DTAX`, `AFEE`, `DFEE` | imported as `FEE` (reduces realized P&L) |
 | `SPL`, `SPR` | **skipped with a warning** — enter the split manually with its ratio |
-| options (`BTO`/`STO`/`BTC`/`STC`/`OEXP`/`OASGN`), transfers (`ACH`/`RTP`/`WIRE`), `INT`, `GOLD`, `MINT`, `REC`, `SOFF` | skipped with a warning explaining why |
+| `ITRF`/`ACH`/`RTP`/`WIRE` **with** an instrument + quantity | **skipped with a warning** — a transferred-in position has no price in the export; add it via the position-snapshot form so its cost basis is real, not zero |
+| `ITRF`/`ACH`/`RTP`/`WIRE` cash-only | skipped (not a security transaction) |
+| options (`BTO`/`STO`/`BTC`/`STC`/`OEXP`/`OASGN`), `INT`, `GOLD`, `MINT`, `REC`, `SOFF` | skipped with a warning explaining why |
 
 Every skipped row comes back in `warnings` (with its line number, code, and
 description), so nothing is silently lost. Dry-run a file before uploading:
