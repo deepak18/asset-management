@@ -28,6 +28,36 @@ class Base(DeclarativeBase):
     """Declarative base shared by every ORM model (single metadata registry)."""
 
 
+# Async DB drivers are optional extras so the fast unit path (SQLite) stays lean
+# and doesn't need a compiled wheel. When a URL asks for a driver that isn't
+# installed, SQLAlchemy raises a bare ``ModuleNotFoundError`` naming only the
+# module — which doesn't tell you how to fix it. Map the driver back to the extra
+# that provides it so the error is actionable.
+_DRIVER_EXTRAS: dict[str, str] = {
+    "asyncpg": "postgres",
+    "aiosqlite": "dev",
+}
+
+
+def _explain_missing_driver(url: str, exc: ModuleNotFoundError) -> ModuleNotFoundError:
+    """Rewrite a missing-driver import error into an instruction that fixes it."""
+
+    driver = exc.name or ""
+    extra = _DRIVER_EXTRAS.get(driver)
+    hint = (
+        f"install it with: uv sync --extra dev --extra {extra}"
+        if extra
+        else "install the driver package for this URL"
+    )
+    return ModuleNotFoundError(
+        f"The database driver {driver!r} required by DATABASE_URL "
+        f"({url.split('://', 1)[0]}://...) is not installed — {hint}. "
+        "Note that `uv sync` prunes packages outside the extras you name, so "
+        "syncing without --extra postgres removes asyncpg.",
+        name=exc.name,
+    )
+
+
 def create_engine(
     database_url: str,
     *,
@@ -45,6 +75,9 @@ def create_engine(
     still alive before handing it out (recovering transparently from ones the DB
     dropped after an idle period). SQLite ignores these — it uses its own pooling
     (NullPool / StaticPool), so passing QueuePool tuning would error.
+
+    Raises a ``ModuleNotFoundError`` carrying the exact install command when the
+    URL names a driver (e.g. ``asyncpg``) that isn't installed.
     """
 
     kwargs: dict[str, object] = {"echo": echo, "future": True}
@@ -52,7 +85,10 @@ def create_engine(
         kwargs["pool_size"] = pool_size
         kwargs["max_overflow"] = max_overflow
         kwargs["pool_pre_ping"] = True
-    return create_async_engine(database_url, **kwargs)
+    try:
+        return create_async_engine(database_url, **kwargs)
+    except ModuleNotFoundError as exc:
+        raise _explain_missing_driver(database_url, exc) from exc
 
 
 def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
