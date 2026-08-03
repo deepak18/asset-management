@@ -49,7 +49,11 @@ pnpm-debug.log*
 pgdata/
 data/
 uploads/                 # raw user-uploaded documents (kept local, not committed)
-storage/
+# Runtime blob storage (uploaded broker statements, documents). Anchored to the
+# repo root and to backend/ so it cannot swallow the `backend/app/storage/`
+# source package, which is code and MUST be committed.
+/storage/
+/backend/storage/
 
 # ---------- AI / Models ----------
 models/
