@@ -91,8 +91,7 @@ cd frontend
 npm run dev                               # http://localhost:3000
 ```
 
-Both backend-side prerequisites are now in place (owned by the backend lane,
-not this app), so live mode works end-to-end:
+Both backend-side prerequisites are now in place, so live mode works end-to-end:
 
 1. **CORS** allows the dev origin `http://localhost:3000` — the backend enables
    config-driven CORS for it, so the browser's cross-origin `GET`s go through.
@@ -121,14 +120,51 @@ strings** (never floats). The UI honors that end-to-end:
 
 ```
 src/
-├── app/            App Router: layout, providers (mock bootstrap), dashboard page
+├── app/            App Router: layout, providers (mock + portfolio-selection bootstrap), dashboard page
 ├── components/
-│   ├── ui/         shadcn-style primitives (card, table, badge, button, input, skeleton)
+│   ├── ui/         shadcn-style primitives (card, table, badge, button, input, select, label, progress, dialog, skeleton)
 │   ├── shared/     loading / error / empty state blocks
-│   └── portfolio/  summary, allocation donuts, ledger grid, watchlist
-├── hooks/          useApiResource + endpoint hooks + useWatchlist
+│   ├── app-shell/  top nav (hosts the portfolio picker + theme toggle)
+│   └── portfolio/  summary, allocation donuts, ledger grid, watchlist, picker,
+│                   create-portfolio dialog, add-position + manual-transaction forms,
+│                   CSV import panel, and the dashboard composition
+├── hooks/          useApiResource + endpoint hooks + useWatchlist + portfolio-selection context + import-job poller
 ├── lib/            env, typed api-client, decimal + format utils, cn
-├── mocks/          MSW handlers, fixtures, node server, browser worker + bootstrap
+├── mocks/          MSW handlers, fixtures, mutable write/import state, node server, browser worker + bootstrap
 ├── types/          generated api.ts + friendly domain aliases
-└── __tests__/      Vitest + RTL specs (lib + components)
+└── __tests__/      Vitest + RTL specs (lib + hooks + components)
 ```
+
+## Portfolio selection, data entry & statement import
+
+The dashboard is no longer pinned to a single portfolio id:
+
+- **Picker (app shell).** `GET /api/v1/portfolios` populates a dropdown in the nav.
+  The chosen id is persisted in `localStorage` (`am.selected.portfolio`) and shared
+  through a React context (`hooks/use-portfolio-selection.tsx`), so every panel
+  reads the selected portfolio. With **no portfolios** the UI prompts to create one.
+- **Create portfolio.** `POST /api/v1/portfolios` from a dialog, then the new
+  portfolio is auto-selected.
+- **Add position (snapshot).** `POST /api/v1/portfolios/{id}/positions` — cost basis
+  is entered as *exactly one* of per-share or total (the "both" case is
+  unrepresentable in the form, so the 422 can't happen); the form spells out that a
+  snapshot leaves XIRR undefined until full history is imported.
+- **Manual transaction.** `POST /api/v1/portfolios/{id}/transactions` with only the
+  fields relevant to the chosen type (BUY/SELL → qty/price/fees, DIVIDEND/FEE →
+  amount, SPLIT → ratio). Bodies use the **`Transaction-Input`** variant.
+- **CSV import (async).** `POST .../imports` (multipart, expects **202**) →
+  poll `GET .../imports/{job_id}` ~1s until `SUCCEEDED`/`FAILED` (polling stops on
+  terminal state **and** on unmount — no leaked intervals). Progress is
+  indeterminate until `total_rows` is counted. On success we show
+  `created_transactions`, `tickers`, and every `warnings[]` row that needs manual
+  entry; `409` (duplicate) offers an explicit "import anyway"
+  (`allow_duplicate=true`), `413`/`422` are explained.
+
+After any successful write, or an import job reaching `SUCCEEDED`, the selected
+portfolio's analytics/holdings/transactions refetch (a `dataVersion` token in the
+selection context that every per-portfolio hook folds into its deps).
+
+> **Contract note:** these routes came from a backend contract bump. Regenerate
+> types with `npm run typegen`, then reconcile the MSW handlers/fixtures in
+> `src/mocks/`. `Transaction` now generates as `Transaction-Input` (POST bodies)
+> and `Transaction-Output` (reads).

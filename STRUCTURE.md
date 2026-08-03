@@ -189,43 +189,53 @@ frontend/
 └── src/
     ├── app/                   # ✅ App Router
     │   ├── layout.tsx         # ✅ Root layout: globals, terminal chrome (Nav), Providers
-    │   ├── page.tsx           # ✅ dashboard: summary + allocation + ledger + watchlist
-    │   ├── providers.tsx      # ✅ Client bootstrap; mounts MSW mock (next/dynamic ssr:false) in mock mode
+    │   ├── page.tsx           # ✅ dashboard mount point (renders client <Dashboard/>)
+    │   ├── providers.tsx      # ✅ Client bootstrap; mounts MSW mock (ssr:false) + PortfolioSelectionProvider
     │   └── globals.css        # ✅ Tailwind layers + light/dark design tokens
     ├── components/
-    │   ├── ui/                # ✅ shadcn-style primitives: card, badge, skeleton, table, button, input
+    │   ├── ui/                # ✅ shadcn-style primitives: card, badge, skeleton, table, button, input, select, label, progress, dialog
     │   ├── shared/            # ✅ states.tsx — loading / error / empty blocks (honest "—", no fake 0)
     │   ├── portfolio/         # ✅ views
-    │   │   ├── portfolio-summary.tsx   # ✅ Headline stats; unpriced/null → "Not priced"/"—"
-    │   │   ├── allocation-chart.tsx    # ✅ Recharts donut + accessible legend (sector/industry)
-    │   │   ├── allocation-section.tsx  # ✅ Data wrapper feeding the donuts from analytics
-    │   │   ├── transaction-ledger.tsx  # ✅ Ledger grid; type-aware cells (dash irrelevant fields)
-    │   │   └── watchlist.tsx           # ✅ Add/remove tickers (localStorage-backed)
-    │   ├── app-shell/         # ✅ nav.tsx — top bar + light/dark toggle
+    │   │   ├── portfolio-summary.tsx       # ✅ Headline stats; unpriced/null → "Not priced"/"—"; refreshToken-aware
+    │   │   ├── allocation-chart.tsx        # ✅ Recharts donut + accessible legend (sector/industry)
+    │   │   ├── allocation-section.tsx      # ✅ Data wrapper feeding the donuts from analytics; refreshToken-aware
+    │   │   ├── transaction-ledger.tsx      # ✅ Ledger grid; type-aware cells (dash irrelevant fields); refreshToken-aware
+    │   │   ├── watchlist.tsx               # ✅ Add/remove tickers (localStorage-backed)
+    │   │   ├── portfolio-selector.tsx      # ✅ App-shell picker over GET /portfolios; "create one" when empty
+    │   │   ├── create-portfolio-dialog.tsx # ✅ POST /portfolios then auto-select
+    │   │   ├── add-position-form.tsx       # ✅ POST /positions; cost basis = exactly one of per-share/total (422-proof); explains XIRR trade-off
+    │   │   ├── manual-transaction-form.tsx # ✅ POST /transactions (Transaction-Input); type-aware fields
+    │   │   ├── import-panel.tsx            # ✅ CSV upload → 202 → poll to terminal; progress/warnings; 409 "import anyway"/413/422; history
+    │   │   └── dashboard.tsx               # ✅ Composes all panels for the selected portfolio; refetch on write/import
+    │   ├── app-shell/         # ✅ nav.tsx — top bar + portfolio picker + light/dark toggle
     │   ├── research/          # ⬜ Ticker workstation, competitor matrix, thesis canvas
     │   └── workspace-panel/   # ⬜ Context-aware side panel (streaming tokens)
     ├── hooks/                 # ✅ Data + UI state hooks
-    │   ├── use-api-resource.ts        # ✅ Generic async state (loading/error/success), stale-response guard
-    │   ├── use-portfolio.ts           # ✅ Endpoint hooks bound to the typed client
-    │   └── use-watchlist.ts           # ✅ localStorage watchlist (normalized, de-duplicated)
+    │   ├── use-api-resource.ts         # ✅ Generic async state (loading/error/success), stale-response guard
+    │   ├── use-portfolio.ts            # ✅ Endpoint hooks bound to the typed client (version-token refetch)
+    │   ├── use-portfolio-selection.tsx # ✅ Selection context: list + selected id (localStorage) + dataVersion refetch token
+    │   ├── use-import-job.ts           # ✅ Poll one import job to a terminal state (self-scheduling; no leaked intervals)
+    │   └── use-watchlist.ts            # ✅ localStorage watchlist (normalized, de-duplicated)
     ├── lib/                   # ✅ Client-side infra
     │   ├── env.ts             # ✅ Validated public env (API base URL, mock flag)
-    │   ├── api-client.ts      # ✅ Typed REST client (the ONLY backend channel) + ApiError
+    │   ├── api-client.ts      # ✅ Typed REST client (the ONLY backend channel): reads + writes (create/txns/positions) + multipart import; ApiError carries backend detail
     │   ├── decimal.ts         # ✅ Float-free Decimal-string parse/round/scale helpers
     │   ├── format.ts          # ✅ money/percent/quantity formatting; DASH for null/unpriced
     │   └── utils.ts           # ✅ cn() class-merge helper
     ├── mocks/                 # ✅ MSW mock layer (contract-shaped)
     │   ├── fixtures.ts        # ✅ Typed fixtures (priced / unpriced / empty portfolios)
-    │   ├── handlers.ts        # ✅ Request handlers implementing the OpenAPI routes
+    │   ├── state.ts           # ✅ Mutable write/import state (create portfolio, staged import-job progression); resetMockState() between tests
+    │   ├── handlers.ts        # ✅ Request handlers implementing every OpenAPI route (reads + writes + async import)
     │   ├── server.ts          # ✅ Node server for Vitest (msw/node)
     │   ├── browser.ts         # ✅ Browser worker (msw/browser) — client-only
     │   └── mock-bootstrap.tsx # ✅ Client-only worker starter (loaded via ssr:false)
     ├── types/                 # ✅ Contract types
     │   ├── api.ts             # ✅ GENERATED by openapi-typescript from backend/openapi.json (tool-owned)
-    │   └── domain.ts          # ✅ Friendly aliases over the generated schemas
+    │   └── domain.ts          # ✅ Friendly aliases (Transaction = Output; TransactionInput = Input; + write/import schemas)
     └── __tests__/             # ✅ Vitest + RTL specs
-        ├── lib/               # ✅ decimal, format, api-client (MSW-backed)
-        └── components/        # ✅ portfolio-summary, allocation-chart, transaction-ledger, watchlist
+        ├── lib/               # ✅ decimal, format, api-client (MSW-backed; incl. write + import routes)
+        ├── hooks/             # ✅ use-import-job (poll-to-terminal, stop-on-unmount)
+        └── components/        # ✅ portfolio-summary, allocation-chart, transaction-ledger, watchlist, portfolio-selector, create-portfolio-dialog, add-position-form, manual-transaction-form, import-panel
 ```
 
 ---
