@@ -94,12 +94,24 @@ def _parse_date(raw: str) -> date | None:
 
 
 def _pick(row: dict[str, str], *names: str) -> str:
-    """Return the first present, case-insensitively matched column value."""
+    """Return the first present, case-insensitively matched column value.
 
-    lowered = {key.strip().lower(): value for key, value in row.items() if key}
+    Always returns a ``str``. Two real-world quirks force the defensiveness:
+    a **short row** (broker exports end with a stray ``""`` line) makes
+    ``DictReader`` fill the missing columns with ``None``, and a **long row** (the
+    trailing legal disclaimer carries an extra field) parks the surplus under a
+    ``None`` key. Both would otherwise blow up on attribute access.
+    """
+
+    lowered = {
+        key.strip().lower(): value
+        for key, value in row.items()
+        if isinstance(key, str) and isinstance(value, str)
+    }
     for name in names:
-        if name.lower() in lowered:
-            return lowered[name.lower()]
+        value = lowered.get(name.lower())
+        if value is not None:
+            return value
     return ""
 
 
@@ -135,6 +147,10 @@ class RobinhoodCsvParser:
     # These reduce realized P&L, so importing them keeps returns honest.
     _FEE_CODES = {"dtax", "afee", "dfee"}
 
+    # Transfers. Context-dependent: with an instrument + quantity these move a
+    # *position* between accounts (no cost basis in the export); otherwise cash.
+    _TRANSFER_CODES = {"itrf", "ach", "rtp", "wire", "aftr"}
+
     # Recognized but not representable as a ledger event. Mapped to a plain-English
     # reason so the warning tells you what to do, not just that something failed.
     _UNSUPPORTED_CODES = {
@@ -149,9 +165,6 @@ class RobinhoodCsvParser:
         "spr": "reverse split — enter manually as a SPLIT with its ratio",
         "soff": "spin-off — enter manually",
         "rec": "share reclassification — enter manually",
-        "ach": "cash transfer — not a security transaction",
-        "rtp": "instant transfer — not a security transaction",
-        "wire": "wire transfer — not a security transaction",
         "int": "interest — no security position affected",
         "gold": "subscription fee — no security position affected",
         "mint": "cash sweep interest — no security position affected",
@@ -187,13 +200,22 @@ class RobinhoodCsvParser:
         transactions: list[Transaction] = []
         warnings: list[str] = []
 
-        for line_no, row in enumerate(reader, start=2):  # line 1 is the header
+        for row in reader:
+            # reader.line_num is the *physical* line just consumed. Robinhood wraps
+            # multi-line values (e.g. "Netflix\nCUSIP: 64110L106") inside quoted
+            # fields, so one record can span several lines — a manual counter would
+            # drift and point at the wrong row in every warning.
+            line_no = reader.line_num
+
             code = _pick(row, "Trans Code", "Type", "Action").strip().lower()
             if not code:
-                continue  # blank spacer / footer line
+                continue  # blank spacer line, trailing "" row, or legal disclaimer
 
             description = _pick(row, "Description").strip()
-            reason = self._UNSUPPORTED_CODES.get(code)
+            ticker = _pick(row, "Instrument", "Symbol", "Ticker").strip().upper()
+            quantity_raw = _pick(row, "Quantity")
+
+            reason = self._unsupported_reason(code, ticker, quantity_raw)
             if reason is not None:
                 warnings.append(self._warn(line_no, code, reason, description))
                 continue
@@ -205,7 +227,6 @@ class RobinhoodCsvParser:
                 )
                 continue
 
-            ticker = _pick(row, "Instrument", "Symbol", "Ticker").strip().upper()
             if not ticker:
                 warnings.append(
                     self._warn(line_no, code, "missing instrument/ticker", description)
@@ -231,11 +252,40 @@ class RobinhoodCsvParser:
             warnings=tuple(warnings),
         )
 
+    def _unsupported_reason(
+        self, code: str, ticker: str, quantity_raw: str
+    ) -> str | None:
+        """Return why ``code`` can't become a ledger event, or ``None`` if it can.
+
+        Most codes map statically, but transfers are **context-dependent**: the same
+        ``ITRF`` code marks both a cash movement and an incoming *share position*.
+        A transferred-in position carries no price in the export, so importing it
+        would book a zero-cost lot and massively overstate gains — we refuse and
+        point the user at the position-snapshot form, where the real cost basis
+        can be entered.
+        """
+
+        if code in self._TRANSFER_CODES:
+            quantity = _clean_decimal(quantity_raw)
+            if ticker and quantity is not None and quantity > 0:
+                return (
+                    "position transferred in — the export carries no cost basis, "
+                    "so add it with the position-snapshot form instead"
+                )
+            return "cash transfer — not a security transaction"
+
+        return self._UNSUPPORTED_CODES.get(code)
+
     @staticmethod
     def _warn(line_no: int, code: str, reason: str, description: str) -> str:
-        """Build a warning that says which row, which code, and why it was skipped."""
+        """Build a warning that says which row, which code, and why it was skipped.
 
-        suffix = f" ({description})" if description else ""
+        Descriptions arrive with embedded newlines ("Netflix\\nCUSIP: 64110L106");
+        collapse them so each warning stays a single readable line in the UI.
+        """
+
+        flat = " ".join(description.split())
+        suffix = f" ({flat})" if flat else ""
         return f"row {line_no}: skipped {code.upper()} — {reason}{suffix}"
 
     def _resolve_type(self, code: str) -> TransactionType | None:

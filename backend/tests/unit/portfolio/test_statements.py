@@ -108,6 +108,74 @@ def test_rejects_a_csv_that_is_not_an_activity_export() -> None:
         RobinhoodCsvParser().parse(b"foo,bar\n1,2\n")
 
 
+# ---------------------------------------------------------------------------
+# Regression: quirks taken verbatim from a real Robinhood activity export
+# ---------------------------------------------------------------------------
+
+# Reproduces, in order: a multi-line quoted Description (embedded newline), a
+# comma-grouped price with a fractional quantity, a dividend-reinvestment pair,
+# an ITRF cash transfer, an ITRF *share* transfer (no price), a stock split, a
+# short trailing `""` row, and the legal disclaimer row that carries one MORE
+# field than the header. The last two used to crash the parser outright.
+_REAL_WORLD_CSV = (
+    b'"Activity Date","Process Date","Settle Date","Instrument","Description",'
+    b'"Trans Code","Quantity","Price","Amount"\n'
+    b'"7/22/2026","7/22/2026","7/23/2026","AZO","AutoZone\n'
+    b'CUSIP: 053332102","Buy","0.06725","$2,973.95","($200.00)"\n'
+    b'"6/9/2026","6/9/2026","6/9/2026","BKNG","Cash Div: R/D 2026-06-05 - 3.3058 shares at 0.42","CDIV","","","$1.39"\n'
+    b'"4/6/2026","4/6/2026","4/6/2026","BKNG","Booking Holdings\n'
+    b'CUSIP: 09857L108","SPL","3.1736","",""\n'
+    b'"2/4/2026","2/4/2026","2/4/2026","","Transfer from Brokerage to Brokerage","ITRF","","","($476.50)"\n'
+    b'"2/4/2026","2/4/2026","2/4/2026","SPOT","Spotify\n'
+    b'CUSIP: L8681T102","ITRF","1","",""\n'
+    b'""\n'
+    b'"","","","","","","","","","The data provided is for informational purposes only."\n'
+)
+
+
+def test_real_world_export_parses_without_crashing() -> None:
+    """A short trailing row and an over-long disclaimer row must not raise."""
+
+    parsed = RobinhoodCsvParser().parse(_REAL_WORLD_CSV)
+
+    assert [t.ticker for t in parsed.transactions] == ["AZO", "BKNG"]
+    buy = parsed.transactions[0]
+    assert buy.type is TransactionType.BUY
+    assert buy.quantity == Decimal("0.06725")       # fractional shares
+    assert buy.price == Decimal("2973.95")          # comma-grouped price cleaned
+    assert parsed.transactions[1].type is TransactionType.DIVIDEND
+
+
+def test_multiline_description_is_flattened_in_warnings() -> None:
+    """Embedded newlines must not break a warning across lines in the UI."""
+
+    parsed = RobinhoodCsvParser().parse(_REAL_WORLD_CSV)
+    assert all("\n" not in w for w in parsed.warnings)
+    assert any("Booking Holdings CUSIP: 09857L108" in w for w in parsed.warnings)
+
+
+def test_share_transfer_is_refused_with_cost_basis_guidance() -> None:
+    """An ITRF with shares has no price; importing it would book a zero-cost lot."""
+
+    parsed = RobinhoodCsvParser().parse(_REAL_WORLD_CSV)
+    share_transfer = [w for w in parsed.warnings if "SPOT" in w or "position transferred in" in w]
+    assert share_transfer, parsed.warnings
+    assert "position-snapshot" in share_transfer[0]
+    # The cash-only ITRF gets the *other* explanation, not the position one.
+    cash_transfer = [w for w in parsed.warnings if "Transfer from Brokerage" in w]
+    assert "cash transfer" in cash_transfer[0]
+
+
+def test_warning_line_numbers_survive_multiline_records() -> None:
+    """Line numbers must track physical lines, not a naive record counter."""
+
+    parsed = RobinhoodCsvParser().parse(_REAL_WORLD_CSV)
+    split_warning = next(w for w in parsed.warnings if "SPL" in w)
+    # Physical lines: 1 header, 2-3 the wrapped AZO buy, 4 CDIV, 5-6 the wrapped
+    # SPL. A naive per-record counter would have reported row 5 here.
+    assert split_warning.startswith("row 6:")
+
+
 def test_parses_buy_and_sell_rows() -> None:
     data = _csv(
         "01/02/2020,AAPL,Buy,10,$100.00,$1000.00",
