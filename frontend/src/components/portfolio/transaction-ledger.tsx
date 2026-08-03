@@ -96,10 +96,16 @@ function LedgerTable({ transactions }: { transactions: Transaction[] }) {
 /**
  * Transaction ledger grid. Reads the full ledger from the typed client and
  * renders each dated event. Loading, error, and empty-ledger states are all
- * handled explicitly.
+ * handled explicitly. `refreshToken` forces a refetch after a write/import.
  */
-export function TransactionLedger({ portfolioId }: { portfolioId: number }) {
-  const state = useTransactions(portfolioId);
+export function TransactionLedger({
+  portfolioId,
+  refreshToken = 0,
+}: {
+  portfolioId: number;
+  refreshToken?: number;
+}) {
+  const state = useTransactions(portfolioId, refreshToken);
 
   return (
     <Card>

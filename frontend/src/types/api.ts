@@ -4,6 +4,32 @@
  */
 
 export interface paths {
+    "/api/v1/portfolios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Portfolios
+         * @description Return every tracked portfolio, for the UI's portfolio picker.
+         *
+         *     Declared before ``/{portfolio_id}`` so FastAPI matches this literal path first.
+         */
+        get: operations["list_portfolios_api_v1_portfolios_get"];
+        put?: never;
+        /**
+         * Create Portfolio
+         * @description Create a new empty portfolio and return its assigned identity.
+         */
+        post: operations["create_portfolio_api_v1_portfolios_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portfolios/{portfolio_id}": {
         parameters: {
             query?: never;
@@ -37,7 +63,11 @@ export interface paths {
          */
         get: operations["list_transactions_api_v1_portfolios__portfolio_id__transactions_get"];
         put?: never;
-        post?: never;
+        /**
+         * Add Transactions
+         * @description Append manually-entered ledger events (404 if the portfolio is absent).
+         */
+        post: operations["add_transactions_api_v1_portfolios__portfolio_id__transactions_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -84,6 +114,83 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portfolios/{portfolio_id}/positions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Positions
+         * @description Record current-holding snapshots as opening BUY lots (404 if absent).
+         *
+         *     This is the fast on-ramp for an existing portfolio: assert each position's
+         *     ticker, quantity, and cost basis instead of re-keying years of trades.
+         */
+        post: operations["add_positions_api_v1_portfolios__portfolio_id__positions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolios/{portfolio_id}/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Imports
+         * @description Return the portfolio's import history, newest first.
+         */
+        get: operations["list_imports_api_v1_portfolios__portfolio_id__imports_get"];
+        put?: never;
+        /**
+         * Create Import
+         * @description Accept a broker statement and process it in the background.
+         *
+         *     Returns ``202 Accepted`` immediately with a ``PENDING`` job — a decade-long
+         *     export can hold thousands of rows, far too slow to finish inside the request.
+         *     Poll ``GET /portfolios/{id}/imports/{job_id}`` until the status is terminal,
+         *     then refetch analytics.
+         *
+         *     The upload's declared ``content_type`` is untrusted browser metadata, so the
+         *     format comes from ``source_format`` and the parser validates the actual bytes.
+         *     Re-uploading identical content is rejected with ``409`` (it would double-count
+         *     the whole ledger); pass ``allow_duplicate=true`` to override deliberately.
+         */
+        post: operations["create_import_api_v1_portfolios__portfolio_id__imports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolios/{portfolio_id}/imports/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Import
+         * @description Return one import job's live status/progress (the endpoint the UI polls).
+         */
+        get: operations["get_import_api_v1_portfolios__portfolio_id__imports__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -119,6 +226,11 @@ export interface components {
             market_value: string;
             /** Weight */
             weight: string;
+        };
+        /** Body_create_import_api_v1_portfolios__portfolio_id__imports_post */
+        Body_create_import_api_v1_portfolios__portfolio_id__imports_post: {
+            /** File */
+            file: string;
         };
         /**
          * CostBasisResult
@@ -159,6 +271,30 @@ export interface components {
             sector?: string | null;
             /** Industry */
             industry?: string | null;
+        };
+        /**
+         * ImportStatus
+         * @description Lifecycle of an asynchronous statement import.
+         * @enum {string}
+         */
+        ImportStatus: "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED";
+        /**
+         * LedgerIngestResult
+         * @description What a write/import operation actually recorded (the endpoint's response).
+         */
+        LedgerIngestResult: {
+            /** Portfolio Id */
+            portfolio_id: number;
+            /** Created Transactions */
+            created_transactions: number;
+            /** Tickers */
+            tickers: string[];
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+            source_format?: components["schemas"]["StatementFormat"] | null;
         };
         /**
          * OpenLot
@@ -245,6 +381,16 @@ export interface components {
             priced_as_of?: string | null;
         };
         /**
+         * PortfolioCreate
+         * @description Request body to create a new (empty) portfolio.
+         */
+        PortfolioCreate: {
+            /** Name */
+            name: string;
+            /** Base Currency */
+            base_currency: string;
+        };
+        /**
          * PortfolioSummary
          * @description Lightweight portfolio identity + reporting base currency (provider output).
          */
@@ -257,6 +403,110 @@ export interface components {
             base_currency: string;
         };
         /**
+         * PositionSnapshot
+         * @description A user's *current* holding, captured without full transaction history.
+         *
+         *     This is the answer to "my portfolio is 10 years old and I don't want to key in
+         *     every trade": you assert the position as it stands today — how many shares you
+         *     hold and what they cost — and the system records it as a single opening ``BUY``
+         *     lot in the ledger. Every downstream calculator then treats it like any other
+         *     lot, so cost-basis and unrealized P&L are exact.
+         *
+         *     Provide the cost basis exactly one of two ways (brokerages report both):
+         *
+         *     * ``cost_basis_per_share`` — the average price paid per share, or
+         *     * ``total_cost_basis`` — the aggregate amount invested (we divide by quantity).
+         *
+         *     ``as_of`` is the acquisition/opening date. When you genuinely don't know it,
+         *     leave it unset and the service stamps today's date — but note the money-weighted
+         *     return (XIRR) is only meaningful with a *real* purchase date, so a snapshot with
+         *     a placeholder date will (correctly) leave XIRR undefined while cost-basis and
+         *     unrealized P&L stay exact.
+         */
+        PositionSnapshot: {
+            /** Ticker */
+            ticker: string;
+            /** Quantity */
+            quantity: number | string;
+            /** Currency */
+            currency: string;
+            /** As Of */
+            as_of?: string | null;
+            /** Cost Basis Per Share */
+            cost_basis_per_share?: number | string | null;
+            /** Total Cost Basis */
+            total_cost_basis?: number | string | null;
+            /** Sector */
+            sector?: string | null;
+            /** Industry */
+            industry?: string | null;
+        };
+        /**
+         * StatementFormat
+         * @description Supported broker statement layouts for the import endpoint.
+         * @enum {string}
+         */
+        StatementFormat: "robinhood_csv";
+        /**
+         * StatementImportStatus
+         * @description Progress + outcome of one statement import (what the UI polls).
+         *
+         *     A decade-long export can hold thousands of rows, so the upload endpoint returns
+         *     immediately with this record in ``PENDING`` and the work continues in the
+         *     background. The client polls until ``status`` is terminal.
+         *
+         *     ``processed_rows``/``total_rows`` drive a progress bar. ``total_rows`` is
+         *     ``None`` until parsing has counted the file, because an honest "unknown" is
+         *     better than a fake denominator that makes a progress bar jump backwards.
+         */
+        StatementImportStatus: {
+            /** Id */
+            id: number;
+            /** Portfolio Id */
+            portfolio_id: number;
+            status: components["schemas"]["ImportStatus"];
+            source_format: components["schemas"]["StatementFormat"];
+            /** Original Filename */
+            original_filename: string;
+            /** Checksum */
+            checksum: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Started At */
+            started_at?: string | null;
+            /** Finished At */
+            finished_at?: string | null;
+            /** Total Rows */
+            total_rows?: number | null;
+            /**
+             * Processed Rows
+             * @default 0
+             */
+            processed_rows: number;
+            /**
+             * Created Transactions
+             * @default 0
+             */
+            created_transactions: number;
+            /**
+             * Tickers
+             * @default []
+             */
+            tickers: string[];
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+            /** Error */
+            error?: string | null;
+        };
+        /**
          * Transaction
          * @description A single dated ledger event for one ticker, in its native currency.
          *
@@ -267,7 +517,59 @@ export interface components {
          *     * ``FEE``: ``amount`` = total fee paid (native currency).
          *     * ``SPLIT``: ``split_ratio`` (e.g. ``2`` for a 2-for-1); other fields ignored.
          */
-        Transaction: {
+        "Transaction-Input": {
+            /** Ticker */
+            ticker: string;
+            type: components["schemas"]["TransactionType"];
+            /**
+             * Trade Date
+             * Format: date
+             */
+            trade_date: string;
+            /** Currency */
+            currency: string;
+            /**
+             * Quantity
+             * @default 0
+             */
+            quantity: number | string;
+            /**
+             * Price
+             * @default 0
+             */
+            price: number | string;
+            /**
+             * Fees
+             * @default 0
+             */
+            fees: number | string;
+            /**
+             * Amount
+             * @default 0
+             */
+            amount: number | string;
+            /**
+             * Split Ratio
+             * @default 1
+             */
+            split_ratio: number | string;
+            /** Sector */
+            sector?: string | null;
+            /** Industry */
+            industry?: string | null;
+        };
+        /**
+         * Transaction
+         * @description A single dated ledger event for one ticker, in its native currency.
+         *
+         *     Field usage by ``type``:
+         *
+         *     * ``BUY`` / ``SELL``: ``quantity`` (> 0) and ``price`` per share; ``fees`` optional.
+         *     * ``DIVIDEND``: ``amount`` = total cash received (native currency).
+         *     * ``FEE``: ``amount`` = total fee paid (native currency).
+         *     * ``SPLIT``: ``split_ratio`` (e.g. ``2`` for a 2-for-1); other fields ignored.
+         */
+        "Transaction-Output": {
             /** Ticker */
             ticker: string;
             type: components["schemas"]["TransactionType"];
@@ -352,6 +654,59 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_portfolios_api_v1_portfolios_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioSummary"][];
+                };
+            };
+        };
+    };
+    create_portfolio_api_v1_portfolios_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortfolioCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_portfolio_api_v1_portfolios__portfolio_id__get: {
         parameters: {
             query?: never;
@@ -400,7 +755,42 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Transaction"][];
+                    "application/json": components["schemas"]["Transaction-Output"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_transactions_api_v1_portfolios__portfolio_id__transactions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Transaction-Input"][];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerIngestResult"];
                 };
             };
             /** @description Validation Error */
@@ -463,6 +853,142 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortfolioAnalytics"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_positions_api_v1_portfolios__portfolio_id__positions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PositionSnapshot"][];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerIngestResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_imports_api_v1_portfolios__portfolio_id__imports_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatementImportStatus"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_import_api_v1_portfolios__portfolio_id__imports_post: {
+        parameters: {
+            query?: {
+                source_format?: components["schemas"]["StatementFormat"];
+                allow_duplicate?: boolean;
+            };
+            header?: never;
+            path: {
+                portfolio_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_create_import_api_v1_portfolios__portfolio_id__imports_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatementImportStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_import_api_v1_portfolios__portfolio_id__imports__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: number;
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatementImportStatus"];
                 };
             };
             /** @description Validation Error */

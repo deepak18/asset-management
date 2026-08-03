@@ -10,8 +10,14 @@ import { usePortfolioAnalytics } from "@/hooks/use-portfolio";
  * pure (easy to unit-test with fixed props) while this shell owns the async
  * loading/error handling.
  */
-export function AllocationSection({ portfolioId }: { portfolioId: number }) {
-  const state = usePortfolioAnalytics(portfolioId);
+export function AllocationSection({
+  portfolioId,
+  refreshToken = 0,
+}: {
+  portfolioId: number;
+  refreshToken?: number;
+}) {
+  const state = usePortfolioAnalytics(portfolioId, refreshToken);
 
   if (state.status === "loading") {
     return <LoadingRows rows={3} />;

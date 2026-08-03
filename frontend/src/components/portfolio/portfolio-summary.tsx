@@ -116,10 +116,17 @@ function SummaryGrid({ analytics }: { analytics: PortfolioAnalytics }) {
 /**
  * Portfolio Summary overview. Reads analytics from the typed client and renders
  * headline figures. Market-value-dependent stats show "—" / "Not priced" when
- * the backend could not price the book — never a fabricated zero.
+ * the backend could not price the book — never a fabricated zero. `refreshToken`
+ * lets the dashboard force a refetch after a write/import lands.
  */
-export function PortfolioSummary({ portfolioId }: { portfolioId: number }) {
-  const state = usePortfolioAnalytics(portfolioId);
+export function PortfolioSummary({
+  portfolioId,
+  refreshToken = 0,
+}: {
+  portfolioId: number;
+  refreshToken?: number;
+}) {
+  const state = usePortfolioAnalytics(portfolioId, refreshToken);
 
   if (state.status === "loading") {
     return <LoadingRows rows={4} />;

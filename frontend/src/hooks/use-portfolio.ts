@@ -14,20 +14,28 @@ import type {
  *
  * Components depend on these (not on `fetch` or hard-coded data), so swapping
  * MSW mocks for the live backend is invisible to the UI — the seam is the client.
+ *
+ * Each per-portfolio hook takes an optional `version` token: bumping it (after a
+ * successful write or a finished import) forces a refetch so the dashboard shows
+ * freshly-ingested data without a full reload.
  */
 
-export function usePortfolioSummary(id: number): AsyncState<PortfolioSummary> {
-  return useApiResource(() => apiClient.getPortfolio(id), [id]);
+export function usePortfolios(version = 0): AsyncState<PortfolioSummary[]> {
+  return useApiResource(() => apiClient.listPortfolios(), [version]);
 }
 
-export function usePortfolioAnalytics(id: number): AsyncState<PortfolioAnalytics> {
-  return useApiResource(() => apiClient.getAnalytics(id), [id]);
+export function usePortfolioSummary(id: number, version = 0): AsyncState<PortfolioSummary> {
+  return useApiResource(() => apiClient.getPortfolio(id), [id, version]);
 }
 
-export function useTransactions(id: number): AsyncState<Transaction[]> {
-  return useApiResource(() => apiClient.listTransactions(id), [id]);
+export function usePortfolioAnalytics(id: number, version = 0): AsyncState<PortfolioAnalytics> {
+  return useApiResource(() => apiClient.getAnalytics(id), [id, version]);
 }
 
-export function useHoldings(id: number): AsyncState<HoldingInfo[]> {
-  return useApiResource(() => apiClient.listHoldings(id), [id]);
+export function useTransactions(id: number, version = 0): AsyncState<Transaction[]> {
+  return useApiResource(() => apiClient.listTransactions(id), [id, version]);
+}
+
+export function useHoldings(id: number, version = 0): AsyncState<HoldingInfo[]> {
+  return useApiResource(() => apiClient.listHoldings(id), [id, version]);
 }
