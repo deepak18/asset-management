@@ -15,13 +15,23 @@ dependencies = [
     # Web layer (PLAN.md §1.1): FastAPI is the ASGI framework; uvicorn is the
     # server that runs it. Both are runtime deps because the API is now a
     # first-class way to operate the system (not just tests).
-    "fastapi>=0.111",
+    "fastapi>=0.140",
+    # Starlette is FastAPI's ASGI foundation and normally a transitive dep, but we
+    # reference its HTTP status constants directly (via `fastapi.status`). It is
+    # declared explicitly because we depend on the 0.47 renames
+    # (HTTP_413_CONTENT_TOO_LARGE / HTTP_422_UNPROCESSABLE_CONTENT); FastAPI itself
+    # only floors starlette>=0.46, which would let a resolver pick a version
+    # lacking those names.
+    "starlette>=0.47",
     "uvicorn[standard]>=0.30",
     # httpx is a runtime dep: the AI adapters (app/ai/providers/*) talk to the
     # local Ollama HTTP API through it. It also drives the async API contract
     # tests in-process via ASGITransport (no live socket).
     "httpx>=0.28.1",
     "mcp>=1.28.1",
+    # Multipart form parsing: FastAPI needs this to accept file uploads
+    # (the broker-statement import endpoint receives a CSV as multipart/form-data).
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
@@ -86,6 +96,8 @@ extend-immutable-calls = [
     "fastapi.Path",
     "fastapi.Body",
     "fastapi.Header",
+    "fastapi.File",
+    "fastapi.Form",
 ]
 
 [tool.ruff.lint.per-file-ignores]
