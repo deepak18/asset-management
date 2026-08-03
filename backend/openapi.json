@@ -6,6 +6,72 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/v1/portfolios": {
+      "get": {
+        "tags": [
+          "Portfolio"
+        ],
+        "summary": "List Portfolios",
+        "description": "Return every tracked portfolio, for the UI's portfolio picker.\n\nDeclared before ``/{portfolio_id}`` so FastAPI matches this literal path first.",
+        "operationId": "list_portfolios_api_v1_portfolios_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PortfolioSummary"
+                  },
+                  "type": "array",
+                  "title": "Response List Portfolios Api V1 Portfolios Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Portfolio"
+        ],
+        "summary": "Create Portfolio",
+        "description": "Create a new empty portfolio and return its assigned identity.",
+        "operationId": "create_portfolio_api_v1_portfolios_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PortfolioCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/portfolios/{portfolio_id}": {
       "get": {
         "tags": [
@@ -76,9 +142,64 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/Transaction"
+                    "$ref": "#/components/schemas/Transaction-Output"
                   },
                   "title": "Response List Transactions Api V1 Portfolios  Portfolio Id  Transactions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Portfolio"
+        ],
+        "summary": "Add Transactions",
+        "description": "Append manually-entered ledger events (404 if the portfolio is absent).",
+        "operationId": "add_transactions_api_v1_portfolios__portfolio_id__transactions_post",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Transaction-Input"
+                },
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerIngestResult"
                 }
               }
             }
@@ -186,6 +307,232 @@
         }
       }
     },
+    "/api/v1/portfolios/{portfolio_id}/positions": {
+      "post": {
+        "tags": [
+          "Portfolio"
+        ],
+        "summary": "Add Positions",
+        "description": "Record current-holding snapshots as opening BUY lots (404 if absent).\n\nThis is the fast on-ramp for an existing portfolio: assert each position's\nticker, quantity, and cost basis instead of re-keying years of trades.",
+        "operationId": "add_positions_api_v1_portfolios__portfolio_id__positions_post",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PositionSnapshot"
+                },
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerIngestResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/imports": {
+      "post": {
+        "tags": [
+          "Portfolio"
+        ],
+        "summary": "Create Import",
+        "description": "Accept a broker statement and process it in the background.\n\nReturns ``202 Accepted`` immediately with a ``PENDING`` job \u2014 a decade-long\nexport can hold thousands of rows, far too slow to finish inside the request.\nPoll ``GET /portfolios/{id}/imports/{job_id}`` until the status is terminal,\nthen refetch analytics.\n\nThe upload's declared ``content_type`` is untrusted browser metadata, so the\nformat comes from ``source_format`` and the parser validates the actual bytes.\nRe-uploading identical content is rejected with ``409`` (it would double-count\nthe whole ledger); pass ``allow_duplicate=true`` to override deliberately.",
+        "operationId": "create_import_api_v1_portfolios__portfolio_id__imports_post",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          },
+          {
+            "name": "source_format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/StatementFormat",
+              "default": "robinhood_csv"
+            }
+          },
+          {
+            "name": "allow_duplicate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Allow Duplicate"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_create_import_api_v1_portfolios__portfolio_id__imports_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatementImportStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Portfolio"
+        ],
+        "summary": "List Imports",
+        "description": "Return the portfolio's import history, newest first.",
+        "operationId": "list_imports_api_v1_portfolios__portfolio_id__imports_get",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StatementImportStatus"
+                  },
+                  "title": "Response List Imports Api V1 Portfolios  Portfolio Id  Imports Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/imports/{job_id}": {
+      "get": {
+        "tags": [
+          "Portfolio"
+        ],
+        "summary": "Get Import",
+        "description": "Return one import job's live status/progress (the endpoint the UI polls).",
+        "operationId": "get_import_api_v1_portfolios__portfolio_id__imports__job_id__get",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          },
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatementImportStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -240,6 +587,20 @@
         ],
         "title": "AllocationWeight",
         "description": "One row of an allocation breakdown."
+      },
+      "Body_create_import_api_v1_portfolios__portfolio_id__imports_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_create_import_api_v1_portfolios__portfolio_id__imports_post"
       },
       "CostBasisResult": {
         "properties": {
@@ -342,6 +703,62 @@
         ],
         "title": "HoldingInfo",
         "description": "A tracked security's classification metadata (provider output).\n\nGrouping keys for allocation roll-ups; the market value is joined in later once\nthe market-data layer (\u00a71.3) can price the position."
+      },
+      "ImportStatus": {
+        "type": "string",
+        "enum": [
+          "PENDING",
+          "RUNNING",
+          "SUCCEEDED",
+          "FAILED"
+        ],
+        "title": "ImportStatus",
+        "description": "Lifecycle of an asynchronous statement import."
+      },
+      "LedgerIngestResult": {
+        "properties": {
+          "portfolio_id": {
+            "type": "integer",
+            "title": "Portfolio Id"
+          },
+          "created_transactions": {
+            "type": "integer",
+            "title": "Created Transactions"
+          },
+          "tickers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tickers"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "default": []
+          },
+          "source_format": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StatementFormat"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "portfolio_id",
+          "created_transactions",
+          "tickers"
+        ],
+        "title": "LedgerIngestResult",
+        "description": "What a write/import operation actually recorded (the endpoint's response)."
       },
       "OpenLot": {
         "properties": {
@@ -510,6 +927,29 @@
         "title": "PortfolioAnalytics",
         "description": "Aggregated, base-currency portfolio analytics (the service layer's output).\n\nThis is the single typed envelope the ``/analytics`` endpoint returns. It bundles\nthe portfolio identity, per-position FIFO cost-basis results, whole-portfolio\nroll-up totals, and the money-weighted return (XIRR).\n\n``money_weighted_return`` is ``None`` when XIRR is mathematically undefined\n(e.g. an empty ledger, or flows that never change sign) \u2014 we surface \"not\ncomputable\" honestly rather than emitting a misleading ``0``. It is a *rate*\n(annualized fraction), not money, but is kept as ``Decimal`` so no ``float``\nleaks into a financial payload.\n\nMarket-value-dependent figures \u2014 per-position unrealized P&L and allocation\nweights \u2014 are populated when the market-data provider supplies current\nprices. When prices are unavailable (no provider configured, quota exhausted,\nor a missing FX rate) those fields degrade gracefully: totals are ``None``,\nallocation lists are empty, and the affected tickers are reported in\n``unpriced_tickers`` so the omission is explicit, never a silent ``0``."
       },
+      "PortfolioCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "base_currency": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Base Currency"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "base_currency"
+        ],
+        "title": "PortfolioCreate",
+        "description": "Request body to create a new (empty) portfolio."
+      },
       "PortfolioSummary": {
         "properties": {
           "id": {
@@ -536,7 +976,359 @@
         "title": "PortfolioSummary",
         "description": "Lightweight portfolio identity + reporting base currency (provider output)."
       },
-      "Transaction": {
+      "PositionSnapshot": {
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "maxLength": 20,
+            "minLength": 1,
+            "title": "Ticker"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "currency": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "cost_basis_per_share": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Basis Per Share"
+          },
+          "total_cost_basis": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Cost Basis"
+          },
+          "sector": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sector"
+          },
+          "industry": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Industry"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ticker",
+          "quantity",
+          "currency"
+        ],
+        "title": "PositionSnapshot",
+        "description": "A user's *current* holding, captured without full transaction history.\n\nThis is the answer to \"my portfolio is 10 years old and I don't want to key in\nevery trade\": you assert the position as it stands today \u2014 how many shares you\nhold and what they cost \u2014 and the system records it as a single opening ``BUY``\nlot in the ledger. Every downstream calculator then treats it like any other\nlot, so cost-basis and unrealized P&L are exact.\n\nProvide the cost basis exactly one of two ways (brokerages report both):\n\n* ``cost_basis_per_share`` \u2014 the average price paid per share, or\n* ``total_cost_basis`` \u2014 the aggregate amount invested (we divide by quantity).\n\n``as_of`` is the acquisition/opening date. When you genuinely don't know it,\nleave it unset and the service stamps today's date \u2014 but note the money-weighted\nreturn (XIRR) is only meaningful with a *real* purchase date, so a snapshot with\na placeholder date will (correctly) leave XIRR undefined while cost-basis and\nunrealized P&L stay exact."
+      },
+      "StatementFormat": {
+        "type": "string",
+        "enum": [
+          "robinhood_csv"
+        ],
+        "title": "StatementFormat",
+        "description": "Supported broker statement layouts for the import endpoint."
+      },
+      "StatementImportStatus": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "portfolio_id": {
+            "type": "integer",
+            "title": "Portfolio Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ImportStatus"
+          },
+          "source_format": {
+            "$ref": "#/components/schemas/StatementFormat"
+          },
+          "original_filename": {
+            "type": "string",
+            "title": "Original Filename"
+          },
+          "checksum": {
+            "type": "string",
+            "title": "Checksum"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "total_rows": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Rows"
+          },
+          "processed_rows": {
+            "type": "integer",
+            "title": "Processed Rows",
+            "default": 0
+          },
+          "created_transactions": {
+            "type": "integer",
+            "title": "Created Transactions",
+            "default": 0
+          },
+          "tickers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tickers",
+            "default": []
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "default": []
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "portfolio_id",
+          "status",
+          "source_format",
+          "original_filename",
+          "checksum",
+          "size_bytes",
+          "created_at"
+        ],
+        "title": "StatementImportStatus",
+        "description": "Progress + outcome of one statement import (what the UI polls).\n\nA decade-long export can hold thousands of rows, so the upload endpoint returns\nimmediately with this record in ``PENDING`` and the work continues in the\nbackground. The client polls until ``status`` is terminal.\n\n``processed_rows``/``total_rows`` drive a progress bar. ``total_rows`` is\n``None`` until parsing has counted the file, because an honest \"unknown\" is\nbetter than a fake denominator that makes a progress bar jump backwards."
+      },
+      "Transaction-Input": {
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Ticker"
+          },
+          "type": {
+            "$ref": "#/components/schemas/TransactionType"
+          },
+          "trade_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Trade Date"
+          },
+          "currency": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Currency"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              }
+            ],
+            "title": "Quantity",
+            "default": "0"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              }
+            ],
+            "title": "Price",
+            "default": "0"
+          },
+          "fees": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              }
+            ],
+            "title": "Fees",
+            "default": "0"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              }
+            ],
+            "title": "Amount",
+            "default": "0"
+          },
+          "split_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              }
+            ],
+            "title": "Split Ratio",
+            "default": "1"
+          },
+          "sector": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sector"
+          },
+          "industry": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Industry"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ticker",
+          "type",
+          "trade_date",
+          "currency"
+        ],
+        "title": "Transaction",
+        "description": "A single dated ledger event for one ticker, in its native currency.\n\nField usage by ``type``:\n\n* ``BUY`` / ``SELL``: ``quantity`` (> 0) and ``price`` per share; ``fees`` optional.\n* ``DIVIDEND``: ``amount`` = total cash received (native currency).\n* ``FEE``: ``amount`` = total fee paid (native currency).\n* ``SPLIT``: ``split_ratio`` (e.g. ``2`` for a 2-for-1); other fields ignored."
+      },
+      "Transaction-Output": {
         "properties": {
           "ticker": {
             "type": "string",

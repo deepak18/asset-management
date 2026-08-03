@@ -25,10 +25,15 @@ from app.marketdata.alphavantage import PROVIDER_CODE, AlphaVantageMarketDataPro
 from app.marketdata.cache import ReadThroughCache
 from app.mcp.client import StreamableHttpMcpClient
 from app.mcp.registry import build_alphavantage_config
+from app.portfolio.imports import StatementImportService
+from app.portfolio.ingest import PortfolioIngestService
 from app.portfolio.service import PortfolioService
-from app.providers.base import PortfolioProvider
+from app.providers.base import PortfolioProvider, StatementImportStore
 from app.providers.marketdata_provider import MarketDataProvider
 from app.providers.portfolio_provider import SqlAlchemyPortfolioProvider
+from app.providers.statement_import_store import SqlAlchemyStatementImportStore
+from app.providers.statement_storage import StatementStorage
+from app.storage.local_disk import LocalDiskStatementStorage
 
 
 def get_settings_dep() -> Settings:
@@ -102,3 +107,108 @@ def get_portfolio_service(
     """Compose the orchestration service from the provider + FX + market-data seams."""
 
     return PortfolioService(provider, fx, market_data=market_data)
+
+
+def get_portfolio_ingest_service(
+    session: AsyncSession = Depends(get_session),
+) -> PortfolioIngestService:
+    """Compose the write-side ingest service (manual entry, snapshots, import).
+
+    One ``SqlAlchemyPortfolioProvider`` instance backs both the read (existence
+    check) and write halves — the two Protocols exist to segregate capability at the
+    call site, not to demand two objects over the same session.
+    """
+
+    provider = SqlAlchemyPortfolioProvider(session)
+    return PortfolioIngestService(writer=provider, reader=provider)
+
+
+def get_statement_storage(
+    settings: Settings = Depends(get_settings_dep),
+) -> StatementStorage:
+    """Provide the blob store for raw uploaded statements (local disk by default).
+
+    Returned as the interface so an S3-backed store can replace it by config alone.
+    """
+
+    return LocalDiskStatementStorage(settings.statement_storage_dir)
+
+
+def get_statement_import_store(
+    session: AsyncSession = Depends(get_session),
+) -> StatementImportStore:
+    """Provide read access to import-job status (returned as the interface)."""
+
+    return SqlAlchemyStatementImportStore(session)
+
+
+def get_statement_import_service(
+    session: AsyncSession = Depends(get_session),
+    storage: StatementStorage = Depends(get_statement_storage),
+    settings: Settings = Depends(get_settings_dep),
+) -> StatementImportService:
+    """Compose the upload-acceptance service used by the request path."""
+
+    provider = SqlAlchemyPortfolioProvider(session)
+    return StatementImportService(
+        store=SqlAlchemyStatementImportStore(session),
+        storage=storage,
+        reader=provider,
+        writer=provider,
+        batch_size=settings.import_batch_size,
+        max_stored_warnings=settings.import_max_stored_warnings,
+    )
+
+
+class BackgroundImportRunner:
+    """Runs a queued import **after** the HTTP response, on its own DB session.
+
+    A request-scoped session is closed as soon as the response is sent, so the
+    background job cannot borrow it — it would operate on a dead connection. This
+    runner therefore holds the *session factory* and opens a fresh session per job,
+    which is also what keeps the job's incremental progress commits visible to the
+    separate requests that poll for status.
+    """
+
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        storage: StatementStorage,
+        batch_size: int,
+        max_stored_warnings: int,
+    ) -> None:
+        self._session_factory = session_factory
+        self._storage = storage
+        self._batch_size = batch_size
+        self._max_stored_warnings = max_stored_warnings
+
+    async def run(self, job_id: int, storage_key: str, portfolio_id: int) -> None:
+        async with self._session_factory() as session:
+            provider = SqlAlchemyPortfolioProvider(session)
+            service = StatementImportService(
+                store=SqlAlchemyStatementImportStore(session),
+                storage=self._storage,
+                reader=provider,
+                writer=provider,
+                batch_size=self._batch_size,
+                max_stored_warnings=self._max_stored_warnings,
+            )
+            await service.process(job_id, storage_key, portfolio_id)
+
+
+def get_background_import_runner(
+    request: Request,
+    storage: StatementStorage = Depends(get_statement_storage),
+    settings: Settings = Depends(get_settings_dep),
+) -> BackgroundImportRunner:
+    """Build the background runner from the app-scoped session factory."""
+
+    factory = cast(
+        "async_sessionmaker[AsyncSession]", request.app.state.session_factory
+    )
+    return BackgroundImportRunner(
+        factory,
+        storage,
+        batch_size=settings.import_batch_size,
+        max_stored_warnings=settings.import_max_stored_warnings,
+    )

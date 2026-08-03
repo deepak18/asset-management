@@ -12,10 +12,12 @@ wiring, serialization, the service, the provider — runs exactly as in producti
 
 from __future__ import annotations
 
+import tempfile
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from pathlib import Path
 
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -24,12 +26,17 @@ from sqlalchemy.pool import StaticPool
 
 import app.marketdata.models  # noqa: F401  (registers the cache table on Base.metadata)
 import app.portfolio.models  # noqa: F401  (registers ORM tables on Base.metadata)
-from app.api.deps import get_market_data_provider, get_session
+from app.api.deps import (
+    get_market_data_provider,
+    get_session,
+    get_statement_storage,
+)
 from app.core.database import Base
 from app.main import create_app
 from app.marketdata.schemas import MarketDataProvenance, Quote
 from app.portfolio import models
 from app.portfolio.schemas import TransactionType
+from app.storage.local_disk import LocalDiskStatementStorage
 
 SEEDED_PORTFOLIO_ID = 1
 
@@ -105,6 +112,9 @@ async def _build_client(
         await _seed(session)
 
     app = create_app()
+    # The lifespan doesn't run under ASGITransport, so publish the session factory
+    # that background tasks resolve from app.state themselves.
+    app.state.session_factory = factory
 
     async def _override_session() -> AsyncIterator[AsyncSession]:
         async with factory() as session:
@@ -114,9 +124,16 @@ async def _build_client(
     # Never hit the live MCP server from tests — inject an explicit provider (or None).
     app.dependency_overrides[get_market_data_provider] = market_data_override
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        yield client
+    # Uploaded statements must land in a throwaway directory, never the configured
+    # (real) storage path.
+    with tempfile.TemporaryDirectory() as tmp:
+        app.dependency_overrides[get_statement_storage] = (
+            lambda: LocalDiskStatementStorage(Path(tmp))
+        )
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            yield client
 
     await engine.dispose()
 
