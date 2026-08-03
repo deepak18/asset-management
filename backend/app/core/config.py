@@ -66,6 +66,20 @@ class Settings(BaseSettings):
     # Single local user (PLAN.md decision #1): optional local gate, no multi-tenant.
     api_access_key: str | None = None
 
+    # --- Broker-statement imports -------------------------------------------
+    # Uploaded statements are kept as raw bytes on disk (the DB stores only
+    # metadata + a pointer). Blobs in a relational DB bloat backups and are
+    # awkward to stream; a directory is trivially swappable for S3 later behind
+    # the StatementStorage interface.
+    statement_storage_dir: str = "./storage/statements"
+    # A decade-long export can hold thousands of rows. We insert in batches so a
+    # single giant transaction never holds locks for the whole file and progress
+    # becomes observable between commits.
+    import_batch_size: int = 500
+    # Warnings are per-row diagnostics; a pathological file could emit tens of
+    # thousands. Cap what we persist so one bad upload cannot bloat the table.
+    import_max_stored_warnings: int = 500
+
     # Browser same-origin policy blocks the dev frontend (:3000) from calling this
     # API (:8000) unless the server opts in via CORS. Env-configurable so prod can
     # widen/narrow the allow-list without code changes. NoDecode lets the validator

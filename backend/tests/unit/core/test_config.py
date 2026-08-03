@@ -61,6 +61,27 @@ def test_marketdata_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.marketdata_min_request_interval_seconds == 12.0
 
 
+def test_statement_import_settings_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    for var in (
+        "STATEMENT_STORAGE_DIR",
+        "IMPORT_BATCH_SIZE",
+        "IMPORT_MAX_STORED_WARNINGS",
+    ):
+        monkeypatch.delenv(var, raising=False)
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert settings.statement_storage_dir == "./storage/statements"
+    assert settings.import_batch_size == 500
+    assert settings.import_max_stored_warnings == 500
+
+
+def test_statement_import_settings_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("STATEMENT_STORAGE_DIR", "/data/statements")
+    monkeypatch.setenv("IMPORT_BATCH_SIZE", "100")
+    settings = Settings()
+    assert settings.statement_storage_dir == "/data/statements"
+    assert settings.import_batch_size == 100
+
+
 def test_supported_currencies_accepts_csv(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SUPPORTED_CURRENCIES", "usd, inr")
     settings = Settings()

@@ -23,8 +23,10 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Integer,
     Numeric,
     String,
+    Text,
     TypeDecorator,
     UniqueConstraint,
     func,
@@ -115,3 +117,52 @@ class Cash(Base):
     portfolio_id: Mapped[int] = mapped_column(ForeignKey("portfolios.id"))
     currency: Mapped[str] = mapped_column(String(3))
     balance: Mapped[Decimal] = mapped_column(ExactDecimal, default=Decimal(0))
+
+
+class StatementImport(Base):
+    """Metadata + progress for one uploaded broker statement.
+
+    Only *metadata* lives here — the raw bytes are written to the blob store and
+    referenced by ``storage_key``. Keeping large opaque files out of the database
+    keeps backups small and lets the two halves scale independently.
+
+    Persisting job state in the database (rather than in process memory) is what
+    makes the pipeline honest across restarts: an interrupted job is still visibly
+    ``RUNNING`` and can be inspected or re-driven, instead of vanishing silently.
+
+    ``checksum`` is the SHA-256 of the uploaded bytes. It gives us content-addressed
+    storage keys and, more importantly, lets us detect a re-upload of the same file
+    — re-importing a decade of trades would silently double every position.
+    """
+
+    __tablename__ = "statement_imports"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    portfolio_id: Mapped[int] = mapped_column(ForeignKey("portfolios.id"), index=True)
+    status: Mapped[str] = mapped_column(String(20), index=True)
+    source_format: Mapped[str] = mapped_column(String(40))
+
+    original_filename: Mapped[str] = mapped_column(String(255))
+    storage_key: Mapped[str] = mapped_column(String(120))
+    checksum: Mapped[str] = mapped_column(String(64), index=True)
+    size_bytes: Mapped[int] = mapped_column(Integer)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+
+    total_rows: Mapped[int | None] = mapped_column(Integer, default=None)
+    processed_rows: Mapped[int] = mapped_column(Integer, default=0)
+    created_transactions: Mapped[int] = mapped_column(Integer, default=0)
+    # Small JSON arrays kept as TEXT so the schema stays dialect-portable across
+    # SQLite (tests) and PostgreSQL (production); they are read whole, never queried.
+    tickers_json: Mapped[str] = mapped_column(Text, default="[]")
+    warnings_json: Mapped[str] = mapped_column(Text, default="[]")
+    error: Mapped[str | None] = mapped_column(Text, default=None)
+
