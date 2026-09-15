@@ -33,7 +33,7 @@ from app.api.deps import (
 )
 from app.core.database import Base
 from app.main import create_app
-from app.marketdata.schemas import MarketDataProvenance, Quote
+from app.marketdata.schemas import CompanyProfile, MarketDataProvenance, Quote
 from app.portfolio import models
 from app.portfolio.schemas import TransactionType
 from app.storage.local_disk import LocalDiskStatementStorage
@@ -65,6 +65,29 @@ class _FakePricedMarketData:
         return None
 
 
+class _FakeProfiledMarketData(_FakePricedMarketData):
+    """Prices AAPL *and* answers company-profile lookups (for classification tests).
+
+    ``NFLX`` resolves; ``XOM`` deliberately does not, so tests can assert the
+    unresolved path without reaching a real provider.
+    """
+
+    async def get_company_profile(self, ticker: str) -> CompanyProfile | None:  # type: ignore[override]
+        if ticker != "NFLX":
+            return None
+        return CompanyProfile(
+            ticker="NFLX",
+            name="Netflix",
+            sector="Communication Services",
+            industry="Entertainment",
+            provenance=MarketDataProvenance(
+                provider_code="ALPHAVANTAGE",
+                source_table="OVERVIEW",
+                as_of=datetime(2026, 9, 1, tzinfo=UTC),
+            ),
+        )
+
+
 async def _seed(session: AsyncSession) -> None:
     """Insert one USD portfolio: AAPL bought 10@100 then sold 4@150; plus XOM meta."""
 
@@ -78,6 +101,9 @@ async def _seed(session: AsyncSession) -> None:
                 portfolio_id=portfolio.id, ticker="AAPL", sector="Tech", industry="Hardware"
             ),
             models.Holding(portfolio_id=portfolio.id, ticker="XOM", sector="Energy"),
+            # Deliberately unclassified: this is what an imported statement produces
+            # and what the classification backfill is expected to fill in.
+            models.Holding(portfolio_id=portfolio.id, ticker="NFLX"),
             models.Transaction(
                 portfolio_id=portfolio.id, ticker="AAPL", type=TransactionType.BUY,
                 trade_date=date(2026, 1, 1), currency="USD",
@@ -152,4 +178,13 @@ async def api_client_priced() -> AsyncIterator[AsyncClient]:
 
     async with _build_client(lambda: _FakePricedMarketData()) as client:
         yield client
+
+
+@pytest_asyncio.fixture
+async def api_client_profiled() -> AsyncIterator[AsyncClient]:
+    """App client whose market-data provider also answers company-profile lookups."""
+
+    async with _build_client(lambda: _FakeProfiledMarketData()) as client:
+        yield client
+
 

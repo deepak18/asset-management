@@ -21,11 +21,16 @@ from fastapi import (
 from app.api.deps import (
     BackgroundImportRunner,
     get_background_import_runner,
+    get_holding_classification_service,
     get_portfolio_ingest_service,
     get_portfolio_provider,
     get_portfolio_service,
     get_statement_import_service,
     get_statement_import_store,
+)
+from app.portfolio.classification import (
+    DEFAULT_CLASSIFY_LIMIT,
+    HoldingClassificationService,
 )
 from app.portfolio.imports import (
     DuplicateStatementError,
@@ -34,6 +39,8 @@ from app.portfolio.imports import (
 )
 from app.portfolio.ingest import PortfolioIngestService
 from app.portfolio.schemas import (
+    HoldingClassificationResult,
+    HoldingClassificationUpdate,
     HoldingInfo,
     LedgerIngestResult,
     PortfolioAnalytics,
@@ -171,6 +178,71 @@ async def add_positions(
             detail=f"Portfolio {portfolio_id} not found",
         )
     return result
+
+
+@router.post("/{portfolio_id}/holdings/classify", status_code=status.HTTP_200_OK)
+async def classify_holdings(
+    portfolio_id: int,
+    refresh: bool = Query(False),
+    limit: int = Query(DEFAULT_CLASSIFY_LIMIT, ge=1, le=200),
+    service: HoldingClassificationService | None = Depends(
+        get_holding_classification_service
+    ),
+) -> HoldingClassificationResult:
+    """Backfill sector/industry for this portfolio's holdings from company profiles.
+
+    A broker statement carries no classification data, so imported holdings start
+    unclassified and the allocation breakdown groups them under ``UNCLASSIFIED``.
+    This fills them in from the market-data provider.
+
+    Already-classified holdings are skipped (so hand-entered labels survive) unless
+    ``refresh=true``. At most ``limit`` tickers are processed per call to bound both
+    request time and free-tier quota use; repeat while ``remaining`` is non-zero.
+
+    Responds ``503`` when no market-data provider is configured — the remedy is an
+    API key, not a retry.
+    """
+
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Market data is not configured; set ALPHAVANTAGE_API_KEY to enable "
+                "sector/industry classification, or set them manually via "
+                "PATCH /holdings/{ticker}"
+            ),
+        )
+
+    result = await service.classify(portfolio_id, refresh=refresh, limit=limit)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Portfolio {portfolio_id} not found",
+        )
+    return result
+
+
+@router.patch("/{portfolio_id}/holdings/{ticker}")
+async def update_holding_classification(
+    portfolio_id: int,
+    ticker: str,
+    body: HoldingClassificationUpdate,
+    ingest: PortfolioIngestService = Depends(get_portfolio_ingest_service),
+) -> HoldingInfo:
+    """Manually set a holding's sector and/or industry (404 if it isn't held).
+
+    The manual path intentionally does not depend on market data: classification
+    must stay editable when the provider is unconfigured, rate-limited, or simply
+    wrong about a symbol.
+    """
+
+    updated = await ingest.set_classification(portfolio_id, ticker, body)
+    if updated is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Holding {ticker.upper()} not found in portfolio {portfolio_id}",
+        )
+    return updated
 
 
 @router.post("/{portfolio_id}/imports", status_code=status.HTTP_202_ACCEPTED)

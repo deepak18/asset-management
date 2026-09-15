@@ -25,6 +25,7 @@ from app.marketdata.alphavantage import PROVIDER_CODE, AlphaVantageMarketDataPro
 from app.marketdata.cache import ReadThroughCache
 from app.mcp.client import StreamableHttpMcpClient
 from app.mcp.registry import build_alphavantage_config
+from app.portfolio.classification import HoldingClassificationService
 from app.portfolio.imports import StatementImportService
 from app.portfolio.ingest import PortfolioIngestService
 from app.portfolio.service import PortfolioService
@@ -122,6 +123,25 @@ def get_portfolio_ingest_service(
 
     provider = SqlAlchemyPortfolioProvider(session)
     return PortfolioIngestService(writer=provider, reader=provider)
+
+
+def get_holding_classification_service(
+    session: AsyncSession = Depends(get_session),
+    market_data: MarketDataProvider | None = Depends(get_market_data_provider),
+) -> HoldingClassificationService | None:
+    """Compose the classification backfill service, or ``None`` without market data.
+
+    Returned as ``None`` rather than raising so the route can answer with a clear
+    "market data is not configured" instead of a generic failure — the fix is an
+    environment variable, and the caller deserves to be told that.
+    """
+
+    if market_data is None:
+        return None
+    provider = SqlAlchemyPortfolioProvider(session)
+    return HoldingClassificationService(
+        reader=provider, writer=provider, market_data=market_data
+    )
 
 
 def get_statement_storage(
