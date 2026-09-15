@@ -10,10 +10,14 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
+import pytest
+from pydantic import ValidationError
+
 from app.core.currency import FxRateTable
 from app.portfolio.calculators import cost_basis_fifo
 from app.portfolio.ingest import PortfolioIngestService, snapshot_to_opening_buy
 from app.portfolio.schemas import (
+    HoldingClassificationUpdate,
     HoldingInfo,
     PortfolioCreate,
     PortfolioSummary,
@@ -44,6 +48,9 @@ class _FakeProvider:
     async def list_holdings(self, portfolio_id: int) -> list[HoldingInfo]:
         return [h for (pid, _), h in self.holdings.items() if pid == portfolio_id]
 
+    async def get_holding(self, portfolio_id: int, ticker: str) -> HoldingInfo | None:
+        return self.holdings.get((portfolio_id, ticker.upper()))
+
     async def create_portfolio(self, data: PortfolioCreate) -> PortfolioSummary:
         pid = self._next_id
         self._next_id += 1
@@ -63,8 +70,14 @@ class _FakeProvider:
         sector: str | None = None,
         industry: str | None = None,
     ) -> None:
+        # Mirrors the real provider: a None field never blanks a stored value.
+        prev = self.holdings.get((portfolio_id, ticker))
         self.holdings[(portfolio_id, ticker)] = HoldingInfo(
-            ticker=ticker, sector=sector, industry=industry
+            ticker=ticker,
+            sector=sector if sector is not None else (prev.sector if prev else None),
+            industry=(
+                industry if industry is not None else (prev.industry if prev else None)
+            ),
         )
 
 
@@ -120,3 +133,42 @@ async def test_write_to_missing_portfolio_returns_none() -> None:
 
     assert await service.add_snapshots(999, []) is None
     assert await service.add_transactions(999, []) is None
+
+
+async def test_manual_classification_updates_only_supplied_fields() -> None:
+    provider = _FakeProvider({1: PortfolioSummary(id=1, name="M", base_currency="USD")})
+    provider.holdings[(1, "NFLX")] = HoldingInfo(ticker="NFLX", sector="Comms")
+    service = PortfolioIngestService(writer=provider, reader=provider)
+
+    updated = await service.set_classification(
+        1, "nflx", HoldingClassificationUpdate(industry="Streaming")
+    )
+
+    assert updated is not None
+    # Industry was set; the previously-known sector must survive a partial edit.
+    assert updated.industry == "Streaming"
+    assert updated.sector == "Comms"
+    assert provider.holdings[(1, "NFLX")].sector == "Comms"
+
+
+async def test_manual_classification_on_unheld_ticker_returns_none() -> None:
+    """An edit must not conjure a holding — a typo'd ticker is a 404, not an insert."""
+
+    provider = _FakeProvider({1: PortfolioSummary(id=1, name="M", base_currency="USD")})
+    service = PortfolioIngestService(writer=provider, reader=provider)
+
+    result = await service.set_classification(
+        1, "TYPO", HoldingClassificationUpdate(sector="Tech")
+    )
+
+    assert result is None
+    assert provider.holdings == {}
+
+
+def test_classification_update_requires_at_least_one_field() -> None:
+    """An empty body is a no-op request, not an instruction to erase."""
+
+    with pytest.raises(ValidationError):
+        HoldingClassificationUpdate()
+
+

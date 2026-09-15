@@ -21,6 +21,8 @@ from __future__ import annotations
 from datetime import date
 
 from app.portfolio.schemas import (
+    HoldingClassificationUpdate,
+    HoldingInfo,
     LedgerIngestResult,
     PortfolioCreate,
     PortfolioSummary,
@@ -92,6 +94,36 @@ class PortfolioIngestService:
         transactions = [snapshot_to_opening_buy(s) for s in snapshots]
         return await self._record(portfolio_id, transactions)
 
+    async def set_classification(
+        self, portfolio_id: int, ticker: str, update: HoldingClassificationUpdate
+    ) -> HoldingInfo | None:
+        """Apply a manual sector/industry override; ``None`` if the ticker isn't held.
+
+        Deliberately free of any market-data dependency: classification has to stay
+        editable when the provider is unconfigured, rate-limited, or simply wrong
+        about a symbol.
+
+        Requiring the holding to already exist keeps this an *edit*. A typo in the
+        ticker must not quietly create a phantom holding that then appears in the
+        allocation breakdown with no shares behind it.
+        """
+
+        existing = await self._reader.get_holding(portfolio_id, ticker)
+        if existing is None:
+            return None
+
+        await self._writer.upsert_holding(
+            portfolio_id,
+            existing.ticker,
+            sector=update.sector,
+            industry=update.industry,
+        )
+        # upsert_holding ignores None, so an omitted field keeps its prior value.
+        return HoldingInfo(
+            ticker=existing.ticker,
+            sector=update.sector or existing.sector,
+            industry=update.industry or existing.industry,
+        )
 
     async def _record(
         self, portfolio_id: int, transactions: list[Transaction]
