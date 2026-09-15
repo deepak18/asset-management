@@ -61,7 +61,8 @@ backend/
     │   │   │   ├── test_cost_basis.py # ✅ FIFO realized/unrealized, splits, dividends, fees, mixed-ccy
     │   │   │   ├── test_ingest.py      # ✅ snapshot→opening-BUY, holding upsert, missing-portfolio None (faked provider)
     │   │   │   ├── test_imports.py     # ✅ async pipeline: accept→PENDING, background process→SUCCEEDED, per-batch progress, duplicate 409/override, failure recorded not raised
-    │   │   │   ├── test_service.py    # ✅ service orchestration (grouping, roll-ups, XIRR, market values/allocation, unpriced) — faked providers
+    │   │   │   ├── test_service.py    # ✅ service orchestration (grouping, roll-ups, XIRR terminal value + status enum, market values/allocation, unpriced) — faked providers
+    │   │   │   ├── test_classification.py # ✅ backfill policy: skip vs refresh, unknown/empty profile → unresolved, upstream failure degrades one ticker, limit + remaining
     │   │   │   ├── test_statements.py  # ✅ Robinhood 9-col export: trade/dividend/tax mapping, Activity-Date keying, derived price, money-cell cleaning, option/transfer/split warnings, non-activity CSV rejected
     │   │   │   └── test_xirr.py       # ✅ pinned XIRR (10%/20%/neg, Excel ref), mixed-ccy, error paths
     │   │   ├── providers/         # ✅ SQLAlchemy portfolio provider round-trip (in-memory SQLite)
@@ -83,9 +84,10 @@ backend/
 │   │   │   ├── test_factory.py       # ✅ config-only provider selection, future/unknown seams
 │   │   │   └── test_ollama_client.py # ✅ request shaping, typed parsing, structured JSON, timeout/error translation
     │   │   ├── api/                   # ✅ Route contract tests via httpx ASGITransport (in-process app)
-    │   │   │   ├── conftest.py        # ✅ Seeded in-memory SQLite + get_session/market-data/statement-storage overrides + AsyncClient fixtures
-    │   │   │   ├── test_portfolio_routes.py # ✅ health, summary/txns/holdings/analytics (cost-basis + market values), 200 + 404
+    │   │   │   ├── conftest.py        # ✅ Seeded in-memory SQLite (incl. an unclassified holding) + get_session/market-data/profile/statement-storage overrides + AsyncClient fixtures
+    │   │   │   ├── test_portfolio_routes.py # ✅ health, summary/txns/holdings/analytics (cost-basis + market values + XIRR status), 200 + 404
     │   │   │   ├── test_ingest_routes.py    # ✅ GET list + POST create/transactions/positions; async import 202→poll→SUCCEEDED→analytics, duplicate 409, 404/422
+    │   │   │   ├── test_classification_routes.py # ✅ classify backfill/refresh/limit, 503 without market data, PATCH partial edit + 404/422
     │   │   │   └── test_cors.py        # ✅ config-driven CORS: allowed/disallowed origin headers + preflight (OPTIONS)
 │   └── integration/           # 🟡 @pytest.mark.integration — real Postgres/pgvector + MCP/Ollama wiring (opt-in)
 │       ├── test_postgres_pgvector.py # ✅ connect + CREATE EXTENSION vector + vector column round-trip
@@ -109,9 +111,9 @@ backend/
     │   └── v1/
     │       ├── router.py      # ✅ Aggregates all v1 routes
     │       └── routes/        # 🟡 portfolio.py ✅; research.py, documents.py, marketdata.py, workspace.py ⬜
-    │           └── portfolio.py   # ✅ GET list/portfolio/transactions/holdings/analytics/imports(+id) + POST create/transactions/positions/imports (thin controllers, 202/404/409/413/422)
+    │           └── portfolio.py   # ✅ GET list/portfolio/transactions/holdings/analytics/imports(+id) + POST create/transactions/positions/imports/holdings-classify + PATCH holdings/{ticker} (thin controllers, 202/404/409/413/422/503)
     ├── providers/             # 🟡 Strongly-typed abstraction interfaces (§2) — the ONLY I/O boundary
-    │   ├── base.py            # ✅ PortfolioProvider (read) + PortfolioWriter (write) + StatementImportStore (job state) Protocols (interface-segregated structural typing)
+    │   ├── base.py            # ✅ PortfolioProvider (read, incl. get_holding) + PortfolioWriter (write) + StatementImportStore (job state) Protocols (interface-segregated structural typing)
     │   ├── portfolio_provider.py  # ✅ SqlAlchemyPortfolioProvider — ORM rows ↔ typed domain objects (reads incl. list_portfolios; writes: create/add-txns/upsert-holding)
     │   ├── statement_storage.py   # ✅ StatementStorage Protocol — raw blob put/get, kept OUT of the relational DB (local disk now, S3 later)
     │   ├── statement_import_store.py # ✅ SqlAlchemyStatementImportStore — import-job metadata/progress; commits per mutation so pollers see live progress
@@ -122,10 +124,11 @@ backend/
     │   └── document_provider.py
     ├── portfolio/             # 🟡 Ledger, allocation weights, investor returns (XIRR), valuations (pure Python)
     │   ├── models.py          # ✅ SQLAlchemy 2.0 mapped: Portfolio, Holding, Transaction, Cash, StatementImport (exact Decimal, currency-aware)
-    │   ├── schemas.py         # ✅ Pydantic typed I/O — read models (Transaction, PortfolioSummary, HoldingInfo, PortfolioAnalytics) + write inputs (PortfolioCreate, PositionSnapshot, ParsedStatement, LedgerIngestResult) + job status (ImportStatus, StatementImportStatus) — no dict/Any
+    │   ├── schemas.py         # ✅ Pydantic typed I/O — read models (Transaction, PortfolioSummary, HoldingInfo, PortfolioAnalytics, MoneyWeightedReturnStatus) + write inputs (PortfolioCreate, PositionSnapshot, HoldingClassificationUpdate, ParsedStatement, LedgerIngestResult, HoldingClassificationResult) + job status (ImportStatus, StatementImportStatus) — no dict/Any
     │   ├── service.py         # ✅ Read orchestration: provider I/O × pure calculators → PortfolioAnalytics (+ market values; no math, no I/O)
     │   ├── ingest.py          # ✅ Write orchestration: manual trades + current-holding snapshots (→ opening BUY lot) behind the PortfolioWriter seam
     │   ├── imports.py         # ✅ Async statement-import pipeline: accept (checksum/store/queue) → background process (batched inserts + progress) → terminal state; duplicate-content guard
+    │   ├── classification.py  # ✅ HoldingClassificationService — backfills sector/industry from company profiles; skips user-set labels unless refresh, bounded per call (limit/remaining), upstream failure → unresolved
     │   ├── statements.py      # ✅ Broker-statement parsing seam: StatementParser Protocol + RobinhoodCsvParser (9-column export → typed txns; trades/dividends/taxes mapped, options/transfers/splits warned); content-validated, MIME-untrusted
     │   └── calculators.py     # ✅ Pure math: FIFO cost-basis P&L, realized/unrealized, allocation, XIRR (unit-tested)
     ├── research/              # ⬜ Competitor matrix (manual peer seed), news streaming, evaluation workspaces
@@ -266,6 +269,7 @@ mcp/
 - **Single local user:** no per-user data isolation; auth is an optional local `API_ACCESS_KEY` gate only.
 - **Currency-aware from day one:** `BASE_CURRENCY`/`SUPPORTED_CURRENCIES` drive `core/currency.py`; USD enabled now, INR next with no schema changes.
 - **Free-tier only:** market data is served through a read-through Postgres cache (`MARKETDATA_CACHE_TTL_SECONDS`) to survive rate limits.
+- **Market data is opt-in:** the provider is built only when **both** `ALPHAVANTAGE_MCP_URL` and `ALPHAVANTAGE_API_KEY` are set (the URL has a default, so the key is the real switch). Unconfigured means market values, allocation weights, sector/industry backfill, and the money-weighted return are unavailable — reported explicitly (`unpriced_tickers`, `UNPRICED_POSITIONS`, HTTP 503) rather than faked.
 - **Uploaded statements are files, not rows:** `STATEMENT_STORAGE_DIR` holds raw broker exports (git-ignored); the database keeps only metadata + a pointer. `IMPORT_BATCH_SIZE` / `IMPORT_MAX_STORED_WARNINGS` tune the async import pipeline.
 
 ---

@@ -9,6 +9,7 @@ FastAPI service for the Local AI-powered Investment Research Platform.
 - Alembic migrations (portfolio schema + pgvector enablement).
 - REST API: `/health`, `/api/v1/portfolios/{id}` (+ `/transactions`, `/holdings`, `/analytics`). `/analytics` returns cost-basis/realized/XIRR always, and adds unrealized P&L + allocation weights (by ticker/sector/industry) when market data is available — degrading gracefully to `unpriced_tickers` otherwise.
 - **Data entry & import (write endpoints):** create/list portfolios, key in transactions, record current-holding **snapshots**, or upload a broker CSV that is parsed **asynchronously** with pollable job status — see [Getting data in](#getting-data-in).
+- **Holding classification:** backfill sector/industry from company profiles (`POST /holdings/classify`) or set them by hand (`PATCH /holdings/{ticker}`) — see [Known gaps & follow-ups](#4-sector--industry-classification).
 - AI provider abstraction (`app/ai/`) — typed `LLMClient` interface + local Ollama adapter (`complete` / `complete_structured` / `embed`); switching provider is config-only (`AI_PROVIDER`), no code changes (§4).
 - Market data (`app/marketdata/` + `app/mcp/`) — `MarketDataProvider` served by the AlphaVantage **hosted MCP** server, behind a read-through Postgres cache (TTL + stale fallback) and a free-tier throttle. Quotes/profiles/statements map to typed schemas with source provenance (§7).
 
@@ -76,6 +77,31 @@ uv run python scripts/ollama_healthcheck.py --url http://192.168.1.42:11434 --mo
 ```
 
 The opt-in live smoke test uses the same config: `uv run pytest -m integration -k ollama`.
+
+## Enable market data (prices, profiles, and XIRR)
+
+Market data is **off until an API key is present**. Set in the root `.env`:
+
+```dotenv
+ALPHAVANTAGE_API_KEY=your_free_key_here     # https://www.alphavantage.co/support/#api-key
+ALPHAVANTAGE_MCP_URL=https://mcp.alphavantage.co/mcp   # already the default
+MARKETDATA_CACHE_TTL_SECONDS=3600           # read-through cache; survives rate limits
+```
+
+The provider is only constructed when **both** the URL and the key are set. The URL
+ships with a working default, so without that guard a key-less install would fire a
+request on every analytics call that the hosted server can only reject — paying a
+network round-trip to learn what configuration already knew. Unconfigured now means
+an immediate, honest "not priced" instead.
+
+Turning this on unlocks three things that are otherwise unavailable:
+
+1. `market_value_base` / `unrealized_pnl_base` on `/analytics`,
+2. allocation weights (they need market values to weight by), and
+3. the money-weighted return — see [XIRR](#3-money-weighted-return-xirr-needs-a-terminal-value--and-therefore-prices).
+
+Quotes and profiles are cached in Postgres with an `as_of` stamp and served
+cache-first, so repeat requests don't consume free-tier quota.
 
 ## Getting data in
 
@@ -260,30 +286,70 @@ a list of "unresolved items" (`kind`, `ticker`, `trade_date`, `quantity`,
 and the user just supplies the missing number. That turns each warning into a
 one-click fix and removes the need to read line numbers out of a text list.
 
-### 3. Money-weighted return (XIRR) is `None` for a buy-only portfolio
+### 3. Money-weighted return (XIRR) needs a terminal value — and therefore prices
 
-This is correct arithmetic, not a defect: XIRR solves for the rate where the net
-present value of dated cash flows is zero, which requires **at least one inflow and
-one outflow**. A portfolio that has only ever bought (plus a few small dividends)
-has effectively one sign, so no root exists and the calculator raises rather than
-returning a misleading number.
+XIRR solves for the rate where the net present value of dated cash flows is zero,
+which requires **at least one inflow and one outflow**. A portfolio that has only
+ever bought has effectively one sign, so no root exists.
 
-The missing piece is the **terminal value**: today's market value of the open
-positions, treated as a synthetic final inflow (what you'd receive if you liquidated
-now). That single flow creates the sign change and makes XIRR meaningful — and yes,
-it requires live quotes, i.e. the AlphaVantage MCP provider (see below).
+The missing flow is the **terminal value**: today's market value of the open
+positions, treated as the synthetic inflow you would receive on liquidating now.
+The service appends it automatically, so a buy-only imported ledger *does* produce
+a return — **provided every open position can be priced**. Configure
+`ALPHAVANTAGE_API_KEY` to enable that.
 
-### 4. Sector / industry allocation is all `UNCLASSIFIED`
+`/analytics` therefore returns `money_weighted_return_status` alongside the value:
+
+| Status | `money_weighted_return` | Meaning |
+|---|---|---|
+| `OK` | a rate | Computed, including the terminal value (or the book is fully closed) |
+| `UNPRICED_POSITIONS` | `null` | Open positions exist but at least one has no price, so the terminal value would be partial. A partial terminal value *understates* the return, so the number is withheld rather than shown wrong. Fix: configure market data. |
+| `INSUFFICIENT_FLOWS` | `null` | Genuinely undefined — fewer than two distinct dated flows, or all flows share one sign. Fix: enter more history. |
+
+A bare `null` cannot distinguish "not enough history" from "market data is off",
+and those need opposite user action — hence the explicit reason.
+
+### 4. Sector / industry classification
 
 `allocation_weights` buckets any position lacking the grouping attribute under
-`UNCLASSIFIED`. Sector and industry live on the `holdings` row, and the CSV import
-only ever learns a **ticker** — a Robinhood activity export contains no
-classification data. So every imported holding has `sector = NULL`.
+`UNCLASSIFIED`. A broker activity export contains no classification data — it says
+you bought `NFLX`, not that Netflix is a communication-services company — so every
+imported holding starts with `sector = NULL`.
 
-Two complementary fixes, both already supported by the existing seams:
-`MarketDataProvider.get_company_profile()` returns `sector`/`industry`, and
-`PortfolioWriter.upsert_holding()` persists them without overwriting values you
-set by hand.
+Two complementary fixes, both wired up:
+
+```bash
+# Backfill from company profiles (needs ALPHAVANTAGE_API_KEY; 503 without it).
+# Already-classified holdings are skipped so hand-entered labels survive.
+curl -X POST 'localhost:8000/api/v1/portfolios/1/holdings/classify'
+
+# Re-fetch everything, overwriting existing values with the vendor's answer:
+curl -X POST 'localhost:8000/api/v1/portfolios/1/holdings/classify?refresh=true'
+
+# Manual override — always available, no market data required:
+curl -X PATCH localhost:8000/api/v1/portfolios/1/holdings/NFLX \
+  -H 'content-type: application/json' \
+  -d '{"sector":"Communication Services","industry":"Entertainment"}'
+```
+
+The backfill response splits results into `classified`, `unresolved` (unknown
+symbol, or quota spent — retry later), `skipped` (already classified), and
+`remaining`. Each call processes at most `limit` tickers (default 25) so one
+request can neither hang nor silently burn a day's free-tier quota; repeat while
+`remaining` is non-zero.
+
+`PATCH` only ever *edits*: it 404s on a ticker the portfolio doesn't hold, so a
+typo cannot conjure a phantom holding into the allocation chart. Omitted fields
+keep their previous value.
+
+### 5. Remaining follow-ups
+
+* **Structured unresolved items.** Import warnings are still free text. Promoting
+  them to a typed payload (`kind`, `ticker`, `trade_date`, `quantity`) would let
+  the UI render a pre-filled split/snapshot form per item instead of asking the
+  user to read line numbers out of prose.
+* **Post-parse split inference** (see above).
+* **Durable background jobs.** In-process tasks don't survive a restart.
 
 ## Regenerate the OpenAPI contract
 
