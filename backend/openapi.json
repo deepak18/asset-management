@@ -364,6 +364,133 @@
         }
       }
     },
+    "/api/v1/portfolios/{portfolio_id}/holdings/classify": {
+      "post": {
+        "tags": [
+          "Portfolio"
+        ],
+        "summary": "Classify Holdings",
+        "description": "Backfill sector/industry for this portfolio's holdings from company profiles.\n\nA broker statement carries no classification data, so imported holdings start\nunclassified and the allocation breakdown groups them under ``UNCLASSIFIED``.\nThis fills them in from the market-data provider.\n\nAlready-classified holdings are skipped (so hand-entered labels survive) unless\n``refresh=true``. At most ``limit`` tickers are processed per call to bound both\nrequest time and free-tier quota use; repeat while ``remaining`` is non-zero.\n\nResponds ``503`` when no market-data provider is configured \u2014 the remedy is an\nAPI key, not a retry.",
+        "operationId": "classify_holdings_api_v1_portfolios__portfolio_id__holdings_classify_post",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          },
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Refresh"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 25,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldingClassificationResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/holdings/{ticker}": {
+      "patch": {
+        "tags": [
+          "Portfolio"
+        ],
+        "summary": "Update Holding Classification",
+        "description": "Manually set a holding's sector and/or industry (404 if it isn't held).\n\nThe manual path intentionally does not depend on market data: classification\nmust stay editable when the provider is unconfigured, rate-limited, or simply\nwrong about a symbol.",
+        "operationId": "update_holding_classification_api_v1_portfolios__portfolio_id__holdings__ticker__patch",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          },
+          {
+            "name": "ticker",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ticker"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HoldingClassificationUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldingInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/portfolios/{portfolio_id}/imports": {
       "post": {
         "tags": [
@@ -667,6 +794,82 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "HoldingClassificationResult": {
+        "properties": {
+          "portfolio_id": {
+            "type": "integer",
+            "title": "Portfolio Id"
+          },
+          "classified": {
+            "items": {
+              "$ref": "#/components/schemas/HoldingInfo"
+            },
+            "type": "array",
+            "title": "Classified",
+            "default": []
+          },
+          "unresolved": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unresolved",
+            "default": []
+          },
+          "skipped": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Skipped",
+            "default": []
+          },
+          "remaining": {
+            "type": "integer",
+            "title": "Remaining",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "portfolio_id"
+        ],
+        "title": "HoldingClassificationResult",
+        "description": "Outcome of backfilling holdings' sector/industry from company profiles.\n\nSplit three ways so the caller can tell progress from failure:\n\n* ``classified`` \u2014 holdings that now carry a sector and/or industry.\n* ``unresolved`` \u2014 the provider returned nothing usable (unknown symbol,\n  quota exhausted, upstream down). Retrying later may succeed.\n* ``skipped``    \u2014 already classified, so no upstream call was spent on them.\n\n``remaining`` reports how many unclassified holdings were left untouched\nbecause the per-request ``limit`` was reached, so a caller knows to call again\nrather than assuming the backfill is complete."
+      },
+      "HoldingClassificationUpdate": {
+        "properties": {
+          "sector": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sector"
+          },
+          "industry": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Industry"
+          }
+        },
+        "type": "object",
+        "title": "HoldingClassificationUpdate",
+        "description": "Manual sector/industry override for one holding.\n\nBoth fields are optional so a caller can correct just one of them, but at\nleast one must be present \u2014 an empty body is a no-op request, not an\ninstruction to erase the classification. Clearing a value is deliberately not\nexpressible here: allocation grouping already represents \"unknown\" as the\n``UNCLASSIFIED`` bucket, so blanking a field has no separate meaning."
+      },
       "HoldingInfo": {
         "properties": {
           "ticker": {
@@ -760,6 +963,16 @@
         "title": "LedgerIngestResult",
         "description": "What a write/import operation actually recorded (the endpoint's response)."
       },
+      "MoneyWeightedReturnStatus": {
+        "type": "string",
+        "enum": [
+          "OK",
+          "UNPRICED_POSITIONS",
+          "INSUFFICIENT_FLOWS"
+        ],
+        "title": "MoneyWeightedReturnStatus",
+        "description": "Why the money-weighted return (XIRR) is, or is not, a number.\n\nA bare ``null`` cannot distinguish \"this portfolio has too little history to\nhave a return\" from \"we could not price your open positions today\". Those\ncall for completely different user action \u2014 enter more history versus\nconfigure market data \u2014 so the reason travels with the value."
+      },
       "OpenLot": {
         "properties": {
           "trade_date": {
@@ -836,6 +1049,10 @@
               }
             ],
             "title": "Money Weighted Return"
+          },
+          "money_weighted_return_status": {
+            "$ref": "#/components/schemas/MoneyWeightedReturnStatus",
+            "default": "INSUFFICIENT_FLOWS"
           },
           "positions_unrealized": {
             "items": {
@@ -925,7 +1142,7 @@
           "open_cost_basis_base"
         ],
         "title": "PortfolioAnalytics",
-        "description": "Aggregated, base-currency portfolio analytics (the service layer's output).\n\nThis is the single typed envelope the ``/analytics`` endpoint returns. It bundles\nthe portfolio identity, per-position FIFO cost-basis results, whole-portfolio\nroll-up totals, and the money-weighted return (XIRR).\n\n``money_weighted_return`` is ``None`` when XIRR is mathematically undefined\n(e.g. an empty ledger, or flows that never change sign) \u2014 we surface \"not\ncomputable\" honestly rather than emitting a misleading ``0``. It is a *rate*\n(annualized fraction), not money, but is kept as ``Decimal`` so no ``float``\nleaks into a financial payload.\n\nMarket-value-dependent figures \u2014 per-position unrealized P&L and allocation\nweights \u2014 are populated when the market-data provider supplies current\nprices. When prices are unavailable (no provider configured, quota exhausted,\nor a missing FX rate) those fields degrade gracefully: totals are ``None``,\nallocation lists are empty, and the affected tickers are reported in\n``unpriced_tickers`` so the omission is explicit, never a silent ``0``."
+        "description": "Aggregated, base-currency portfolio analytics (the service layer's output).\n\nThis is the single typed envelope the ``/analytics`` endpoint returns. It bundles\nthe portfolio identity, per-position FIFO cost-basis results, whole-portfolio\nroll-up totals, and the money-weighted return (XIRR).\n\n``money_weighted_return`` is ``None`` whenever XIRR is not trustworthy, and\n``money_weighted_return_status`` says why \u2014 we surface \"not computable\"\nhonestly rather than emitting a misleading ``0``. It is a *rate* (annualized\nfraction), not money, but is kept as ``Decimal`` so no ``float`` leaks into a\nfinancial payload.\n\nNote that XIRR on a portfolio holding open positions requires a **terminal\nvalue**: today's market value, treated as the inflow you would receive on\nliquidating. Without it a buy-only ledger has only negative flows and no root\nexists. That is why the return depends on market data being available, and why\nit is withheld (``UNPRICED_POSITIONS``) when any open position lacks a price.\n\nMarket-value-dependent figures \u2014 per-position unrealized P&L and allocation\nweights \u2014 are populated when the market-data provider supplies current\nprices. When prices are unavailable (no provider configured, quota exhausted,\nor a missing FX rate) those fields degrade gracefully: totals are ``None``,\nallocation lists are empty, and the affected tickers are reported in\n``unpriced_tickers`` so the omission is explicit, never a silent ``0``."
       },
       "PortfolioCreate": {
         "properties": {
