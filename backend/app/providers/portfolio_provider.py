@@ -82,6 +82,16 @@ class SqlAlchemyPortfolioProvider:
             for row in rows
         ]
 
+    async def get_holding(self, portfolio_id: int, ticker: str) -> HoldingInfo | None:
+        stmt = select(models.Holding).where(
+            models.Holding.portfolio_id == portfolio_id,
+            models.Holding.ticker == ticker.upper(),
+        )
+        row = (await self._session.scalars(stmt)).first()
+        if row is None:
+            return None
+        return HoldingInfo(ticker=row.ticker, sector=row.sector, industry=row.industry)
+
     # --- writes -----------------------------------------------------------
 
     async def create_portfolio(self, data: PortfolioCreate) -> PortfolioSummary:

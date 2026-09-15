@@ -44,6 +44,14 @@ class PortfolioProvider(Protocol):
         """Return the portfolio's tracked securities + classification metadata."""
         ...
 
+    async def get_holding(self, portfolio_id: int, ticker: str) -> HoldingInfo | None:
+        """Return one tracked security, or ``None`` if the portfolio doesn't hold it.
+
+        Exists so a caller can distinguish "update an existing holding" from
+        "create one", which ``upsert_holding`` deliberately cannot express.
+        """
+        ...
+
 
 class PortfolioWriter(Protocol):
     """Write access to a portfolio's identity, ledger, and holding classification.

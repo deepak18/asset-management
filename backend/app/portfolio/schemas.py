@@ -299,6 +299,52 @@ class PositionSnapshot(BaseModel):
         return self
 
 
+class HoldingClassificationUpdate(BaseModel):
+    """Manual sector/industry override for one holding.
+
+    Both fields are optional so a caller can correct just one of them, but at
+    least one must be present — an empty body is a no-op request, not an
+    instruction to erase the classification. Clearing a value is deliberately not
+    expressible here: allocation grouping already represents "unknown" as the
+    ``UNCLASSIFIED`` bucket, so blanking a field has no separate meaning.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    sector: str | None = Field(default=None, min_length=1, max_length=80)
+    industry: str | None = Field(default=None, min_length=1, max_length=80)
+
+    @model_validator(mode="after")
+    def _at_least_one_field(self) -> HoldingClassificationUpdate:
+        if self.sector is None and self.industry is None:
+            raise ValueError("provide at least one of 'sector' or 'industry'")
+        return self
+
+
+class HoldingClassificationResult(BaseModel):
+    """Outcome of backfilling holdings' sector/industry from company profiles.
+
+    Split three ways so the caller can tell progress from failure:
+
+    * ``classified`` — holdings that now carry a sector and/or industry.
+    * ``unresolved`` — the provider returned nothing usable (unknown symbol,
+      quota exhausted, upstream down). Retrying later may succeed.
+    * ``skipped``    — already classified, so no upstream call was spent on them.
+
+    ``remaining`` reports how many unclassified holdings were left untouched
+    because the per-request ``limit`` was reached, so a caller knows to call again
+    rather than assuming the backfill is complete.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    portfolio_id: int
+    classified: tuple[HoldingInfo, ...] = ()
+    unresolved: tuple[str, ...] = ()
+    skipped: tuple[str, ...] = ()
+    remaining: int = 0
+
+
 class StatementFormat(StrEnum):
     """Supported broker statement layouts for the import endpoint."""
 

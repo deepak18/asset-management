@@ -71,6 +71,21 @@ async def test_list_holdings_maps_classification(async_session: AsyncSession) ->
     assert by_ticker["XOM"].industry is None
 
 
+async def test_get_holding_returns_one_or_none(async_session: AsyncSession) -> None:
+    pid = await _seed_portfolio(async_session)
+    provider = SqlAlchemyPortfolioProvider(async_session)
+
+    # Lookup is case-insensitive on the ticker so a lower-case URL path works.
+    found = await provider.get_holding(pid, "aapl")
+    assert found is not None
+    assert found.ticker == "AAPL"
+    assert found.sector == "Tech"
+
+    assert await provider.get_holding(pid, "NOPE") is None
+    # Holdings are scoped per portfolio, never leaked across them.
+    assert await provider.get_holding(pid + 999, "AAPL") is None
+
+
 async def test_list_transactions_preserves_exact_decimals(async_session: AsyncSession) -> None:
     pid = await _seed_portfolio(async_session)
     provider = SqlAlchemyPortfolioProvider(async_session)
