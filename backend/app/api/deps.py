@@ -81,11 +81,12 @@ def get_market_data_provider(
 ) -> MarketDataProvider | None:
     """Build the AlphaVantage-over-MCP provider, or ``None`` if not configured.
 
-    Returns ``None`` when no MCP URL is set (``build_alphavantage_config`` disabled),
-    so analytics degrades gracefully to cost-basis-only offline. No throttle is
-    attached on the request path: the read-through cache is the free-tier guard, and
-    a per-call delay would make a cold analytics request needlessly slow. (Batch/
-    background refresh flows can attach an app-scoped ``AsyncRateLimiter`` later.)
+    Returns ``None`` when the MCP URL or API key is unset, so analytics degrades
+    gracefully to cost-basis-only offline instead of attempting a call that cannot
+    succeed. No throttle is attached on the request path: the read-through cache is
+    the free-tier guard, and a per-call delay would make a cold analytics request
+    needlessly slow. (Batch/background refresh flows can attach an app-scoped
+    ``AsyncRateLimiter`` later.)
     """
 
     config = build_alphavantage_config(settings)

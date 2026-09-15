@@ -16,6 +16,34 @@ def test_no_url_disables_provider() -> None:
     assert build_alphavantage_config(_settings(alphavantage_mcp_url="")) is None
 
 
+def test_no_api_key_disables_provider() -> None:
+    """A key-less client can only fail, so it must not be built at all.
+
+    The MCP URL ships with a working default, so without this guard a fresh
+    install with no API key would fire a doomed request on every analytics call
+    before degrading to "unpriced".
+    """
+
+    assert (
+        build_alphavantage_config(
+            _settings(
+                alphavantage_mcp_url="https://mcp.alphavantage.co/mcp",
+                alphavantage_api_key=None,
+            )
+        )
+        is None
+    )
+    assert (
+        build_alphavantage_config(
+            _settings(
+                alphavantage_mcp_url="https://mcp.alphavantage.co/mcp",
+                alphavantage_api_key="   ",
+            )
+        )
+        is None
+    )
+
+
 def test_api_key_is_appended_as_query_param() -> None:
     config = build_alphavantage_config(
         _settings(
@@ -51,9 +79,14 @@ def test_existing_query_uses_ampersand_separator() -> None:
     assert "?foo=bar&apikey=KEY" in config.url
 
 
-def test_no_key_leaves_url_untouched() -> None:
+def test_no_key_leaves_configured_url_query_intact() -> None:
+    """A URL that already carries its own apikey is passed through unchanged."""
+
     config = build_alphavantage_config(
-        _settings(alphavantage_mcp_url="https://host/mcp", alphavantage_api_key="")
+        _settings(
+            alphavantage_mcp_url="https://host/mcp?apikey=EMBEDDED",
+            alphavantage_api_key="EMBEDDED",
+        )
     )
     assert config is not None
-    assert config.url == "https://host/mcp"
+    assert config.url == "https://host/mcp?apikey=EMBEDDED"
