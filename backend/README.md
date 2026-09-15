@@ -39,10 +39,18 @@ From the **repo root** first: `docker compose up -d --wait` (starts Postgres + p
 cd backend
 uv sync --extra dev --extra postgres
 uv run alembic upgrade head             # create tables + enable pgvector + import-job table
-uv run uvicorn app.main:app --reload    # http://localhost:8000/docs
+uv run python -m uvicorn app.main:app --reload    # http://localhost:8000/docs
 ```
 
 Config comes from the repo-root `.env` (see the main [README](../README.md)); `DATABASE_URL` selects the database. With no `.env`/env override, the app falls back to a local SQLite file for zero-infra runs.
+
+> 💡 **Why `python -m uvicorn` and not `uvicorn`?** `uv sync` installs a small
+> `uvicorn.exe` launcher shim in `.venv\Scripts\`. On locked-down Windows (Smart App
+> Control / WDAC / AppLocker), spawning that freshly-created unsigned shim is blocked
+> with `error: Failed to spawn: 'uvicorn' … An Application Control policy has blocked
+> this file. (os error 4551)`. Invoking through the trusted Python interpreter
+> (`python -m uvicorn …`) sidesteps the shim entirely. The same trick applies to any
+> blocked console script (`python -m pytest`, `python -m alembic …`).
 
 ## Point at a remote or slow (GPU-less) Ollama
 
@@ -190,10 +198,92 @@ uv run python scripts/import_demo.py path/to/robinhood_activity.csv
 All four write endpoints return `201` with a `LedgerIngestResult`
 (`created_transactions`, `tickers`, `warnings`, `source_format`).
 
+## Known gaps & follow-ups
+
+Deliberate, documented limitations — each one is a *correct* refusal to guess
+rather than a bug. They are listed in the order they distort reported numbers.
+
+### 1. Stock splits from broker exports are skipped (needs manual entry)
+
+**What happens:** a Robinhood `SPL` / `SPR` row is skipped with a warning, e.g.
+`row 44: skipped SPL — stock split — enter it manually with its ratio (Booking Holdings)`.
+
+**Why:** the export reports the *shares added* (`Quantity` = `3.1736`), not the
+split **ratio**. Those coincide only when you held exactly one share. Deriving the
+ratio requires the pre-split open quantity at that instant — knowable only by
+replaying the ledger, which the row-by-row parser deliberately does not do (a
+parser that silently invents a ratio from an incomplete export would corrupt cost
+basis without telling you).
+
+**Impact if ignored:** open share count and per-share cost basis for that ticker
+are wrong. Total basis stays right, so realized P&L on already-closed lots is
+unaffected.
+
+**Workaround today:** post the split yourself —
 
 ```bash
-uv run python scripts/import_demo.py path/to/robinhood_activity.csv
+curl -X POST localhost:8000/api/v1/portfolios/1/transactions \
+  -H 'content-type: application/json' \
+  -d '[{"ticker":"BKNG","type":"SPLIT","trade_date":"2026-04-06","currency":"USD","split_ratio":"20"}]'
 ```
+
+**Recommendation:** resolve splits in a *post-parse* pass, not in the parser.
+After all rows are staged, replay the ledger up to each `SPL` date, compute
+`ratio = (open_qty + shares_added) / open_qty`, and emit a real `SPLIT` event —
+but **only** when the ledger genuinely starts before the split date (otherwise the
+opening quantity is unknown and the inference is invalid). Keep the warning as the
+fallback. A corroborating `SPLITS` feed from the market-data provider would let us
+verify the inferred ratio against the official one before accepting it.
+
+### 2. Transferred-in positions (`ITRF`) carry no cost basis
+
+**What happens:** an `ITRF` row with an instrument and a quantity but **no price**
+(an ACATS-style transfer in) is skipped with a warning pointing you at the
+position-snapshot form.
+
+**Why:** importing it as a `BUY` at a blank price would book a **zero-cost lot**,
+which overstates unrealized gain by the entire value of the position. Refusing is
+the only honest option — the true basis lives at the *sending* broker and is
+simply not in this file.
+
+**Impact if ignored:** those shares are missing from the portfolio entirely
+(understated market value), which is visible and correctable; the alternative
+(zero-cost lots) is invisible and wrong.
+
+**Workaround today:** add each transferred-in position via
+`POST /api/v1/portfolios/{id}/positions` with its real acquisition date and cost.
+
+**Recommendation:** keep the refusal, but make the follow-up actionable instead of
+prose. Promote these warnings into a typed, structured payload on the import job —
+a list of "unresolved items" (`kind`, `ticker`, `trade_date`, `quantity`,
+`description`) — so the UI can render a *pre-filled* snapshot/split form per item
+and the user just supplies the missing number. That turns each warning into a
+one-click fix and removes the need to read line numbers out of a text list.
+
+### 3. Money-weighted return (XIRR) is `None` for a buy-only portfolio
+
+This is correct arithmetic, not a defect: XIRR solves for the rate where the net
+present value of dated cash flows is zero, which requires **at least one inflow and
+one outflow**. A portfolio that has only ever bought (plus a few small dividends)
+has effectively one sign, so no root exists and the calculator raises rather than
+returning a misleading number.
+
+The missing piece is the **terminal value**: today's market value of the open
+positions, treated as a synthetic final inflow (what you'd receive if you liquidated
+now). That single flow creates the sign change and makes XIRR meaningful — and yes,
+it requires live quotes, i.e. the AlphaVantage MCP provider (see below).
+
+### 4. Sector / industry allocation is all `UNCLASSIFIED`
+
+`allocation_weights` buckets any position lacking the grouping attribute under
+`UNCLASSIFIED`. Sector and industry live on the `holdings` row, and the CSV import
+only ever learns a **ticker** — a Robinhood activity export contains no
+classification data. So every imported holding has `sector = NULL`.
+
+Two complementary fixes, both already supported by the existing seams:
+`MarketDataProvider.get_company_profile()` returns `sector`/`industry`, and
+`PortfolioWriter.upsert_holding()` persists them without overwriting values you
+set by hand.
 
 ## Regenerate the OpenAPI contract
 
