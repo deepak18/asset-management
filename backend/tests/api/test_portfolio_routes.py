@@ -61,8 +61,10 @@ async def test_analytics_computes_realized_and_open_cost(api_client: AsyncClient
     assert Decimal(body["open_cost_basis_base"]) == Decimal("600")
     assert body["portfolio"]["name"] == "Main"
     assert len(body["positions"]) == 1
-    # Two opposite-signed dated flows -> XIRR is defined (present, non-null).
-    assert body["money_weighted_return"] is not None
+    # 6 shares are still open and this client has no market-data provider, so the
+    # terminal liquidation value is unknown and the return is withheld with a reason.
+    assert body["money_weighted_return"] is None
+    assert body["money_weighted_return_status"] == "UNPRICED_POSITIONS"
     # No market-data provider in this client → market-value fields degrade cleanly.
     assert body["market_value_base"] is None
     assert body["positions_unrealized"] == []
@@ -82,6 +84,9 @@ async def test_analytics_includes_market_values_when_priced(
     assert len(body["positions_unrealized"]) == 1
     by_ticker = {r["key"]: r for r in body["allocation_by_ticker"]}
     assert Decimal(by_ticker["AAPL"]["weight"]) == Decimal("1")
+    # Everything open is priced, so the terminal value completes the XIRR inputs.
+    assert body["money_weighted_return_status"] == "OK"
+    assert body["money_weighted_return"] is not None
     by_sector = {r["key"]: r for r in body["allocation_by_sector"]}
     assert Decimal(by_sector["Tech"]["market_value"]) == Decimal("900")
     assert body["unpriced_tickers"] == []

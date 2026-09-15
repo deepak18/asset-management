@@ -16,6 +16,7 @@ from app.marketdata.errors import MarketDataUnavailableError
 from app.marketdata.schemas import MarketDataProvenance, Quote
 from app.portfolio.schemas import (
     HoldingInfo,
+    MoneyWeightedReturnStatus,
     PortfolioSummary,
     Transaction,
     TransactionType,
@@ -106,6 +107,10 @@ async def test_empty_ledger_yields_zeroed_totals(usd_only_fx: FxRateTable) -> No
     assert analytics.open_cost_basis_base == Decimal(0)
     # XIRR is undefined for an empty ledger -> reported honestly as None.
     assert analytics.money_weighted_return is None
+    assert (
+        analytics.money_weighted_return_status
+        is MoneyWeightedReturnStatus.INSUFFICIENT_FLOWS
+    )
 
 
 async def test_rolls_up_realized_pnl_and_open_cost(usd_only_fx: FxRateTable) -> None:
@@ -126,8 +131,82 @@ async def test_rolls_up_realized_pnl_and_open_cost(usd_only_fx: FxRateTable) -> 
     assert analytics.open_cost_basis_base == Decimal("600")
     assert len(analytics.positions) == 1
     assert analytics.positions[0].ticker == "AAPL"
-    # Two opposite-signed dated flows -> XIRR is defined (a real number).
+    # 6 shares are still held and nothing can price them, so the terminal value is
+    # unknown. A return computed without it would ignore most of the capital, so
+    # it is withheld with an explicit reason rather than reported as a number.
+    assert analytics.money_weighted_return is None
+    assert (
+        analytics.money_weighted_return_status
+        is MoneyWeightedReturnStatus.UNPRICED_POSITIONS
+    )
+
+
+async def test_fully_closed_book_needs_no_terminal_value(usd_only_fx: FxRateTable) -> None:
+    """With nothing left open, the flows alone already change sign."""
+
+    summary = PortfolioSummary(id=1, name="Main", base_currency="USD")
+    transactions = [
+        _txn(TransactionType.BUY, 1, 1, quantity=Decimal("10"), price=Decimal("100")),
+        _txn(TransactionType.SELL, 7, 1, quantity=Decimal("10"), price=Decimal("110")),
+    ]
+    service = PortfolioService(FakePortfolioProvider(summary, transactions), usd_only_fx)
+
+    analytics = await service.get_analytics(1)
+
+    assert analytics is not None
+    assert analytics.money_weighted_return_status is MoneyWeightedReturnStatus.OK
     assert analytics.money_weighted_return is not None
+    # Bought at 100, sold at 110 roughly half a year later -> strongly positive.
+    assert analytics.money_weighted_return > Decimal("0")
+
+
+async def test_terminal_market_value_makes_buy_only_xirr_computable(
+    usd_only_fx: FxRateTable,
+) -> None:
+    """A buy-only ledger has one-sign flows; today's market value supplies the other.
+
+    This is the case that matters for a real imported statement: without the
+    synthetic liquidation inflow there is no root to solve for at all.
+    """
+
+    summary = PortfolioSummary(id=1, name="Main", base_currency="USD")
+    # Two dated buys, no sells -> every flow is negative on its own.
+    transactions = [
+        _txn(TransactionType.BUY, 1, 1, quantity=Decimal("10"), price=Decimal("100")),
+        _txn(TransactionType.BUY, 3, 1, quantity=Decimal("10"), price=Decimal("110")),
+    ]
+    market = FakeMarketData({"AAPL": Decimal("150")})
+    service = PortfolioService(FakePortfolioProvider(summary, transactions), usd_only_fx, market)
+
+    analytics = await service.get_analytics(1)
+
+    assert analytics is not None
+    assert analytics.money_weighted_return_status is MoneyWeightedReturnStatus.OK
+    assert analytics.money_weighted_return is not None
+    # Paid 2100 for 20 shares now worth 3000 -> the return must be positive.
+    assert analytics.money_weighted_return > Decimal("0")
+
+
+async def test_partially_priced_book_withholds_the_return(usd_only_fx: FxRateTable) -> None:
+    """One missing price makes the terminal value partial -> no number, with a reason."""
+
+    summary = PortfolioSummary(id=1, name="Main", base_currency="USD")
+    transactions = [
+        _txn(TransactionType.BUY, 1, 1, ticker="AAPL", quantity=Decimal("10"), price=Decimal("100")),
+        _txn(TransactionType.BUY, 1, 1, ticker="MSFT", quantity=Decimal("5"), price=Decimal("200")),
+    ]
+    market = FakeMarketData({"AAPL": Decimal("150")})  # MSFT unpriced
+    service = PortfolioService(FakePortfolioProvider(summary, transactions), usd_only_fx, market)
+
+    analytics = await service.get_analytics(1)
+
+    assert analytics is not None
+    assert analytics.unpriced_tickers == ("MSFT",)
+    assert analytics.money_weighted_return is None
+    assert (
+        analytics.money_weighted_return_status
+        is MoneyWeightedReturnStatus.UNPRICED_POSITIONS
+    )
 
 
 async def test_positions_are_grouped_per_ticker_and_sorted(usd_only_fx: FxRateTable) -> None:

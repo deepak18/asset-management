@@ -31,7 +31,9 @@ from app.portfolio.calculators import (
 )
 from app.portfolio.schemas import (
     AllocationWeight,
+    CashFlow,
     CostBasisResult,
+    MoneyWeightedReturnStatus,
     PortfolioAnalytics,
     PositionValue,
     Transaction,
@@ -75,10 +77,11 @@ class PortfolioService:
         """Return aggregated analytics, or ``None`` if the portfolio doesn't exist.
 
         Steps: (1) resolve identity, (2) pull the ledger, (3) run FIFO cost-basis
-        per ticker, (4) roll up base-currency totals, (5) compute whole-portfolio
-        XIRR from all cash flows, (6) if a market-data provider is available, mark
-        open positions to market and compute allocation weights — degrading
-        gracefully to "unpriced" when a quote or FX rate is missing.
+        per ticker, (4) roll up base-currency totals, (5) if a market-data provider
+        is available, mark open positions to market and compute allocation weights —
+        degrading gracefully to "unpriced" when a quote or FX rate is missing, then
+        (6) compute whole-portfolio XIRR, which *depends* on step 5 for its terminal
+        value and so must run after it.
         """
 
         summary = await self._provider.get_portfolio(portfolio_id)
@@ -103,16 +106,11 @@ class PortfolioService:
         fees = sum((p.fees_base for p in positions), Decimal(0))
         open_cost = sum((p.open_cost_basis_base for p in positions), Decimal(0))
 
-        # XIRR can be genuinely undefined (empty ledger, single-sign flows). We
-        # translate that into an explicit None rather than a misleading number.
-        money_weighted_return: Decimal | None
-        try:
-            rate = xirr(transactions_to_cash_flows(transactions), self._fx)
-            money_weighted_return = Decimal(str(rate))
-        except XirrError:
-            money_weighted_return = None
-
-        market = await self._compute_market_values(portfolio_id, positions)
+        as_of_date = date.today()
+        market = await self._compute_market_values(portfolio_id, positions, as_of_date)
+        money_weighted_return, mwr_status = self._money_weighted_return(
+            transactions, positions, market, as_of_date
+        )
 
         return PortfolioAnalytics(
             portfolio=summary,
@@ -123,6 +121,7 @@ class PortfolioService:
             fees_base=fees,
             open_cost_basis_base=open_cost,
             money_weighted_return=money_weighted_return,
+            money_weighted_return_status=mwr_status,
             positions_unrealized=market.positions_unrealized,
             market_value_base=market.market_value_base,
             unrealized_pnl_base=market.unrealized_pnl_base,
@@ -133,8 +132,49 @@ class PortfolioService:
             priced_as_of=market.priced_as_of,
         )
 
+    def _money_weighted_return(
+        self,
+        transactions: list[Transaction],
+        positions: list[CostBasisResult],
+        market: _MarketValues,
+        as_of: date,
+    ) -> tuple[Decimal | None, MoneyWeightedReturnStatus]:
+        """Compute XIRR over the ledger's flows plus a terminal liquidation value.
+
+        A portfolio that still holds shares has not returned that money to the
+        investor yet, so the flows alone are all one sign and no rate exists. The
+        economically correct closing flow is what you would receive by selling
+        everything today — i.e. the current market value — so we append it as a
+        synthetic inflow dated ``as_of``.
+
+        That flow is only appended when **every** open position could be priced.
+        A partial terminal value would produce a confidently wrong, understated
+        return; withholding the number and reporting ``UNPRICED_POSITIONS`` lets
+        the caller explain the gap instead of displaying a lie. A fully closed
+        book needs no terminal value and is computed from its flows alone.
+        """
+
+        flows = transactions_to_cash_flows(transactions)
+
+        if any(p.open_quantity > 0 for p in positions):
+            if market.market_value_base is None or market.unpriced_tickers:
+                return None, MoneyWeightedReturnStatus.UNPRICED_POSITIONS
+            flows.append(
+                CashFlow(
+                    date=as_of,
+                    amount=market.market_value_base,
+                    currency=self._fx.base_currency,
+                )
+            )
+
+        try:
+            rate = xirr(flows, self._fx)
+        except XirrError:
+            return None, MoneyWeightedReturnStatus.INSUFFICIENT_FLOWS
+        return Decimal(str(rate)), MoneyWeightedReturnStatus.OK
+
     async def _compute_market_values(
-        self, portfolio_id: int, positions: list[CostBasisResult]
+        self, portfolio_id: int, positions: list[CostBasisResult], as_of_date: date
     ) -> _MarketValues:
         """Mark open positions to market and build allocation weights.
 
@@ -147,7 +187,6 @@ class PortfolioService:
 
         holdings = await self._provider.list_holdings(portfolio_id)
         meta = {h.ticker: h for h in holdings}
-        as_of_date = date.today()
 
         unrealized: list[UnrealizedResult] = []
         values: list[PositionValue] = []

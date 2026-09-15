@@ -163,6 +163,25 @@ class CashFlow(BaseModel):
     currency: str = Field(min_length=3, max_length=3)
 
 
+class MoneyWeightedReturnStatus(StrEnum):
+    """Why the money-weighted return (XIRR) is, or is not, a number.
+
+    A bare ``null`` cannot distinguish "this portfolio has too little history to
+    have a return" from "we could not price your open positions today". Those
+    call for completely different user action — enter more history versus
+    configure market data — so the reason travels with the value.
+    """
+
+    OK = "OK"
+    # Open positions exist but at least one could not be priced. The terminal
+    # value would therefore be partial, and a partial terminal value silently
+    # *understates* the return. We refuse to emit that number.
+    UNPRICED_POSITIONS = "UNPRICED_POSITIONS"
+    # Mathematically undefined: fewer than two distinct dated flows, or every
+    # flow shares one sign so the net-present-value equation has no root.
+    INSUFFICIENT_FLOWS = "INSUFFICIENT_FLOWS"
+
+
 class PortfolioAnalytics(BaseModel):
     """Aggregated, base-currency portfolio analytics (the service layer's output).
 
@@ -170,11 +189,17 @@ class PortfolioAnalytics(BaseModel):
     the portfolio identity, per-position FIFO cost-basis results, whole-portfolio
     roll-up totals, and the money-weighted return (XIRR).
 
-    ``money_weighted_return`` is ``None`` when XIRR is mathematically undefined
-    (e.g. an empty ledger, or flows that never change sign) — we surface "not
-    computable" honestly rather than emitting a misleading ``0``. It is a *rate*
-    (annualized fraction), not money, but is kept as ``Decimal`` so no ``float``
-    leaks into a financial payload.
+    ``money_weighted_return`` is ``None`` whenever XIRR is not trustworthy, and
+    ``money_weighted_return_status`` says why — we surface "not computable"
+    honestly rather than emitting a misleading ``0``. It is a *rate* (annualized
+    fraction), not money, but is kept as ``Decimal`` so no ``float`` leaks into a
+    financial payload.
+
+    Note that XIRR on a portfolio holding open positions requires a **terminal
+    value**: today's market value, treated as the inflow you would receive on
+    liquidating. Without it a buy-only ledger has only negative flows and no root
+    exists. That is why the return depends on market data being available, and why
+    it is withheld (``UNPRICED_POSITIONS``) when any open position lacks a price.
 
     Market-value-dependent figures — per-position unrealized P&L and allocation
     weights — are populated when the market-data provider supplies current
@@ -194,6 +219,9 @@ class PortfolioAnalytics(BaseModel):
     fees_base: Decimal
     open_cost_basis_base: Decimal
     money_weighted_return: Decimal | None = None
+    money_weighted_return_status: MoneyWeightedReturnStatus = (
+        MoneyWeightedReturnStatus.INSUFFICIENT_FLOWS
+    )
 
     # Market-value-dependent analytics (present only when priced).
     positions_unrealized: tuple[UnrealizedResult, ...] = ()
