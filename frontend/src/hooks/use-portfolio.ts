@@ -3,6 +3,7 @@
 import { apiClient } from "@/lib/api-client";
 import { useApiResource, type AsyncState } from "@/hooks/use-api-resource";
 import type {
+  HoldingAnalytics,
   HoldingInfo,
   PortfolioAnalytics,
   PortfolioSummary,
@@ -52,4 +53,21 @@ export function useHolding(
   version = 0,
 ): AsyncState<HoldingInfo> {
   return useApiResource(() => apiClient.getHolding(id, ticker), [id, ticker, version]);
+}
+
+/**
+ * This holding's own money-weighted return (XIRR), scoped to the URL portfolio +
+ * ticker. Keyed on `[id, ticker, version]` so navigating to a different holding
+ * refetches (and {@link useApiResource}'s stale-response guard discards a late
+ * answer from the previous ticker after navigation or unmount).
+ */
+export function useHoldingAnalytics(
+  id: number,
+  ticker: string,
+  version = 0,
+): AsyncState<HoldingAnalytics> {
+  return useApiResource(
+    () => apiClient.getHoldingAnalytics(id, ticker),
+    [id, ticker, version],
+  );
 }

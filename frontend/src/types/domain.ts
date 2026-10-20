@@ -21,6 +21,20 @@ export type TransactionType = components["schemas"]["TransactionType"];
 export type HoldingInfo = components["schemas"]["HoldingInfo"];
 export type PortfolioAnalytics = components["schemas"]["PortfolioAnalytics"];
 
+// Holding-level (per-ticker) money-weighted return surface.
+//
+// `HoldingReturnStatus` is why this holding's XIRR is (or is not) a number. Like
+// the portfolio-level status, a bare `null` could not tell "snapshot-only history"
+// from "we could not price this open position" — distinct problems with distinct
+// fixes — so the reason travels with the value and the UI explains it rather than
+// printing a misleading 0. `valuation_*` records how the terminal value was dated
+// and sourced (quote provenance for open positions, the final ledger date for
+// closed ones), surfaced only when the backend actually supplies it.
+export type HoldingAnalytics = components["schemas"]["HoldingAnalytics"];
+export type HoldingReturnStatus = components["schemas"]["HoldingReturnStatus"];
+export type HoldingValuationSource =
+  components["schemas"]["HoldingValuationSource"];
+export type MarketDataProvenance = components["schemas"]["MarketDataProvenance"];
 export type AllocationWeight = components["schemas"]["AllocationWeight"];
 export type CostBasisResult = components["schemas"]["CostBasisResult"];
 export type UnrealizedResult = components["schemas"]["UnrealizedResult"];

@@ -1,4 +1,5 @@
 import type {
+  HoldingAnalytics,
   HoldingInfo,
   PortfolioAnalytics,
   PortfolioSummary,
@@ -329,4 +330,126 @@ export const summariesById: Record<number, PortfolioSummary> = {
   2: analyticsUnpriced.portfolio,
   3: analyticsUnclassified.portfolio,
   99: analyticsEmpty.portfolio,
+};
+
+/**
+ * Per-holding money-weighted return (XIRR) fixtures, keyed `"{portfolioId}:{TICKER}"`.
+ *
+ * Each holding is scored on its *own* dated cash flows, so a holding's status is
+ * independent of other holdings' missing prices/FX — the keys below deliberately
+ * mix statuses *within* a portfolio to prove that:
+ *
+ *   * `1:AAPL` → OK positive, valued from a live QUOTE (provenance attached);
+ *   * `1:MSFT` → OK negative, valued from a live QUOTE;
+ *   * `1:XYZ`  → MISSING_FX — a foreign-currency holding in the *same* priced
+ *     portfolio, withheld without suppressing AAPL/MSFT;
+ *   * `2:AAPL` → UNPRICED_POSITION in an unpriced portfolio (no terminal value);
+ *   * `2:MSFT` → OK zero from the LEDGER — a *closed* position needs no quote, so
+ *     it still reports a return even though the portfolio is otherwise unpriced;
+ *   * `3:NVDA`/`3:ZZZZ` → INCOMPLETE_HISTORY (snapshot / unconfirmed import);
+ *   * `3:PLTR` → INSUFFICIENT_FLOWS (a single dated flow has no rate);
+ *   * `3:SOFI` → INVALID_HISTORY (flows cannot produce a valid return).
+ *
+ * Unavailable returns are `null` with `valuation_source: "UNAVAILABLE"` and no
+ * provenance — never a synthetic zero and never invented metadata.
+ */
+export const holdingAnalyticsByKey: Record<string, HoldingAnalytics> = {
+  "1:AAPL": {
+    portfolio_id: 1,
+    ticker: "AAPL",
+    base_currency: "USD",
+    money_weighted_return: "0.1842",
+    money_weighted_return_status: "OK",
+    valuation_date: "2026-07-24",
+    valuation_source: "QUOTE",
+    valuation_provenance: {
+      provider_code: "ALPHAVANTAGE",
+      source_table: "GLOBAL_QUOTE",
+      as_of: "2026-07-24T20:00:00Z",
+    },
+  },
+  "1:MSFT": {
+    portfolio_id: 1,
+    ticker: "MSFT",
+    base_currency: "USD",
+    money_weighted_return: "-0.0530",
+    money_weighted_return_status: "OK",
+    valuation_date: "2026-07-24",
+    valuation_source: "QUOTE",
+    valuation_provenance: {
+      provider_code: "ALPHAVANTAGE",
+      source_table: "GLOBAL_QUOTE",
+      as_of: "2026-07-24T20:00:00Z",
+    },
+  },
+  "1:XYZ": {
+    portfolio_id: 1,
+    ticker: "XYZ",
+    base_currency: "USD",
+    money_weighted_return: null,
+    money_weighted_return_status: "MISSING_FX",
+    valuation_date: "2026-07-24",
+    valuation_source: "UNAVAILABLE",
+    valuation_provenance: null,
+  },
+  "2:AAPL": {
+    portfolio_id: 2,
+    ticker: "AAPL",
+    base_currency: "USD",
+    money_weighted_return: null,
+    money_weighted_return_status: "UNPRICED_POSITION",
+    valuation_date: "2026-07-24",
+    valuation_source: "UNAVAILABLE",
+    valuation_provenance: null,
+  },
+  "2:MSFT": {
+    portfolio_id: 2,
+    ticker: "MSFT",
+    base_currency: "USD",
+    money_weighted_return: "0",
+    money_weighted_return_status: "OK",
+    valuation_date: "2026-04-01",
+    valuation_source: "LEDGER",
+    valuation_provenance: null,
+  },
+  "3:NVDA": {
+    portfolio_id: 3,
+    ticker: "NVDA",
+    base_currency: "USD",
+    money_weighted_return: null,
+    money_weighted_return_status: "INCOMPLETE_HISTORY",
+    valuation_date: "2026-09-30",
+    valuation_source: "UNAVAILABLE",
+    valuation_provenance: null,
+  },
+  "3:PLTR": {
+    portfolio_id: 3,
+    ticker: "PLTR",
+    base_currency: "USD",
+    money_weighted_return: null,
+    money_weighted_return_status: "INSUFFICIENT_FLOWS",
+    valuation_date: "2026-09-30",
+    valuation_source: "UNAVAILABLE",
+    valuation_provenance: null,
+  },
+  "3:SOFI": {
+    portfolio_id: 3,
+    ticker: "SOFI",
+    base_currency: "USD",
+    money_weighted_return: null,
+    money_weighted_return_status: "INVALID_HISTORY",
+    valuation_date: "2026-09-30",
+    valuation_source: "UNAVAILABLE",
+    valuation_provenance: null,
+  },
+  "3:ZZZZ": {
+    portfolio_id: 3,
+    ticker: "ZZZZ",
+    base_currency: "USD",
+    money_weighted_return: null,
+    money_weighted_return_status: "INCOMPLETE_HISTORY",
+    valuation_date: "2026-09-30",
+    valuation_source: "UNAVAILABLE",
+    valuation_provenance: null,
+  },
 };

@@ -13,6 +13,7 @@ import {
   findPortfolio,
   getAnalytics,
   getHoldings,
+  getHoldingAnalytics,
   getImport,
   getTransactions,
   ingest,
@@ -138,6 +139,13 @@ export const handlers = [
       return updated ? HttpResponse.json(updated) : notFound("Holding not found");
     },
   ),
+
+  http.get(`${base}/api/v1/portfolios/:id/holdings/:ticker/analytics`, ({ params }) => {
+    const analytics = getHoldingAnalytics(Number(params.id), String(params.ticker));
+    return analytics
+      ? HttpResponse.json(analytics)
+      : notFound("Portfolio or holding not found");
+  }),
 
   http.get(`${base}/api/v1/portfolios/:id/holdings/:ticker`, ({ params }) => {
     const holding = getHoldings(Number(params.id))?.find(

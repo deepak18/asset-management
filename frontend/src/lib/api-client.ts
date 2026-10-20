@@ -1,5 +1,6 @@
 import { env } from "@/lib/env";
 import type {
+  HoldingAnalytics,
   HoldingClassificationResult,
   HoldingClassificationUpdate,
   HoldingInfo,
@@ -257,6 +258,29 @@ export const apiClient = {
   getHolding(id: number, ticker: string, signal?: AbortSignal): Promise<HoldingInfo> {
     return getJson<HoldingInfo>(
       `${API_V1}/portfolios/${id}/holdings/${encodeURIComponent(ticker)}`,
+      signal,
+    );
+  },
+
+  /**
+   * This holding's own annualized money-weighted return (XIRR), scoped to the
+   * URL portfolio + ticker — never the portfolio-wide figure.
+   *
+   * The backend computes the return from this ticker's dated cash flows alone, so
+   * an unrelated holding's missing price or FX rate cannot suppress it. When the
+   * return is withheld, `money_weighted_return` is null and
+   * `money_weighted_return_status` says why (snapshot-only history, an unpriced
+   * open position, a missing FX rate, …) — the UI explains it instead of printing
+   * a fabricated 0. Throws {@link ApiError} with status 404 when the portfolio or
+   * holding does not exist.
+   */
+  getHoldingAnalytics(
+    id: number,
+    ticker: string,
+    signal?: AbortSignal,
+  ): Promise<HoldingAnalytics> {
+    return getJson<HoldingAnalytics>(
+      `${API_V1}/portfolios/${id}/holdings/${encodeURIComponent(ticker)}/analytics`,
       signal,
     );
   },

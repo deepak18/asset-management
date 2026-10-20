@@ -1,6 +1,7 @@
 import type {
   AllocationWeight,
   ClassificationFailure,
+  HoldingAnalytics,
   HoldingClassificationResult,
   HoldingClassificationUpdate,
   HoldingInfo,
@@ -14,6 +15,7 @@ import { UNCLASSIFIED_KEY } from "@/types/domain";
 import {
   analyticsById,
   holdingsById,
+  holdingAnalyticsByKey,
   profileDirectory,
   summariesById,
   transactions,
@@ -194,6 +196,46 @@ export function getHoldings(id: number): HoldingInfo[] | undefined {
     return undefined;
   }
   return state.holdings.get(id) ?? [];
+}
+
+/**
+ * This holding's own money-weighted return (XIRR), scored on its *own* cash flows.
+ *
+ * Returns `undefined` (→ 404) when the portfolio is absent or the ticker is not
+ * held, mirroring the backend. The per-holding fixture is looked up by
+ * `"{id}:{TICKER}"`, so one holding's withheld return (missing FX, unpriced open
+ * position) never suppresses another's — exactly the independence the contract
+ * guarantees. A held ticker with no explicit fixture reports INCOMPLETE_HISTORY
+ * (its history is unknown to the mock) rather than a fabricated figure.
+ */
+export function getHoldingAnalytics(
+  id: number,
+  ticker: string,
+): HoldingAnalytics | undefined {
+  const rows = getHoldings(id);
+  if (!rows) {
+    return undefined;
+  }
+  const symbol = ticker.toUpperCase();
+  const holding = rows.find((h) => h.ticker.toUpperCase() === symbol);
+  if (!holding) {
+    return undefined;
+  }
+  const fixture = holdingAnalyticsByKey[`${id}:${symbol}`];
+  if (fixture) {
+    return fixture;
+  }
+  const summary = findPortfolio(id);
+  return {
+    portfolio_id: id,
+    ticker: symbol,
+    base_currency: summary?.base_currency ?? "USD",
+    money_weighted_return: null,
+    money_weighted_return_status: "INCOMPLETE_HISTORY",
+    valuation_date: "2026-01-01",
+    valuation_source: "UNAVAILABLE",
+    valuation_provenance: null,
+  };
 }
 
 /** Discriminated result of a classify attempt (503 = no provider configured). */
