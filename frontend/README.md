@@ -186,11 +186,22 @@ selection context that every per-portfolio hook folds into its deps).
   does not discard an open draft.
 - The detail page displays available position values, classification provenance,
   gap warnings, and ticker-filtered transactions. Company names, live-price
-  inputs, average-cost calculations, and research are not fabricated. XIRR is
-  explicitly **portfolio-level** because this contract has no per-ticker return.
-- XIRR stays `—` when unavailable: `UNPRICED_POSITIONS` explains **Connect market
-  data**, while `INSUFFICIENT_FLOWS` explains **Needs more history**. Neither
-  becomes a fake zero.
+  inputs, average-cost calculations, and research are not fabricated. It now shows
+  **this holding's own** annualized money-weighted return (XIRR), scoped to the
+  URL portfolio + ticker — not the portfolio-wide figure. The backend computes it
+  from the ticker's own dated cash flows, so an unrelated holding's missing price
+  or FX rate cannot suppress it.
+- A computed return uses the existing percentage conventions (legitimate zero and
+  negative values included) and shows its valuation provenance: a live quote's
+  `provider_code`/`source_table`/as-of for open positions, or the final ledger
+  date for closed ones. It never invents metadata the backend did not supply.
+- The holding return stays `—` when the backend withholds it, with status-specific
+  guidance (never a fake 0): `UNPRICED_POSITION` → **Connect market data**;
+  `INCOMPLETE_HISTORY` → import full dated transactions (snapshot/unconfirmed
+  import only); `INSUFFICIENT_FLOWS` → **Needs more history**; `MISSING_FX` → add
+  the exchange rate; `INVALID_HISTORY` → review source history. Loading, request
+  failure, and 404 of the return never disable classification editing or the
+  ledger. Portfolio-wide XIRR on the dashboard is unchanged.
 - **Classify holdings**, above the table, follows `next_cursor` as `after_ticker`
   until `remaining=0`, including unsuccessful lookups. A fresh click starts a
   fresh sweep and retries unresolved tickers. Manual labels (even cleared ones)
@@ -212,16 +223,16 @@ selection context that every per-portfolio hook folds into its deps).
 | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
 | `app/portfolios/[id]/holdings/[ticker]/page.tsx`                   | Validates URL identity and mounts the holding detail.                                         |
 | `components/portfolio/holdings-table.tsx`                          | Dashboard holdings rows, ticker links, editable cells, and bulk action.                       |
-| `components/portfolio/holding-detail.tsx`                          | URL-scoped position overview, classification, gaps, and ledger.      |
+| `components/portfolio/holding-detail.tsx`                          | URL-scoped position overview, classification, gaps, ledger, and this holding's own XIRR.      |
 | `components/portfolio/holding-classification-cell.tsx`             | Shared per-field PATCH editor with Save/Cancel and local errors.                              |
 | `components/portfolio/holding-data-gaps.tsx`                       | Typed, readable user-fixable warnings.                                                        |
 | `components/portfolio/classify-holdings-button.tsx`                | Abortable finite cursor sweep with typed failure summaries.                                   |
-| `hooks/use-portfolio.ts`                                           | Typed endpoint hooks, including single-holding lookup.                    |
-| `mocks/handlers.ts`, `mocks/state.ts`, `mocks/fixtures.ts`         | Holding detail GET, nullable PATCH, provenance, cursor sweeps, and current-label allocations. |
-| `__tests__/components/holdings.test.tsx`                           | Table/detail editing, independent drafts, warnings, degraded data. |
+| `hooks/use-portfolio.ts`                                           | Typed endpoint hooks, including single-holding lookup and per-holding XIRR.                    |
+| `mocks/handlers.ts`, `mocks/state.ts`, `mocks/fixtures.ts`         | Holding GET, per-holding analytics, nullable PATCH, provenance, cursor sweeps, and allocations. |
+| `__tests__/components/holdings.test.tsx`                           | Detail editing, independent drafts, gaps, and holding-level XIRR statuses.                    |
 | `__tests__/components/classify-holdings-button.test.tsx`           | Cursor progress, failures, configuration errors, and cancellation.                            |
 | `__tests__/components/holding-page.test.tsx`, `dashboard.test.tsx` | Deep-link validation, portfolio return, and allocation refresh integration.                   |
-| `__tests__/lib/holding-api.test.ts`                                | Contract-shaped mock/client behavior, manual protection, immediate analytics. |
+| `__tests__/lib/holding-api.test.ts`                                | Contract-shaped mock/client behavior, classification edits, and per-holding XIRR statuses.    |
 
 In mock mode choose **Imported Portfolio** (id 3) for unclassified holdings;
 `ZZZZ` deliberately has no profile and remains unresolved. Portfolio 2 is
