@@ -3,15 +3,64 @@
 import * as React from "react";
 import Link from "next/link";
 import { ApiError } from "@/lib/api-client";
-import { useHolding, usePortfolioAnalytics } from "@/hooks/use-portfolio";
+import {
+  useHolding,
+  useHoldingAnalytics,
+  usePortfolioAnalytics,
+} from "@/hooks/use-portfolio";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { ErrorState, LoadingRows } from "@/components/shared/states";
 import { HoldingClassificationCell } from "./holding-classification-cell";
 import { HoldingDataGaps } from "./holding-data-gaps";
 import { TransactionLedger } from "./transaction-ledger";
-import { formatMoney, formatQuantity } from "@/lib/format";
-import { xirrPresentation } from "./portfolio-summary";
-import type { HoldingInfo } from "@/types/domain";
+import { DASH, formatMoney, formatPercent, formatQuantity, signTone } from "@/lib/format";
+import type {
+  HoldingAnalytics,
+  HoldingInfo,
+  HoldingReturnStatus,
+} from "@/types/domain";
+
+/**
+ * Why this holding's XIRR is withheld, phrased as the action that would fix it.
+ *
+ * Each reason needs a different response — more history vs. market-data config vs.
+ * a missing FX rate vs. a source-data repair — so the status travels with the
+ * (null) value and we explain it. None of these is ever rendered as `0`: that
+ * would assert a return the backend explicitly declined to compute.
+ */
+const RETURN_GUIDANCE: Record<HoldingReturnStatus, string> = {
+  OK: "Return not reported for this holding.",
+  INCOMPLETE_HISTORY:
+    "Incomplete history — this holding only has a snapshot or an unconfirmed import. Import its full dated transactions to compute a return.",
+  UNPRICED_POSITION:
+    "Connect market data — this holding's return needs today's price as its terminal value.",
+  MISSING_FX:
+    "Missing FX rate — add the exchange rate from this holding's currency to the portfolio base currency.",
+  INSUFFICIENT_FLOWS:
+    "Needs more history — a single dated cash flow has no rate of return.",
+  INVALID_HISTORY:
+    "History needs review — this holding's transactions can't produce a valid return.",
+};
+
+/** The provenance/date line for a *computed* return, only from supplied metadata. */
+function valuationNote(analytics: HoldingAnalytics): string | null {
+  if (analytics.valuation_source === "QUOTE" && analytics.valuation_provenance) {
+    const { provider_code, source_table, as_of } = analytics.valuation_provenance;
+    return `Valued ${analytics.valuation_date} from ${provider_code} ${source_table} (quote as of ${as_of.slice(0, 10)}).`;
+  }
+  if (analytics.valuation_source === "LEDGER") {
+    return `Valued from the final ledger entry on ${analytics.valuation_date} (closed position).`;
+  }
+  return null;
+}
+
+/** Sign-aware color for a computed return (zero/neutral stays muted-foreground). */
+function returnToneClass(raw: string | null | undefined): string {
+  const tone = signTone(raw);
+  if (tone === "positive") return "text-positive";
+  if (tone === "negative") return "text-destructive";
+  return "text-foreground";
+}
 
 export function HoldingDetail(props: { portfolioId: number; ticker: string }) {
   return (
@@ -30,6 +79,7 @@ function HoldingDetailForTicker({
   const [edited, setEdited] = React.useState<HoldingInfo | null>(null);
   const holding = useHolding(portfolioId, ticker);
   const analytics = usePortfolioAnalytics(portfolioId, version);
+  const holdingReturn = useHoldingAnalytics(portfolioId, ticker);
   const back = (
     <Link className="underline" href={`/?portfolio=${portfolioId}`}>
       ← Back to portfolio
@@ -61,7 +111,6 @@ function HoldingDetailForTicker({
   const value = data?.positions_unrealized.find((row) => row.ticker === ticker);
   const currency = data?.base_currency ?? "";
   const gaps = [...new Set([...record.data_gaps, ...(position?.data_gaps ?? [])])];
-  const xirr = data ? xirrPresentation(data) : null;
   const refresh = (updated: HoldingInfo) => {
     setEdited(updated);
     setVersion((current) => current + 1);
@@ -153,26 +202,78 @@ function HoldingDetailForTicker({
           ))}
         </CardContent>
       </Card>
-      {xirr ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Portfolio money-weighted return (XIRR)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="font-semibold">{xirr.value}</p>
-            {xirr.hint ? <p>{xirr.hint}</p> : null}
-            <p className="text-sm text-muted-foreground">
-              This return is for the whole portfolio, not this ticker. The API does not
-              expose a per-holding XIRR.
-            </p>
-          </CardContent>
-        </Card>
-      ) : null}
+      <Card>
+        <CardHeader>
+          <CardTitle>This holding&apos;s money-weighted return (XIRR)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <HoldingReturnBody state={holdingReturn} ticker={record.ticker} />
+        </CardContent>
+      </Card>
       <TransactionLedger
         portfolioId={portfolioId}
         ticker={ticker}
         refreshToken={version}
       />
     </div>
+  );
+}
+
+/**
+ * Renders the holding-scoped XIRR, split so loading/error/404 of *this* request
+ * never disables the classification editor or the ledger above it. A computed
+ * return is formatted with the existing percentage conventions (legitimate zero
+ * and negative values included); a withheld one reads as a dash plus the
+ * status-specific reason, never a fabricated 0.
+ */
+function HoldingReturnBody({
+  state,
+  ticker,
+}: {
+  state: ReturnType<typeof useHoldingAnalytics>;
+  ticker: string;
+}) {
+  if (state.status === "loading") {
+    return <LoadingRows rows={1} />;
+  }
+  if (state.status === "error") {
+    const missing = state.error instanceof ApiError && state.error.status === 404;
+    return (
+      <p className="text-sm text-muted-foreground">
+        {missing
+          ? "No return reported for this holding."
+          : "Could not load this holding's return. Classification editing still works."}
+      </p>
+    );
+  }
+  const analytics = state.data;
+  const computed =
+    analytics.money_weighted_return_status === "OK" &&
+    analytics.money_weighted_return != null;
+  if (computed) {
+    const note = valuationNote(analytics);
+    return (
+      <>
+        <p
+          className={`text-2xl font-semibold tabular-nums ${returnToneClass(
+            analytics.money_weighted_return,
+          )}`}
+        >
+          {formatPercent(analytics.money_weighted_return, { signed: true })}
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Annualized money-weighted return on your {ticker} cash flows.
+        </p>
+        {note ? <p className="mt-1 text-sm text-muted-foreground">{note}</p> : null}
+      </>
+    );
+  }
+  return (
+    <>
+      <p className="text-2xl font-semibold tabular-nums text-muted-foreground">{DASH}</p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {RETURN_GUIDANCE[analytics.money_weighted_return_status]}
+      </p>
+    </>
   );
 }

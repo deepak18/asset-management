@@ -133,7 +133,7 @@ describe("holdings table", () => {
 });
 
 describe("holding detail", () => {
-  it("uses the URL portfolio, filters the ledger, and labels portfolio-only XIRR", async () => {
+  it("uses the URL portfolio, filters the ledger, and reports this ticker's own XIRR", async () => {
     render(<HoldingDetail portfolioId={1} ticker="AAPL" />);
     expect(await screen.findByRole("heading", { name: "AAPL" })).toBeInTheDocument();
     expect(await screen.findByText("USD 1,290.00")).toBeInTheDocument();
@@ -141,7 +141,22 @@ describe("holding detail", () => {
       "href",
       "/?portfolio=1",
     );
-    expect(await screen.findByText(/whole portfolio, not this ticker/)).toBeInTheDocument();
+    // Holding-level XIRR: this ticker's own return, with its valuation provenance.
+    expect(
+      await screen.findByText(/This holding's money-weighted return/),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("+18.42%")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Annualized money-weighted return on your AAPL cash flows/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/from ALPHAVANTAGE GLOBAL_QUOTE/),
+    ).toBeInTheDocument();
+    // The obsolete portfolio-wide fallback must be gone.
+    expect(
+      screen.queryByText(/whole portfolio, not this ticker/),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/does not expose a per-holding XIRR/)).not.toBeInTheDocument();
     const ledger = await screen.findByRole("table");
     expect(within(ledger).queryByText("MSFT")).not.toBeInTheDocument();
     expect(within(ledger).getAllByRole("link", { name: "AAPL" })).toHaveLength(3);
@@ -170,11 +185,24 @@ describe("holding detail", () => {
   it("explains unpriced positions without a zero return", async () => {
     render(<HoldingDetail portfolioId={2} ticker="AAPL" />);
     expect(await screen.findByText(/Price unavailable/)).toBeInTheDocument();
-    expect(screen.getByText(/Connect market data — XIRR/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        /Connect market data — this holding's return needs today's price/,
+      ),
+    ).toBeInTheDocument();
     expect(screen.queryByText("0.00%")).not.toBeInTheDocument();
     const label = screen.getByText("Market value");
     expect(label.parentElement).toHaveTextContent("—");
   });
+
+  it("reports a closed holding's zero return independently of its unpriced portfolio", async () => {
+    // Portfolio 2 is unpriced overall, yet MSFT is closed and valued from the
+    // ledger — its own return is still available and renders a legitimate 0%.
+    render(<HoldingDetail portfolioId={2} ticker="MSFT" />);
+    expect(await screen.findByText("+0.00%")).toBeInTheDocument();
+    expect(screen.getByText(/final ledger entry on 2026-04-01/)).toBeInTheDocument();
+  });
+
   it("shows 404 and analytics failure without inventing data", async () => {
     const { rerender } = render(<HoldingDetail portfolioId={1} ticker="MISSING" />);
     expect(await screen.findByRole("alert")).toHaveTextContent("Holding not found");
@@ -188,6 +216,77 @@ describe("holding detail", () => {
     expect(
       await screen.findByText(/Could not load position values/),
     ).toBeInTheDocument();
+  });
+});
+
+describe("holding-level XIRR statuses", () => {
+  it("keeps the editor usable while the holding return is loading", async () => {
+    server.use(
+      http.get(`${base}/3/holdings/PLTR/analytics`, async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        return HttpResponse.json({}, { status: 500 });
+      }),
+    );
+    render(<HoldingDetail portfolioId={3} ticker="PLTR" />);
+    expect(
+      await screen.findByRole("button", { name: "Edit PLTR sector" }),
+    ).toBeEnabled();
+    expect(screen.queryByText(/Could not load this holding's return/)).toBeNull();
+    expect(await screen.findByText(/Could not load this holding's return/)).toBeInTheDocument();
+  });
+
+  it("treats a missing return as local to its card, not a missing holding", async () => {
+    server.use(
+      http.get(`${base}/3/holdings/PLTR/analytics`, () =>
+        HttpResponse.json({ detail: "Holding not found" }, { status: 404 }),
+      ),
+    );
+    render(<HoldingDetail portfolioId={3} ticker="PLTR" />);
+    expect(await screen.findByText("No return reported for this holding.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit PLTR sector" })).toBeEnabled();
+  });
+
+  it("renders a negative return with the existing percentage conventions", async () => {
+    render(<HoldingDetail portfolioId={1} ticker="MSFT" />);
+    expect(await screen.findByText("-5.30%")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["NVDA", "INCOMPLETE_HISTORY", /Incomplete history/],
+    ["PLTR", "INSUFFICIENT_FLOWS", /Needs more history/],
+    ["SOFI", "INVALID_HISTORY", /History needs review/],
+  ] as const)(
+    "renders %s (%s) as a dash with status-specific guidance, never 0%%",
+    async (ticker, _status, guidance) => {
+      render(<HoldingDetail portfolioId={3} ticker={ticker} />);
+      expect(await screen.findByText(guidance)).toBeInTheDocument();
+      expect(screen.queryByText("0.00%")).not.toBeInTheDocument();
+      expect(screen.queryByText("+0.00%")).not.toBeInTheDocument();
+    },
+  );
+
+  it("withholds a foreign-currency holding's return without suppressing a priced sibling", async () => {
+    // Same portfolio (1): XYZ is MISSING_FX while AAPL is OK. One holding's gap
+    // must not suppress the other's available return.
+    render(<HoldingDetail portfolioId={1} ticker="XYZ" />);
+    expect(await screen.findByText(/Missing FX rate/)).toBeInTheDocument();
+    expect(screen.queryByText(/%$/)).not.toBeInTheDocument();
+    const sibling = await apiClient.getHoldingAnalytics(1, "AAPL");
+    expect(sibling.money_weighted_return_status).toBe("OK");
+    expect(sibling.money_weighted_return).toBe("0.1842");
+  });
+
+  it("keeps classification editable while the return is loading, then on failure", async () => {
+    server.use(
+      http.get(`${base}/3/holdings/PLTR/analytics`, () =>
+        HttpResponse.json({}, { status: 500 }),
+      ),
+    );
+    render(<HoldingDetail portfolioId={3} ticker="PLTR" />);
+    expect(
+      await screen.findByText(/Could not load this holding's return/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit PLTR sector" })).toBeEnabled();
   });
 });
 
