@@ -29,7 +29,8 @@ describe("PortfolioSummary", () => {
     expect(screen.getByText("Not priced")).toBeInTheDocument();
     // Market value and XIRR are unknown → em dash, never "0"
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
-    expect(screen.getByText("Not computable")).toBeInTheDocument();
+    expect(screen.getByText(/Connect market data/)).toBeInTheDocument();
+    expect(screen.queryByText("0.00%")).not.toBeInTheDocument();
     expect(screen.getByText(/Unpriced: AAPL, MSFT/)).toBeInTheDocument();
   });
 
@@ -43,5 +44,11 @@ describe("PortfolioSummary", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Could not load portfolio analytics.",
     );
+  });
+
+  it("explains insufficient history without fabricating a return", async () => {
+    render(<PortfolioSummary portfolioId={3} />);
+    expect(await screen.findByText(/Needs more history/)).toBeInTheDocument();
+    expect(screen.queryByText("0.00%")).not.toBeInTheDocument();
   });
 });

@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/shared/states";
 import { usePortfolioAnalytics } from "@/hooks/use-portfolio";
 import { DASH, formatMoney, formatPercent, signTone } from "@/lib/format";
-import type { PortfolioAnalytics } from "@/types/domain";
+import type { MoneyWeightedReturnStatus, PortfolioAnalytics } from "@/types/domain";
 
 /** A single labelled figure with sign-aware coloring. */
 function StatCard({
@@ -41,7 +41,9 @@ function StatCard({
 }
 
 /** Map a Decimal-string sign to a StatCard tone (unknown = not computed). */
-function toneFor(raw: string | null | undefined): "positive" | "negative" | "unknown" | "neutral" {
+function toneFor(
+  raw: string | null | undefined,
+): "positive" | "negative" | "unknown" | "neutral" {
   const tone = signTone(raw);
   if (tone === "positive") return "positive";
   if (tone === "negative") return "negative";
@@ -49,9 +51,45 @@ function toneFor(raw: string | null | undefined): "positive" | "negative" | "unk
   return "neutral";
 }
 
+/**
+ * Why XIRR is not a number, phrased as the action that would fix it.
+ *
+ * A bare `null` left the user stuck ("not computable" — and then what?). The
+ * backend now says *why*, and the two reasons need opposite responses: one is a
+ * configuration problem (we cannot price your open positions, which XIRR needs
+ * as its terminal cash flow), the other is a data problem (one dated flow has no
+ * rate of return). Neither is ever rendered as `0` — that would assert a figure
+ * the backend explicitly withheld.
+ */
+const XIRR_EXPLANATION: Record<MoneyWeightedReturnStatus, string> = {
+  OK: "Not reported for this portfolio.",
+  UNPRICED_POSITIONS:
+    "Connect market data — XIRR needs today's value of your open positions.",
+  INSUFFICIENT_FLOWS:
+    "Needs more history — import or enter dated transactions, not just a snapshot.",
+};
+
+/** Resolve the XIRR stat's value, tone, and (when withheld) its explanation. */
+export function xirrPresentation(analytics: PortfolioAnalytics): {
+  value: string;
+  tone: "positive" | "negative" | "unknown" | "neutral";
+  hint?: string;
+} {
+  const raw = analytics.money_weighted_return;
+  if (raw != null && analytics.money_weighted_return_status === "OK") {
+    return { value: formatPercent(raw, { signed: true }), tone: toneFor(raw) };
+  }
+  return {
+    value: DASH,
+    tone: "unknown",
+    hint: XIRR_EXPLANATION[analytics.money_weighted_return_status],
+  };
+}
+
 function SummaryGrid({ analytics }: { analytics: PortfolioAnalytics }) {
   const ccy = analytics.base_currency;
   const isUnpriced = analytics.market_value_base == null;
+  const xirr = xirrPresentation(analytics);
 
   return (
     <div className="flex flex-col gap-4">
@@ -97,9 +135,9 @@ function SummaryGrid({ analytics }: { analytics: PortfolioAnalytics }) {
         />
         <StatCard
           label="Money-weighted return (XIRR)"
-          value={formatPercent(analytics.money_weighted_return, { signed: true })}
-          tone={toneFor(analytics.money_weighted_return)}
-          hint={analytics.money_weighted_return == null ? "Not computable" : undefined}
+          value={xirr.value}
+          tone={xirr.tone}
+          hint={xirr.hint}
         />
       </div>
 

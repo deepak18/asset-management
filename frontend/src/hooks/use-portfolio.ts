@@ -24,11 +24,17 @@ export function usePortfolios(version = 0): AsyncState<PortfolioSummary[]> {
   return useApiResource(() => apiClient.listPortfolios(), [version]);
 }
 
-export function usePortfolioSummary(id: number, version = 0): AsyncState<PortfolioSummary> {
+export function usePortfolioSummary(
+  id: number,
+  version = 0,
+): AsyncState<PortfolioSummary> {
   return useApiResource(() => apiClient.getPortfolio(id), [id, version]);
 }
 
-export function usePortfolioAnalytics(id: number, version = 0): AsyncState<PortfolioAnalytics> {
+export function usePortfolioAnalytics(
+  id: number,
+  version = 0,
+): AsyncState<PortfolioAnalytics> {
   return useApiResource(() => apiClient.getAnalytics(id), [id, version]);
 }
 
@@ -38,4 +44,12 @@ export function useTransactions(id: number, version = 0): AsyncState<Transaction
 
 export function useHoldings(id: number, version = 0): AsyncState<HoldingInfo[]> {
   return useApiResource(() => apiClient.listHoldings(id), [id, version]);
+}
+
+export function useHolding(
+  id: number,
+  ticker: string,
+  version = 0,
+): AsyncState<HoldingInfo> {
+  return useApiResource(() => apiClient.getHolding(id, ticker), [id, ticker, version]);
 }

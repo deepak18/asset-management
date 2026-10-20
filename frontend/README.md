@@ -9,15 +9,15 @@ never blocks on a live backend.
 
 ## Stack
 
-| Concern | Choice |
-|---|---|
-| Framework | Next.js 16 (App Router, Turbopack) |
-| Language | TypeScript 5 (strict, `noUncheckedIndexedAccess`, no `any`) |
-| Styling | Tailwind CSS 3 + shadcn/ui-style primitives |
-| Charts | Recharts (donut allocations) |
-| Contract types | `openapi-typescript` → `src/types/api.ts` |
-| Mock layer | MSW (`msw/node` in tests, `msw/browser` in dev) |
-| Tests | Vitest + React Testing Library (jsdom) |
+| Concern        | Choice                                                      |
+| -------------- | ----------------------------------------------------------- |
+| Framework      | Next.js 16 (App Router, Turbopack)                          |
+| Language       | TypeScript 5 (strict, `noUncheckedIndexedAccess`, no `any`) |
+| Styling        | Tailwind CSS 3 + shadcn/ui-style primitives                 |
+| Charts         | Recharts (donut allocations)                                |
+| Contract types | `openapi-typescript` → `src/types/api.ts`                   |
+| Mock layer     | MSW (`msw/node` in tests, `msw/browser` in dev)             |
+| Tests          | Vitest + React Testing Library (jsdom)                      |
 
 ## Prerequisites
 
@@ -34,10 +34,10 @@ cp .env.local.example .env.local   # then edit if your API host differs
 
 `.env.local` variables:
 
-| Variable | Purpose |
-|---|---|
-| `NEXT_PUBLIC_API_BASE_URL` | Backend origin (scheme + host), e.g. `http://localhost:8000`. |
-| `NEXT_PUBLIC_API_MOCKING` | `enabled` → run the UI against in-browser MSW mocks; unset → call the real API. |
+| Variable                   | Purpose                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_API_BASE_URL` | Backend origin (scheme + host), e.g. `http://localhost:8000`.                   |
+| `NEXT_PUBLIC_API_MOCKING`  | `enabled` → run the UI against in-browser MSW mocks; unset → call the real API. |
 
 ## Everyday commands
 
@@ -95,10 +95,9 @@ Both backend-side prerequisites are now in place, so live mode works end-to-end:
 
 1. **CORS** allows the dev origin `http://localhost:3000` — the backend enables
    config-driven CORS for it, so the browser's cross-origin `GET`s go through.
-2. **Portfolio id `1` is seeded** — the dashboard requests `/api/v1/portfolios/1`
-   and its `/transactions`, `/holdings`, `/analytics`, and the backend serves a
-   demo portfolio there. (Against an empty DB every panel renders its
-   empty/error state by design — we never fake a `0`.)
+2. **Portfolio selection** — the dashboard lists portfolios and uses the selected
+   id for its transactions, holdings, and analytics. An empty database prompts
+   you to create a portfolio; no seeded id is required.
 
 > **Deferred (tracked):** containerizing this app (`frontend/Dockerfile` +
 > `.dockerignore`) is intentionally postponed until after local live wiring; see
@@ -120,14 +119,15 @@ strings** (never floats). The UI honors that end-to-end:
 
 ```
 src/
-├── app/            App Router: layout, providers (mock + portfolio-selection bootstrap), dashboard page
+├── app/            App Router: dashboard + portfolios/[id]/holdings/[ticker]/page.tsx
 ├── components/
 │   ├── ui/         shadcn-style primitives (card, table, badge, button, input, select, label, progress, dialog, skeleton)
 │   ├── shared/     loading / error / empty state blocks
 │   ├── app-shell/  top nav (hosts the portfolio picker + theme toggle)
 │   └── portfolio/  summary, allocation donuts, ledger grid, watchlist, picker,
 │                   create-portfolio dialog, add-position + manual-transaction forms,
-│                   CSV import panel, and the dashboard composition
+│                   CSV import panel, holdings table/detail, classification cells,
+│                   typed data-gap warnings, bulk classification, dashboard
 ├── hooks/          useApiResource + endpoint hooks + useWatchlist + portfolio-selection context + import-job poller
 ├── lib/            env, typed api-client, decimal + format utils, cn
 ├── mocks/          MSW handlers, fixtures, mutable write/import state, node server, browser worker + bootstrap
@@ -146,7 +146,7 @@ The dashboard is no longer pinned to a single portfolio id:
 - **Create portfolio.** `POST /api/v1/portfolios` from a dialog, then the new
   portfolio is auto-selected.
 - **Add position (snapshot).** `POST /api/v1/portfolios/{id}/positions` — cost basis
-  is entered as *exactly one* of per-share or total (the "both" case is
+  is entered as _exactly one_ of per-share or total (the "both" case is
   unrepresentable in the form, so the 422 can't happen); the form spells out that a
   snapshot leaves XIRR undefined until full history is imported.
 - **Manual transaction.** `POST /api/v1/portfolios/{id}/transactions` with only the
@@ -168,3 +168,65 @@ selection context that every per-portfolio hook folds into its deps).
 > types with `npm run typegen`, then reconcile the MSW handlers/fixtures in
 > `src/mocks/`. `Transaction` now generates as `Transaction-Input` (POST bodies)
 > and `Transaction-Output` (reads).
+
+## Holdings: inspect, classify, and correct
+
+- The dashboard holdings table links each ticker to
+  `/portfolios/{id}/holdings/{ticker}`. The URL, not the locally selected id,
+  identifies the detail page's portfolio. **Back to portfolio** restores that
+  portfolio on the dashboard.
+- Warning icons include readable explanations from the API's typed `data_gaps`.
+  Missing prices are a separate provider-availability message, not a manual
+  classification field. Other ledger gaps direct you to review source history;
+  the sector/industry editor does not repair transactions or cost basis.
+- Sector and industry cells have pencil buttons in both views. Save PATCHes only
+  that ticker and field; Cancel changes nothing. Blank explicitly sends `null`
+  to clear a label. Inputs follow the contract's 80-character limit. A failed
+  save preserves its draft and displays a local error; refreshing another cell
+  does not discard an open draft.
+- The detail page displays available position values, classification provenance,
+  gap warnings, and ticker-filtered transactions. Company names, live-price
+  inputs, average-cost calculations, and research are not fabricated. XIRR is
+  explicitly **portfolio-level** because this contract has no per-ticker return.
+- XIRR stays `—` when unavailable: `UNPRICED_POSITIONS` explains **Connect market
+  data**, while `INSUFFICIENT_FLOWS` explains **Needs more history**. Neither
+  becomes a fake zero.
+- **Classify holdings**, above the table, follows `next_cursor` as `after_ticker`
+  until `remaining=0`, including unsuccessful lookups. A fresh click starts a
+  fresh sweep and retries unresolved tickers. Manual labels (even cleared ones)
+  remain protected; this UI does not request `refresh=true`.
+- HTTP **503** means missing configuration: set the backend's
+  `ALPHAVANTAGE_API_KEY` and verify `ALPHAVANTAGE_MCP_URL`; never expose these as
+  `NEXT_PUBLIC_*` variables. The action is replaced by setup guidance, not retry.
+  Once configuration is fixed, reload the page. HTTP **200** can still report
+  `PROVIDER_UNAVAILABLE` failures (quota/outage), which suggest trying later.
+  `NO_PROFILE` suggests manual entry or a later sweep, not permanent failure.
+- Successful edits/classification refresh dashboard data. Detail saves use the
+  committed PATCH response for labels and refetch analytics/transactions. New
+  allocation labels appear when prices are available; editing labels cannot
+  supply missing prices. Allocation donuts and legends are **reporting only**.
+
+### Relevant file map
+
+| File under `src/`                                                  | Responsibility                                                                                |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `app/portfolios/[id]/holdings/[ticker]/page.tsx`                   | Validates URL identity and mounts the holding detail.                                         |
+| `components/portfolio/holdings-table.tsx`                          | Dashboard holdings rows, ticker links, editable cells, and bulk action.                       |
+| `components/portfolio/holding-detail.tsx`                          | URL-scoped position overview, classification, gaps, and ledger.      |
+| `components/portfolio/holding-classification-cell.tsx`             | Shared per-field PATCH editor with Save/Cancel and local errors.                              |
+| `components/portfolio/holding-data-gaps.tsx`                       | Typed, readable user-fixable warnings.                                                        |
+| `components/portfolio/classify-holdings-button.tsx`                | Abortable finite cursor sweep with typed failure summaries.                                   |
+| `hooks/use-portfolio.ts`                                           | Typed endpoint hooks, including single-holding lookup.                    |
+| `mocks/handlers.ts`, `mocks/state.ts`, `mocks/fixtures.ts`         | Holding detail GET, nullable PATCH, provenance, cursor sweeps, and current-label allocations. |
+| `__tests__/components/holdings.test.tsx`                           | Table/detail editing, independent drafts, warnings, degraded data. |
+| `__tests__/components/classify-holdings-button.test.tsx`           | Cursor progress, failures, configuration errors, and cancellation.                            |
+| `__tests__/components/holding-page.test.tsx`, `dashboard.test.tsx` | Deep-link validation, portfolio return, and allocation refresh integration.                   |
+| `__tests__/lib/holding-api.test.ts`                                | Contract-shaped mock/client behavior, manual protection, immediate analytics. |
+
+In mock mode choose **Imported Portfolio** (id 3) for unclassified holdings;
+`ZZZZ` deliberately has no profile and remains unresolved. Portfolio 2 is
+unpriced; portfolio 99 is empty. Tests exercise quota/outage and configuration
+failures with MSW overrides. `vitest.setup.ts` uses native Node abort constructors
+alongside Node fetch so jsdom tests exercise request cancellation rather than
+dropping abort signals. Run `npm run test`, `npm run typecheck`, and `npm run lint`
+together: Vitest runs behavior tests but does not perform TypeScript checking.

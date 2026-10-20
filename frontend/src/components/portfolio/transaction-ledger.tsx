@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   Table,
   TableBody,
@@ -16,7 +17,9 @@ import { DASH, formatMoney, formatQuantity } from "@/lib/format";
 import type { Transaction, TransactionType } from "@/types/domain";
 
 /** Buy/Sell get colored badges; cash and structural events are neutral. */
-function badgeVariant(type: TransactionType): "positive" | "negative" | "muted" | "default" {
+function badgeVariant(
+  type: TransactionType,
+): "positive" | "negative" | "muted" | "default" {
   switch (type) {
     case "BUY":
       return "positive";
@@ -34,7 +37,10 @@ function badgeVariant(type: TransactionType): "positive" | "negative" | "muted" 
  * irrelevant columns (e.g. price on a DIVIDEND) keeps the grid honest instead
  * of printing a default 0 that looks like real data.
  */
-function cellsFor(txn: Transaction, currency: string): {
+function cellsFor(
+  txn: Transaction,
+  currency: string,
+): {
   quantity: string;
   price: string;
   amount: string;
@@ -51,11 +57,21 @@ function cellsFor(txn: Transaction, currency: string): {
     case "FEE":
       return { quantity: DASH, price: DASH, amount: formatMoney(txn.amount, currency) };
     case "SPLIT":
-      return { quantity: `${formatQuantity(txn.split_ratio)}:1`, price: DASH, amount: DASH };
+      return {
+        quantity: `${formatQuantity(txn.split_ratio)}:1`,
+        price: DASH,
+        amount: DASH,
+      };
   }
 }
 
-function LedgerTable({ transactions }: { transactions: Transaction[] }) {
+function LedgerTable({
+  transactions,
+  portfolioId,
+}: {
+  transactions: Transaction[];
+  portfolioId: number;
+}) {
   return (
     <Table>
       <TableHeader>
@@ -75,11 +91,20 @@ function LedgerTable({ transactions }: { transactions: Transaction[] }) {
           return (
             <TableRow key={`${txn.ticker}-${txn.trade_date}-${txn.type}-${index}`}>
               <TableCell className="tabular-nums">{txn.trade_date}</TableCell>
-              <TableCell className="font-medium">{txn.ticker}</TableCell>
+              <TableCell className="font-medium">
+                <Link
+                  className="underline"
+                  href={`/portfolios/${portfolioId}/holdings/${encodeURIComponent(txn.ticker)}`}
+                >
+                  {txn.ticker}
+                </Link>
+              </TableCell>
               <TableCell>
                 <Badge variant={badgeVariant(txn.type)}>{txn.type}</Badge>
               </TableCell>
-              <TableCell className="text-right tabular-nums">{cells.quantity}</TableCell>
+              <TableCell className="text-right tabular-nums">
+                {cells.quantity}
+              </TableCell>
               <TableCell className="text-right tabular-nums">{cells.price}</TableCell>
               <TableCell className="text-right tabular-nums">
                 {formatMoney(txn.fees, txn.currency)}
@@ -101,11 +126,17 @@ function LedgerTable({ transactions }: { transactions: Transaction[] }) {
 export function TransactionLedger({
   portfolioId,
   refreshToken = 0,
+  ticker,
 }: {
   portfolioId: number;
   refreshToken?: number;
+  ticker?: string;
 }) {
   const state = useTransactions(portfolioId, refreshToken);
+  const transactions =
+    state.status === "success"
+      ? state.data.filter((row) => !ticker || row.ticker === ticker)
+      : [];
 
   return (
     <Card>
@@ -117,10 +148,10 @@ export function TransactionLedger({
           <LoadingRows rows={4} />
         ) : state.status === "error" ? (
           <ErrorState message="Could not load transactions." />
-        ) : state.data.length === 0 ? (
+        ) : transactions.length === 0 ? (
           <EmptyState message="No transactions yet." />
         ) : (
-          <LedgerTable transactions={state.data} />
+          <LedgerTable transactions={transactions} portfolioId={portfolioId} />
         )}
       </CardContent>
     </Card>

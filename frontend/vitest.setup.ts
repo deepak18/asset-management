@@ -1,8 +1,16 @@
 import "@testing-library/jest-dom/vitest";
+import { transferableAbortController } from "node:util";
 import { cleanup } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll } from "vitest";
 import { server } from "@/mocks/server";
 import { resetMockState } from "@/mocks/state";
+
+// Node fetch rejects jsdom's cross-realm AbortSignal. Use the host primitives
+// so tests exercise real request cancellation rather than stripping signals.
+const nativeAbortController = transferableAbortController();
+globalThis.AbortController =
+  nativeAbortController.constructor as typeof AbortController;
+globalThis.AbortSignal = nativeAbortController.signal.constructor as typeof AbortSignal;
 
 /**
  * Global test harness.

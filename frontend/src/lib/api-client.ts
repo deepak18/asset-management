@@ -1,5 +1,7 @@
 import { env } from "@/lib/env";
 import type {
+  HoldingClassificationResult,
+  HoldingClassificationUpdate,
   HoldingInfo,
   LedgerIngestResult,
   PortfolioAnalytics,
@@ -26,7 +28,12 @@ export class ApiError extends Error {
   /** Backend's human message (FastAPI `{ "detail": ... }`), when present. */
   readonly detail: string | null;
 
-  constructor(status: number, url: string, message: string, detail: string | null = null) {
+  constructor(
+    status: number,
+    url: string,
+    message: string,
+    detail: string | null = null,
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
@@ -107,7 +114,11 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
 }
 
 /** Core JSON POST wrapper (accepts any 2xx, including 201). */
-async function postJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+async function postJson<T>(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
   const target = url(path);
   const response = await fetch(target, {
     method: "POST",
@@ -122,8 +133,32 @@ async function postJson<T>(path: string, body: unknown, signal?: AbortSignal): P
   return (await response.json()) as T;
 }
 
+/** Core JSON PATCH wrapper — partial update of one resource. */
+async function patchJson<T>(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
+  const target = url(path);
+  const response = await fetch(target, {
+    method: "PATCH",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  if (!response.ok) {
+    throw await toApiError(response, "PATCH", path, target);
+  }
+  return (await response.json()) as T;
+}
+
 /** Multipart POST for file uploads (accepts any 2xx, including 202). */
-async function postForm<T>(path: string, form: FormData, signal?: AbortSignal): Promise<T> {
+async function postForm<T>(
+  path: string,
+  form: FormData,
+  signal?: AbortSignal,
+): Promise<T> {
   const target = url(path);
   // NB: do NOT set Content-Type manually — the browser adds the multipart
   // boundary; setting it by hand corrupts the body.
@@ -148,6 +183,16 @@ export interface CreateImportOptions {
   allowDuplicate?: boolean;
 }
 
+/** Options for {@link apiClient.classifyHoldings}. */
+export interface ClassifyHoldingsOptions {
+  /** Re-fetch classifications that are already set (overwrites manual labels). */
+  refresh?: boolean;
+  /** Max tickers processed in this call (backend default 25, max 200). */
+  limit?: number;
+  /** Continue a sweep using the previous response's next_cursor. */
+  afterTicker?: string;
+}
+
 /** The versioned API surface, one method per backend route. */
 export const apiClient = {
   /** Liveness probe — returns the backend's status map. */
@@ -161,7 +206,10 @@ export const apiClient = {
   },
 
   /** Create a new empty portfolio, returning its assigned identity. */
-  createPortfolio(body: PortfolioCreate, signal?: AbortSignal): Promise<PortfolioSummary> {
+  createPortfolio(
+    body: PortfolioCreate,
+    signal?: AbortSignal,
+  ): Promise<PortfolioSummary> {
     return postJson<PortfolioSummary>(`${API_V1}/portfolios`, body, signal);
   },
 
@@ -181,7 +229,11 @@ export const apiClient = {
     body: TransactionInput[],
     signal?: AbortSignal,
   ): Promise<LedgerIngestResult> {
-    return postJson<LedgerIngestResult>(`${API_V1}/portfolios/${id}/transactions`, body, signal);
+    return postJson<LedgerIngestResult>(
+      `${API_V1}/portfolios/${id}/transactions`,
+      body,
+      signal,
+    );
   },
 
   /** Record current-holding snapshots as opening BUY lots. */
@@ -190,12 +242,75 @@ export const apiClient = {
     body: PositionSnapshot[],
     signal?: AbortSignal,
   ): Promise<LedgerIngestResult> {
-    return postJson<LedgerIngestResult>(`${API_V1}/portfolios/${id}/positions`, body, signal);
+    return postJson<LedgerIngestResult>(
+      `${API_V1}/portfolios/${id}/positions`,
+      body,
+      signal,
+    );
   },
 
   /** Tracked securities + classification metadata. */
   listHoldings(id: number, signal?: AbortSignal): Promise<HoldingInfo[]> {
     return getJson<HoldingInfo[]>(`${API_V1}/portfolios/${id}/holdings`, signal);
+  },
+
+  getHolding(id: number, ticker: string, signal?: AbortSignal): Promise<HoldingInfo> {
+    return getJson<HoldingInfo>(
+      `${API_V1}/portfolios/${id}/holdings/${encodeURIComponent(ticker)}`,
+      signal,
+    );
+  },
+
+  /**
+   * Backfill sector/industry for this portfolio's holdings from company profiles.
+   *
+   * Bounded per call (`limit`) to protect the free-tier quota, so the caller must
+   * repeat while `remaining` is non-zero. Already-classified holdings are skipped
+   * unless `refresh` is set, which keeps hand-entered labels from being
+   * overwritten. Throws {@link ApiError} with status 503 when no market-data
+   * provider is configured — the remedy there is an API key, not a retry.
+   */
+  classifyHoldings(
+    id: number,
+    options: ClassifyHoldingsOptions = {},
+    signal?: AbortSignal,
+  ): Promise<HoldingClassificationResult> {
+    const params = new URLSearchParams();
+    if (options.refresh) {
+      params.set("refresh", "true");
+    }
+    if (options.limit != null) {
+      params.set("limit", String(options.limit));
+    }
+    if (options.afterTicker != null) {
+      params.set("after_ticker", options.afterTicker);
+    }
+    const query = params.toString();
+    return postJson<HoldingClassificationResult>(
+      `${API_V1}/portfolios/${id}/holdings/classify${query ? `?${query}` : ""}`,
+      null,
+      signal,
+    );
+  },
+
+  /**
+   * Manually set one holding's sector and/or industry (404 if it isn't held).
+   *
+   * Deliberately independent of market data: classification must stay editable
+   * when the provider is unconfigured, rate-limited, or simply wrong about a
+   * symbol.
+   */
+  updateHoldingClassification(
+    id: number,
+    ticker: string,
+    body: HoldingClassificationUpdate,
+    signal?: AbortSignal,
+  ): Promise<HoldingInfo> {
+    return patchJson<HoldingInfo>(
+      `${API_V1}/portfolios/${id}/holdings/${encodeURIComponent(ticker)}`,
+      body,
+      signal,
+    );
   },
 
   /** Aggregated cost-basis / realized-P&L / XIRR analytics. */
@@ -231,12 +346,22 @@ export const apiClient = {
 
   /** The portfolio's import history, newest first. */
   listImports(id: number, signal?: AbortSignal): Promise<StatementImportStatus[]> {
-    return getJson<StatementImportStatus[]>(`${API_V1}/portfolios/${id}/imports`, signal);
+    return getJson<StatementImportStatus[]>(
+      `${API_V1}/portfolios/${id}/imports`,
+      signal,
+    );
   },
 
   /** One import job's live status/progress (the endpoint the UI polls). */
-  getImport(id: number, jobId: number, signal?: AbortSignal): Promise<StatementImportStatus> {
-    return getJson<StatementImportStatus>(`${API_V1}/portfolios/${id}/imports/${jobId}`, signal);
+  getImport(
+    id: number,
+    jobId: number,
+    signal?: AbortSignal,
+  ): Promise<StatementImportStatus> {
+    return getJson<StatementImportStatus>(
+      `${API_V1}/portfolios/${id}/imports/${jobId}`,
+      signal,
+    );
   },
 } as const;
 

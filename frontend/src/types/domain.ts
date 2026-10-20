@@ -20,6 +20,7 @@ export type TransactionInput = components["schemas"]["Transaction-Input"];
 export type TransactionType = components["schemas"]["TransactionType"];
 export type HoldingInfo = components["schemas"]["HoldingInfo"];
 export type PortfolioAnalytics = components["schemas"]["PortfolioAnalytics"];
+
 export type AllocationWeight = components["schemas"]["AllocationWeight"];
 export type CostBasisResult = components["schemas"]["CostBasisResult"];
 export type UnrealizedResult = components["schemas"]["UnrealizedResult"];
@@ -32,3 +33,25 @@ export type LedgerIngestResult = components["schemas"]["LedgerIngestResult"];
 export type StatementFormat = components["schemas"]["StatementFormat"];
 export type ImportStatus = components["schemas"]["ImportStatus"];
 export type StatementImportStatus = components["schemas"]["StatementImportStatus"];
+
+// Classification + XIRR-status surface (new in this contract revision).
+//
+// `MoneyWeightedReturnStatus` is why XIRR is (or is not) a number. A bare `null`
+// could not distinguish "too little history" from "we could not price your open
+// positions", and those call for opposite user action — so the reason now travels
+// with the value and the UI explains it rather than printing a misleading 0.
+export type MoneyWeightedReturnStatus =
+  components["schemas"]["MoneyWeightedReturnStatus"];
+export type HoldingClassificationResult =
+  components["schemas"]["HoldingClassificationResult"];
+export type HoldingClassificationUpdate =
+  components["schemas"]["HoldingClassificationUpdate"];
+export type DataGap = components["schemas"]["DataGap"];
+export type ClassificationFailure = components["schemas"]["ClassificationFailure"];
+
+/**
+ * Allocation bucket the backend groups holdings under when sector/industry is
+ * unknown. Named once here so the chart, the editor, and the mocks can never
+ * drift on the spelling.
+ */
+export const UNCLASSIFIED_KEY = "UNCLASSIFIED";

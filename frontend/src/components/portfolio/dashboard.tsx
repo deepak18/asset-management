@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { usePortfolioSelection } from "@/hooks/use-portfolio-selection";
 import { PortfolioSummary } from "@/components/portfolio/portfolio-summary";
 import { AllocationSection } from "@/components/portfolio/allocation-section";
@@ -11,6 +12,7 @@ import { ImportPanel } from "@/components/portfolio/import-panel";
 import { CreatePortfolioDialog } from "@/components/portfolio/create-portfolio-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorState, LoadingRows } from "@/components/shared/states";
+import { HoldingsTable } from "@/components/portfolio/holdings-table";
 
 /**
  * Unified Portfolio Dashboard (§1.4).
@@ -22,8 +24,16 @@ import { ErrorState, LoadingRows } from "@/components/shared/states";
  * refetch. With no portfolios at all, we prompt the user to create their first.
  */
 export function Dashboard() {
-  const { status, portfolios, selected, selectedId, dataVersion, refreshData } =
+  const { status, portfolios, selected, selectedId, dataVersion, refreshData, select } =
     usePortfolioSelection();
+
+  React.useEffect(() => {
+    if (status !== "success") return;
+    const requested = Number(
+      new URLSearchParams(window.location.search).get("portfolio"),
+    );
+    if (portfolios.some((portfolio) => portfolio.id === requested)) select(requested);
+  }, [status, portfolios, select]);
 
   if (status === "loading") {
     return <LoadingRows rows={6} />;
@@ -41,7 +51,10 @@ export function Dashboard() {
           <p className="text-sm text-muted-foreground">
             Create your first portfolio to start tracking holdings and analytics.
           </p>
-          <CreatePortfolioDialog triggerLabel="Create portfolio" triggerVariant="default" />
+          <CreatePortfolioDialog
+            triggerLabel="Create portfolio"
+            triggerVariant="default"
+          />
         </CardContent>
       </Card>
     );
@@ -53,19 +66,32 @@ export function Dashboard() {
     <div className="flex flex-col gap-6">
       <PortfolioSummary portfolioId={selectedId} refreshToken={dataVersion} />
       <AllocationSection portfolioId={selectedId} refreshToken={dataVersion} />
+      <HoldingsTable
+        portfolioId={selectedId}
+        refreshToken={dataVersion}
+        onChanged={refreshData}
+      />
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[2fr_1fr]">
         <TransactionLedger portfolioId={selectedId} refreshToken={dataVersion} />
         <Watchlist />
       </div>
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <AddPositionForm portfolioId={selectedId} currency={currency} onSuccess={refreshData} />
+        <AddPositionForm
+          portfolioId={selectedId}
+          currency={currency}
+          onSuccess={refreshData}
+        />
         <ManualTransactionForm
           portfolioId={selectedId}
           currency={currency}
           onSuccess={refreshData}
         />
       </div>
-      <ImportPanel portfolioId={selectedId} currency={currency} onSuccess={refreshData} />
+      <ImportPanel
+        portfolioId={selectedId}
+        currency={currency}
+        onSuccess={refreshData}
+      />
     </div>
   );
 }

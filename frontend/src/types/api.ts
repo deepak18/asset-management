@@ -94,6 +94,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portfolios/{portfolio_id}/holdings/{ticker}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Holding
+         * @description Return a single holding, including provenance and user-correctable gaps.
+         */
+        get: operations["get_holding_api_v1_portfolios__portfolio_id__holdings__ticker__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Holding Classification
+         * @description Manually set a holding's sector and/or industry (404 if it isn't held).
+         *
+         *     The manual path intentionally does not depend on market data: classification
+         *     must stay editable when the provider is unconfigured, rate-limited, or simply
+         *     wrong about a symbol.
+         *
+         *     Omission preserves a field; explicit null clears it. Always sets source MANUAL.
+         *     Commits before returning: the next analytics GET uses the new grouping labels,
+         *     with allocation weights computed on read when prices are available.
+         */
+        patch: operations["update_holding_classification_api_v1_portfolios__portfolio_id__holdings__ticker__patch"];
+        trace?: never;
+    };
+    "/api/v1/portfolios/{portfolio_id}/holdings/{ticker}/analytics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Holding Analytics
+         * @description Ticker-only annualized XIRR, with explicit history/price/FX failure statuses.
+         *
+         *     Open positions append a terminal valuation; closed positions need no quote.
+         *     Unavailable returns are null. Snapshot or unconfirmed import history is refused.
+         */
+        get: operations["get_holding_analytics_api_v1_portfolios__portfolio_id__holdings__ticker__analytics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portfolios/{portfolio_id}/analytics": {
         parameters: {
             query?: never;
@@ -137,6 +192,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portfolios/{portfolio_id}/holdings/classify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Classify Holdings
+         * @description Backfill sector/industry for this portfolio's holdings from company profiles.
+         *
+         *     A broker statement carries no classification data, so imported holdings start
+         *     unclassified and the allocation breakdown groups them under ``UNCLASSIFIED``.
+         *     This fills them in from the market-data provider.
+         *
+         *     MANUAL holdings (including manually cleared ones) and already-classified
+         *     holdings are skipped unless ``refresh=true``. Process at most ``limit`` tickers.
+         *     Continue with ``after_ticker=next_cursor`` until ``remaining=0``. Remaining
+         *     strictly decreases along that cursor chain for an unchanged portfolio, even
+         *     when lookups fail; repeating without a cursor has no such guarantee.
+         *     Unresolved tickers are retried on a new sweep. Repeating a request is safe:
+         *     it changes metadata only, never creates ledger events or duplicate holdings.
+         *
+         *     Responds ``503`` when no market-data provider is configured — the remedy is an
+         *     URL/key configuration, not a retry. Quota exhaustion or upstream outages
+         *     instead return 200 with per-ticker ``PROVIDER_UNAVAILABLE`` failures (retry
+         *     later). ``NO_PROFILE`` means no usable taxonomy was returned; manual entry
+         *     remains available. No classification failure is treated as permanently final.
+         */
+        post: operations["classify_holdings_api_v1_portfolios__portfolio_id__holdings_classify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portfolios/{portfolio_id}/imports": {
         parameters: {
             query?: never;
@@ -165,6 +258,66 @@ export interface paths {
          *     the whole ledger); pass ``allow_duplicate=true`` to override deliberately.
          */
         post: operations["create_import_api_v1_portfolios__portfolio_id__imports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolios/{portfolio_id}/imports/{job_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Import
+         * @description Re-run a failed import from retained bytes; remove only its owned partial rows.
+         */
+        post: operations["retry_import_api_v1_portfolios__portfolio_id__imports__job_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolios/{portfolio_id}/unresolved": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Unresolved
+         * @description List structured source items requiring user review across successful imports.
+         */
+        get: operations["list_unresolved_api_v1_portfolios__portfolio_id__unresolved_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolios/{portfolio_id}/unresolved/{item_id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve Unresolved
+         * @description Write a user correction and resolve its item atomically; duplicate resolution is rejected.
+         */
+        post: operations["resolve_unresolved_api_v1_portfolios__portfolio_id__unresolved__item_id__resolve_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -232,6 +385,22 @@ export interface components {
             /** File */
             file: string;
         };
+        /** ClassificationFailure */
+        ClassificationFailure: {
+            /** Ticker */
+            ticker: string;
+            reason: components["schemas"]["ClassificationFailureReason"];
+        };
+        /**
+         * ClassificationFailureReason
+         * @enum {string}
+         */
+        ClassificationFailureReason: "NO_PROFILE" | "PROVIDER_UNAVAILABLE";
+        /**
+         * ClassificationSource
+         * @enum {string}
+         */
+        ClassificationSource: "MANUAL" | "PROVIDER" | "NONE";
         /**
          * CostBasisResult
          * @description Outcome of replaying a ticker's ledger under FIFO lot accounting.
@@ -251,11 +420,114 @@ export interface components {
             fees_base: string;
             /** Open Lots */
             open_lots: components["schemas"]["OpenLot"][];
+            /** @default NONE */
+            classification_source: components["schemas"]["ClassificationSource"];
+            /**
+             * Data Gaps
+             * @default []
+             */
+            data_gaps: components["schemas"]["DataGap"][];
         };
+        /**
+         * DataGap
+         * @description Missing facts a user can supply; provider price availability is separate.
+         * @enum {string}
+         */
+        DataGap: "SECTOR" | "INDUSTRY" | "COST_BASIS" | "CURRENCY" | "SPLIT_RATIO" | "TICKER" | "TRADE_DATE" | "QUANTITY" | "TRANSACTION";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HoldingAnalytics
+         * @description Ticker-only annualized XIRR; unavailable returns are null, never synthetic zero.
+         *
+         *     Open positions use valuation_date as the terminal-flow/FX date, with the
+         *     last-known quote's own source timestamp preserved in valuation_provenance.
+         *     Closed positions use the final ledger date and need no external valuation.
+         */
+        HoldingAnalytics: {
+            /** Portfolio Id */
+            portfolio_id: number;
+            /** Ticker */
+            ticker: string;
+            /** Base Currency */
+            base_currency: string;
+            /** Money Weighted Return */
+            money_weighted_return?: string | null;
+            money_weighted_return_status: components["schemas"]["HoldingReturnStatus"];
+            /**
+             * Valuation Date
+             * Format: date
+             */
+            valuation_date: string;
+            /** @default UNAVAILABLE */
+            valuation_source: components["schemas"]["HoldingValuationSource"];
+            valuation_provenance?: components["schemas"]["MarketDataProvenance"] | null;
+        };
+        /**
+         * HoldingClassificationResult
+         * @description Outcome of backfilling holdings' sector/industry from company profiles.
+         *
+         *     Split three ways so the caller can tell progress from failure:
+         *
+         *     * ``classified`` — holdings that now carry a sector and/or industry.
+         *     * ``unresolved`` — the provider returned nothing usable (unknown symbol,
+         *       quota exhausted, upstream down). Retrying later may succeed.
+         *     * ``skipped`` — MANUAL or already carrying a classification; no lookup spent.
+         *
+         *     ``remaining`` counts eligible tickers after this batch, not unresolved lookups.
+         *     Continue with ``after_ticker=next_cursor`` using the same refresh policy until
+         *     it reaches zero. For unchanged holdings it strictly decreases along that
+         *     cursor chain, even on failure. Omitting the cursor starts a fresh sweep and
+         *     retries unresolved tickers; that sequence has no decreasing-count guarantee.
+         *     Repeats never create ledger events. Provider refreshes may change metadata as
+         *     upstream profiles change, so they are safe but not an immutable snapshot.
+         */
+        HoldingClassificationResult: {
+            /** Portfolio Id */
+            portfolio_id: number;
+            /**
+             * Classified
+             * @default []
+             */
+            classified: components["schemas"]["HoldingInfo"][];
+            /**
+             * Unresolved
+             * @default []
+             */
+            unresolved: string[];
+            /**
+             * Skipped
+             * @default []
+             */
+            skipped: string[];
+            /**
+             * Remaining
+             * @default 0
+             */
+            remaining: number;
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /**
+             * Failures
+             * @default []
+             */
+            failures: components["schemas"]["ClassificationFailure"][];
+        };
+        /**
+         * HoldingClassificationUpdate
+         * @description Manual sector/industry override for one holding.
+         *
+         *     Omitted fields are preserved; explicit null clears a field. Every edit marks
+         *     the holding MANUAL, including clearing both fields.
+         */
+        HoldingClassificationUpdate: {
+            /** Sector */
+            sector?: string | null;
+            /** Industry */
+            industry?: string | null;
         };
         /**
          * HoldingInfo
@@ -271,7 +543,24 @@ export interface components {
             sector?: string | null;
             /** Industry */
             industry?: string | null;
+            /** @default NONE */
+            classification_source: components["schemas"]["ClassificationSource"];
+            /**
+             * Data Gaps
+             * @default []
+             */
+            data_gaps: components["schemas"]["DataGap"][];
         };
+        /**
+         * HoldingReturnStatus
+         * @enum {string}
+         */
+        HoldingReturnStatus: "OK" | "INCOMPLETE_HISTORY" | "UNPRICED_POSITION" | "MISSING_FX" | "INSUFFICIENT_FLOWS" | "INVALID_HISTORY";
+        /**
+         * HoldingValuationSource
+         * @enum {string}
+         */
+        HoldingValuationSource: "LEDGER" | "QUOTE" | "UNAVAILABLE";
         /**
          * ImportStatus
          * @description Lifecycle of an asynchronous statement import.
@@ -297,6 +586,38 @@ export interface components {
             source_format?: components["schemas"]["StatementFormat"] | null;
         };
         /**
+         * MarketDataProvenance
+         * @description Where a datum came from + as-of when (structured citation unit).
+         *
+         *     * ``provider_code`` — the source system, e.g. ``"ALPHAVANTAGE"``.
+         *     * ``source_table``  — the logical source within it (e.g. the AlphaVantage
+         *       function ``"GLOBAL_QUOTE"``), decoupled from any table formatting.
+         *     * ``as_of``         — the timestamp the source attributes to the datum
+         *       (tz-aware), enabling restatement auditing.
+         */
+        MarketDataProvenance: {
+            /** Provider Code */
+            provider_code: string;
+            /** Source Table */
+            source_table: string;
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+        };
+        /**
+         * MoneyWeightedReturnStatus
+         * @description Why the money-weighted return (XIRR) is, or is not, a number.
+         *
+         *     A bare ``null`` cannot distinguish "this portfolio has too little history to
+         *     have a return" from "we could not price your open positions today". Those
+         *     call for completely different user action — enter more history versus
+         *     configure market data — so the reason travels with the value.
+         * @enum {string}
+         */
+        MoneyWeightedReturnStatus: "OK" | "UNPRICED_POSITIONS" | "INSUFFICIENT_FLOWS";
+        /**
          * OpenLot
          * @description An unclosed FIFO purchase lot, valued in the portfolio base currency.
          */
@@ -319,11 +640,17 @@ export interface components {
          *     the portfolio identity, per-position FIFO cost-basis results, whole-portfolio
          *     roll-up totals, and the money-weighted return (XIRR).
          *
-         *     ``money_weighted_return`` is ``None`` when XIRR is mathematically undefined
-         *     (e.g. an empty ledger, or flows that never change sign) — we surface "not
-         *     computable" honestly rather than emitting a misleading ``0``. It is a *rate*
-         *     (annualized fraction), not money, but is kept as ``Decimal`` so no ``float``
-         *     leaks into a financial payload.
+         *     ``money_weighted_return`` is ``None`` whenever XIRR is not trustworthy, and
+         *     ``money_weighted_return_status`` says why — we surface "not computable"
+         *     honestly rather than emitting a misleading ``0``. It is a *rate* (annualized
+         *     fraction), not money, but is kept as ``Decimal`` so no ``float`` leaks into a
+         *     financial payload.
+         *
+         *     Note that XIRR on a portfolio holding open positions requires a **terminal
+         *     value**: today's market value, treated as the inflow you would receive on
+         *     liquidating. Without it a buy-only ledger has only negative flows and no root
+         *     exists. That is why the return depends on market data being available, and why
+         *     it is withheld (``UNPRICED_POSITIONS``) when any open position lacks a price.
          *
          *     Market-value-dependent figures — per-position unrealized P&L and allocation
          *     weights — are populated when the market-data provider supplies current
@@ -348,6 +675,8 @@ export interface components {
             open_cost_basis_base: string;
             /** Money Weighted Return */
             money_weighted_return?: string | null;
+            /** @default INSUFFICIENT_FLOWS */
+            money_weighted_return_status: components["schemas"]["MoneyWeightedReturnStatus"];
             /**
              * Positions Unrealized
              * @default []
@@ -505,6 +834,21 @@ export interface components {
             warnings: string[];
             /** Error */
             error?: string | null;
+            /**
+             * History Complete
+             * @default false
+             */
+            history_complete: boolean;
+            /**
+             * Retry Safe
+             * @default true
+             */
+            retry_safe: boolean;
+            /**
+             * Unresolved Items
+             * @default []
+             */
+            unresolved_items: components["schemas"]["UnresolvedItem"][];
         };
         /**
          * Transaction
@@ -631,6 +975,59 @@ export interface components {
             market_value_base: string;
             /** Unrealized Pnl Base */
             unrealized_pnl_base: string;
+        };
+        /** UnresolvedItem */
+        UnresolvedItem: {
+            kind: components["schemas"]["UnresolvedKind"];
+            /** Source Line */
+            source_line: number;
+            /** Ticker */
+            ticker?: string | null;
+            /** Trade Date */
+            trade_date?: string | null;
+            /** Quantity */
+            quantity?: string | null;
+            /** Currency */
+            currency?: string | null;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Code
+             * @default
+             */
+            code: string;
+            /**
+             * Data Gaps
+             * @default []
+             */
+            data_gaps: components["schemas"]["DataGap"][];
+            /** Id */
+            id: number;
+            /** Import Id */
+            import_id: number;
+            /** Portfolio Id */
+            portfolio_id: number;
+            /**
+             * Resolved
+             * @default false
+             */
+            resolved: boolean;
+        };
+        /**
+         * UnresolvedKind
+         * @enum {string}
+         */
+        UnresolvedKind: "SPLIT_RATIO_UNKNOWN" | "TRANSFER_IN_NO_COST_BASIS" | "MISSING_DATA" | "UNSUPPORTED_ROW";
+        /**
+         * UnresolvedResolution
+         * @description Supply a split, transfer opening lot, or corrected transaction explicitly.
+         */
+        UnresolvedResolution: {
+            transaction?: components["schemas"]["Transaction-Input"] | null;
+            snapshot?: components["schemas"]["PositionSnapshot"] | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -835,6 +1232,120 @@ export interface operations {
             };
         };
     };
+    get_holding_api_v1_portfolios__portfolio_id__holdings__ticker__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: number;
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldingInfo"];
+                };
+            };
+            /** @description Holding absent */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_holding_classification_api_v1_portfolios__portfolio_id__holdings__ticker__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: number;
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HoldingClassificationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldingInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_holding_analytics_api_v1_portfolios__portfolio_id__holdings__ticker__analytics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: number;
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldingAnalytics"];
+                };
+            };
+            /** @description Portfolio or holding absent */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_analytics_api_v1_portfolios__portfolio_id__analytics_get: {
         parameters: {
             query?: never;
@@ -901,6 +1412,49 @@ export interface operations {
             };
         };
     };
+    classify_holdings_api_v1_portfolios__portfolio_id__holdings_classify_post: {
+        parameters: {
+            query?: {
+                refresh?: boolean;
+                limit?: number;
+                /** @description Pass next_cursor to advance past successful and unresolved tickers */
+                after_ticker?: string | null;
+            };
+            header?: never;
+            path: {
+                portfolio_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldingClassificationResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Market-data provider not configured */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     list_imports_api_v1_portfolios__portfolio_id__imports_get: {
         parameters: {
             query?: never;
@@ -937,6 +1491,8 @@ export interface operations {
             query?: {
                 source_format?: components["schemas"]["StatementFormat"];
                 allow_duplicate?: boolean;
+                /** @description Confirm complete opening history to enable conservative split inference */
+                history_complete?: boolean;
             };
             header?: never;
             path: {
@@ -967,6 +1523,131 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    retry_import_api_v1_portfolios__portfolio_id__imports__job_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: number;
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatementImportStatus"];
+                };
+            };
+            /** @description Import absent */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not safely retryable */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stored bytes unavailable or corrupt */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    list_unresolved_api_v1_portfolios__portfolio_id__unresolved_get: {
+        parameters: {
+            query?: {
+                include_resolved?: boolean;
+            };
+            header?: never;
+            path: {
+                portfolio_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnresolvedItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_unresolved_api_v1_portfolios__portfolio_id__unresolved__item_id__resolve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: number;
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnresolvedResolution"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnresolvedItem"];
+                };
+            };
+            /** @description Item absent */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Item already resolved */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid correction */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

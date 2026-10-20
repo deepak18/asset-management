@@ -193,7 +193,7 @@ frontend/
 ├── eslint.config.mjs          # ✅ ESLint 9 flat config (spreads eslint-config-next flat arrays)
 ├── .prettierrc.json           # ✅ Formatter config (LF, double quotes)
 ├── vitest.config.ts           # ✅ Vitest + React Testing Library (jsdom), @/ alias
-├── vitest.setup.ts            # ✅ jest-dom matchers + MSW server lifecycle + ResizeObserver stub
+├── vitest.setup.ts            # ✅ jest-dom + MSW lifecycle, native Node abort constructors for fetch, ResizeObserver stub
 ├── .env.local.example         # ✅ NEXT_PUBLIC_API_BASE_URL + NEXT_PUBLIC_API_MOCKING
 ├── .gitignore                 # ✅ node_modules/.next/env/coverage/generated worker
 ├── README.md                  # ✅ Runbook (install, dev, test, typegen, mock-vs-live, money model)
@@ -204,16 +204,22 @@ frontend/
     ├── app/                   # ✅ App Router
     │   ├── layout.tsx         # ✅ Root layout: globals, terminal chrome (Nav), Providers
     │   ├── page.tsx           # ✅ dashboard mount point (renders client <Dashboard/>)
+    │   ├── portfolios/[id]/holdings/[ticker]/page.tsx # ✅ Validated, bookmarkable URL-scoped holding detail route
     │   ├── providers.tsx      # ✅ Client bootstrap; mounts MSW mock (ssr:false) + PortfolioSelectionProvider
     │   └── globals.css        # ✅ Tailwind layers + light/dark design tokens
     ├── components/
     │   ├── ui/                # ✅ shadcn-style primitives: card, badge, skeleton, table, button, input, select, label, progress, dialog
     │   ├── shared/            # ✅ states.tsx — loading / error / empty blocks (honest "—", no fake 0)
     │   ├── portfolio/         # ✅ views
-    │   │   ├── portfolio-summary.tsx       # ✅ Headline stats; unpriced/null → "Not priced"/"—"; refreshToken-aware
+    │   │   ├── portfolio-summary.tsx       # ✅ Headline stats and status-driven XIRR guidance; unavailable values stay "—"
     │   │   ├── allocation-chart.tsx        # ✅ Recharts donut + accessible legend (sector/industry)
     │   │   ├── allocation-section.tsx      # ✅ Data wrapper feeding the donuts from analytics; refreshToken-aware
-    │   │   ├── transaction-ledger.tsx      # ✅ Ledger grid; type-aware cells (dash irrelevant fields); refreshToken-aware
+    │   │   ├── transaction-ledger.tsx      # ✅ Type-aware ledger with holding links, optional ticker filter, and refresh token
+    │   │   ├── holdings-table.tsx          # ✅ Holding links, position figures, gap warnings, per-cell edits, and bulk classify action
+│   │   │   ├── holding-detail.tsx          # ✅ URL-scoped position overview, editable classification/provenance, gaps, filtered ledger, portfolio-only XIRR
+    │   │   ├── holding-classification-cell.tsx # ✅ Shared per-ticker field PATCH with Save/Cancel, explicit null clearing, preserved error drafts
+    │   │   ├── holding-data-gaps.tsx       # ✅ Readable typed gap warnings, separate from unavailable provider data
+    │   │   ├── classify-holdings-button.tsx # ✅ Abortable cursor sweep with classified/unresolved/failure summaries and 503 configuration guidance
     │   │   ├── watchlist.tsx               # ✅ Add/remove tickers (localStorage-backed)
     │   │   ├── portfolio-selector.tsx      # ✅ App-shell picker over GET /portfolios; "create one" when empty
     │   │   ├── create-portfolio-dialog.tsx # ✅ POST /portfolios then auto-select
@@ -226,30 +232,30 @@ frontend/
     │   └── workspace-panel/   # ⬜ Context-aware side panel (streaming tokens)
     ├── hooks/                 # ✅ Data + UI state hooks
     │   ├── use-api-resource.ts         # ✅ Generic async state (loading/error/success), stale-response guard
-    │   ├── use-portfolio.ts            # ✅ Endpoint hooks bound to the typed client (version-token refetch)
+│   │   ├── use-portfolio.ts            # ✅ Typed endpoint hooks including single-holding reads and version-token refetch
     │   ├── use-portfolio-selection.tsx # ✅ Selection context: list + selected id (localStorage) + dataVersion refetch token
     │   ├── use-import-job.ts           # ✅ Poll one import job to a terminal state (self-scheduling; no leaked intervals)
     │   └── use-watchlist.ts            # ✅ localStorage watchlist (normalized, de-duplicated)
     ├── lib/                   # ✅ Client-side infra
     │   ├── env.ts             # ✅ Validated public env (API base URL, mock flag)
-    │   ├── api-client.ts      # ✅ Typed REST client (the ONLY backend channel): reads + writes (create/txns/positions) + multipart import; ApiError carries backend detail
+│   │   ├── api-client.ts      # ✅ Typed REST client: portfolio/holding reads, writes, nullable classification PATCH, cursor classify, multipart import
     │   ├── decimal.ts         # ✅ Float-free Decimal-string parse/round/scale helpers
     │   ├── format.ts          # ✅ money/percent/quantity formatting; DASH for null/unpriced
     │   └── utils.ts           # ✅ cn() class-merge helper
     ├── mocks/                 # ✅ MSW mock layer (contract-shaped)
-    │   ├── fixtures.ts        # ✅ Typed fixtures (priced / unpriced / empty portfolios)
-    │   ├── state.ts           # ✅ Mutable write/import state (create portfolio, staged import-job progression); resetMockState() between tests
-    │   ├── handlers.ts        # ✅ Request handlers implementing every OpenAPI route (reads + writes + async import)
+    │   ├── fixtures.ts        # ✅ Priced/unpriced/unclassified/empty portfolios with typed classification provenance, and gaps
+│   │   ├── state.ts           # ✅ Mutable write/import/classification state: manual protection, cursor sweeps, current-label analytics, reset between tests
+│   │   ├── handlers.ts        # ✅ Portfolio/write/import mocks plus single holding GET, nullable PATCH, cursor classification and configuration errors
     │   ├── server.ts          # ✅ Node server for Vitest (msw/node)
     │   ├── browser.ts         # ✅ Browser worker (msw/browser) — client-only
     │   └── mock-bootstrap.tsx # ✅ Client-only worker starter (loaded via ssr:false)
     ├── types/                 # ✅ Contract types
     │   ├── api.ts             # ✅ GENERATED by openapi-typescript from backend/openapi.json (tool-owned)
-    │   └── domain.ts          # ✅ Friendly aliases (Transaction = Output; TransactionInput = Input; + write/import schemas)
+    │   └── domain.ts           # ✅ Friendly aliases (Transaction = Output; TransactionInput = Input; + write/import schemas)
     └── __tests__/             # ✅ Vitest + RTL specs
-        ├── lib/               # ✅ decimal, format, api-client (MSW-backed; incl. write + import routes)
+        ├── lib/               # ✅ decimal, format, api-client, holding-api (MSW-backed nullable PATCH, provenance, cursor, immediate analytics)
         ├── hooks/             # ✅ use-import-job (poll-to-terminal, stop-on-unmount)
-        └── components/        # ✅ portfolio-summary, allocation-chart, transaction-ledger, watchlist, portfolio-selector, create-portfolio-dialog, add-position-form, manual-transaction-form, import-panel
+        └── components/        # ✅ Existing panels plus holdings, holding-page, classify-holdings-button, dashboard (editing, gaps, deep links, cursor/cancellation, allocation refresh)
 ```
 
 ---

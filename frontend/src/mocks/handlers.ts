@@ -1,11 +1,13 @@
 import { http, HttpResponse } from "msw";
 import { env } from "@/lib/env";
 import type {
+  HoldingClassificationUpdate,
   PortfolioCreate,
   PositionSnapshot,
   TransactionInput,
 } from "@/types/domain";
 import {
+  classifyHoldings,
   createImport,
   createPortfolio,
   findPortfolio,
@@ -16,6 +18,7 @@ import {
   ingest,
   listImports,
   listPortfolios,
+  updateHoldingClassification,
 } from "@/mocks/state";
 
 /**
@@ -65,18 +68,82 @@ export const handlers = [
     return txns ? HttpResponse.json(txns) : notFound("Portfolio not found");
   }),
 
-  http.post(`${base}/api/v1/portfolios/:id/transactions`, async ({ params, request }) => {
-    const id = Number(params.id);
-    if (!findPortfolio(id)) {
-      return notFound("Portfolio not found");
-    }
-    const body = (await request.json()) as TransactionInput[];
-    return HttpResponse.json(ingest(id, uniqueTickers(body), body.length), { status: 201 });
-  }),
+  http.post(
+    `${base}/api/v1/portfolios/:id/transactions`,
+    async ({ params, request }) => {
+      const id = Number(params.id);
+      if (!findPortfolio(id)) {
+        return notFound("Portfolio not found");
+      }
+      const body = (await request.json()) as TransactionInput[];
+      return HttpResponse.json(ingest(id, uniqueTickers(body), body.length), {
+        status: 201,
+      });
+    },
+  ),
 
   http.get(`${base}/api/v1/portfolios/:id/holdings`, ({ params }) => {
     const holds = getHoldings(Number(params.id));
     return holds ? HttpResponse.json(holds) : notFound("Portfolio not found");
+  }),
+
+  http.post(
+    `${base}/api/v1/portfolios/:id/holdings/classify`,
+    ({ params, request }) => {
+      const url = new URL(request.url);
+      const refresh = url.searchParams.get("refresh") === "true";
+      const rawLimit = url.searchParams.get("limit");
+      const limit = rawLimit == null ? 25 : Number(rawLimit);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+        return HttpResponse.json(
+          { detail: [{ msg: "limit must be between 1 and 200" }] },
+          { status: 422 },
+        );
+      }
+      const attempt = classifyHoldings(
+        Number(params.id),
+        refresh,
+        limit,
+        url.searchParams.get("after_ticker") ?? undefined,
+      );
+      return attempt.ok
+        ? HttpResponse.json(attempt.result)
+        : HttpResponse.json({ detail: attempt.detail }, { status: attempt.status });
+    },
+  ),
+
+  http.patch(
+    `${base}/api/v1/portfolios/:id/holdings/:ticker`,
+    async ({ params, request }) => {
+      const body = (await request.json()) as HoldingClassificationUpdate;
+      if (
+        !Object.keys(body).length ||
+        Object.keys(body).some((key) => key !== "sector" && key !== "industry") ||
+        [body.sector, body.industry].some(
+          (value) =>
+            value != null &&
+            (typeof value !== "string" || !value.trim() || value.length > 80),
+        )
+      ) {
+        return HttpResponse.json(
+          { detail: [{ msg: "Provide a sector and/or an industry." }] },
+          { status: 422 },
+        );
+      }
+      const updated = updateHoldingClassification(
+        Number(params.id),
+        String(params.ticker),
+        body,
+      );
+      return updated ? HttpResponse.json(updated) : notFound("Holding not found");
+    },
+  ),
+
+  http.get(`${base}/api/v1/portfolios/:id/holdings/:ticker`, ({ params }) => {
+    const holding = getHoldings(Number(params.id))?.find(
+      (row) => row.ticker === String(params.ticker).toUpperCase(),
+    );
+    return holding ? HttpResponse.json(holding) : notFound("Holding not found");
   }),
 
   http.get(`${base}/api/v1/portfolios/:id/analytics`, ({ params }) => {
@@ -90,7 +157,9 @@ export const handlers = [
       return notFound("Portfolio not found");
     }
     const body = (await request.json()) as PositionSnapshot[];
-    return HttpResponse.json(ingest(id, uniqueTickers(body), body.length), { status: 201 });
+    return HttpResponse.json(ingest(id, uniqueTickers(body), body.length), {
+      status: 201,
+    });
   }),
 
   http.post(`${base}/api/v1/portfolios/:id/imports`, async ({ params, request }) => {
