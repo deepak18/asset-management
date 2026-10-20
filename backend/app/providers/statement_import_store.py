@@ -23,6 +23,8 @@ from app.portfolio import models
 from app.portfolio.schemas import (
     ImportIssue,
     ImportStatus,
+    LedgerOrigin,
+    SnapshotTransaction,
     StatementFormat,
     StatementImportStatus,
     Transaction,
@@ -375,4 +377,8 @@ def _event_row(portfolio_id: int, txn: Transaction, job_id: int | None) -> model
         fees=txn.fees,
         split_ratio=txn.split_ratio,
         import_job_id=job_id,
+        history_origin=(
+            LedgerOrigin.SNAPSHOT if isinstance(txn, SnapshotTransaction)
+            else LedgerOrigin.OBSERVED
+        ).value,
     )

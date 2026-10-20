@@ -9,6 +9,7 @@ forgets the corresponding migration, catching schema/model divergence early.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -118,5 +119,43 @@ def test_existing_labels_and_legacy_partial_jobs_are_protected(
         assert retry_safety == {
             "PENDING": False, "RUNNING": False, "FAILED": False, "SUCCEEDED": True,
         }
+    finally:
+        engine.dispose()
+
+
+def test_holding_history_backfill_and_downgrade(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _isolate_settings: None,
+) -> None:
+    db_path = tmp_path / "history.db"
+    cfg = _alembic_config(db_path, monkeypatch)
+    command.upgrade(cfg, "0005")
+    engine = create_engine(f"sqlite:///{db_path.as_posix()}")
+    try:
+        metadata = MetaData()
+        portfolios = Table("portfolios", metadata, autoload_with=engine)
+        jobs = Table("statement_imports", metadata, autoload_with=engine)
+        txns = Table("transactions", metadata, autoload_with=engine)
+        with engine.begin() as conn:
+            conn.execute(portfolios.insert().values(id=1, name="Legacy", base_currency="USD"))
+            conn.execute(jobs.insert().values(
+                id=1, portfolio_id=1, status="SUCCEEDED", source_format="robinhood_csv",
+                original_filename="old.csv", storage_key="old.raw", checksum="a" * 64,
+                size_bytes=1, processed_rows=1, created_transactions=1,
+                tickers_json='["AAA"]', warnings_json="[]", history_complete=True,
+            ))
+            for job_id in (None, 1):
+                conn.execute(txns.insert().values(
+                    portfolio_id=1, ticker="AAA", type="BUY", trade_date=date(2024, 1, 1),
+                    currency="USD", quantity=1, price=100, fees=0, amount=0, split_ratio=1,
+                    import_job_id=job_id,
+                ))
+        command.upgrade(cfg, "head")
+        txns = Table("transactions", MetaData(), autoload_with=engine)
+        with engine.connect() as conn:
+            origins = conn.execute(select(txns.c.history_origin).order_by(txns.c.id)).scalars().all()
+        assert origins == ["UNKNOWN", "OBSERVED"]
+        command.downgrade(cfg, "0005")
+        assert "history_origin" not in {c["name"] for c in inspect(engine).get_columns("transactions")}
+        command.upgrade(cfg, "head")
     finally:
         engine.dispose()

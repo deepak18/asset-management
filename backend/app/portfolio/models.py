@@ -110,6 +110,9 @@ class Transaction(Base):
     import_job_id: Mapped[int | None] = mapped_column(
         ForeignKey("statement_imports.id"), index=True
     )
+    history_origin: Mapped[str] = mapped_column(
+        String(20), default="OBSERVED", server_default="UNKNOWN"
+    )
 
 
 class Cash(Base):

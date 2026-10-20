@@ -21,6 +21,7 @@ from fastapi import (
 from app.api.deps import (
     BackgroundImportRunner,
     get_background_import_runner,
+    get_holding_analytics_service,
     get_holding_classification_service,
     get_portfolio_ingest_service,
     get_portfolio_provider,
@@ -32,6 +33,7 @@ from app.portfolio.classification import (
     DEFAULT_CLASSIFY_LIMIT,
     HoldingClassificationService,
 )
+from app.portfolio.holding_analytics import HoldingAnalyticsService
 from app.portfolio.imports import (
     DuplicateStatementError,
     StatementImportService,
@@ -39,6 +41,7 @@ from app.portfolio.imports import (
 )
 from app.portfolio.ingest import PortfolioIngestService
 from app.portfolio.schemas import (
+    HoldingAnalytics,
     HoldingClassificationResult,
     HoldingClassificationUpdate,
     HoldingInfo,
@@ -126,6 +129,26 @@ async def get_holding(
     if holding is None:
         raise HTTPException(status_code=404, detail="Holding not found")
     return holding
+
+
+@router.get(
+    "/{portfolio_id}/holdings/{ticker}/analytics",
+    responses={404: {"description": "Portfolio or holding absent"}},
+)
+async def get_holding_analytics(
+    portfolio_id: int,
+    ticker: str,
+    service: HoldingAnalyticsService = Depends(get_holding_analytics_service),
+) -> HoldingAnalytics:
+    """Ticker-only annualized XIRR, with explicit history/price/FX failure statuses.
+
+    Open positions append a terminal valuation; closed positions need no quote.
+    Unavailable returns are null. Snapshot or unconfirmed import history is refused.
+    """
+    analytics = await service.get_analytics(portfolio_id, ticker)
+    if analytics is None:
+        raise HTTPException(status_code=404, detail="Portfolio or holding not found")
+    return analytics
 
 
 @router.get("/{portfolio_id}/analytics")

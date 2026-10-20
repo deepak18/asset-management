@@ -19,6 +19,7 @@ from typing import Protocol
 from app.portfolio.schemas import (
     ClassificationSource,
     HoldingInfo,
+    HoldingLedger,
     ImportIssue,
     PortfolioCreate,
     PortfolioSummary,
@@ -54,6 +55,16 @@ class PortfolioProvider(Protocol):
         "create one", which ``upsert_holding`` deliberately cannot express.
         """
         ...
+
+
+class HoldingAnalyticsProvider(Protocol):
+    """Identity and scoped history reads needed for holding-level returns."""
+
+    async def get_portfolio(self, portfolio_id: int) -> PortfolioSummary | None: ...
+
+    async def get_holding(self, portfolio_id: int, ticker: str) -> HoldingInfo | None: ...
+
+    async def get_holding_ledger(self, portfolio_id: int, ticker: str) -> HoldingLedger: ...
 
 
 class PortfolioWriter(Protocol):

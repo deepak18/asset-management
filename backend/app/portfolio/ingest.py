@@ -28,6 +28,7 @@ from app.portfolio.schemas import (
     PortfolioCreate,
     PortfolioSummary,
     PositionSnapshot,
+    SnapshotTransaction,
     Transaction,
     TransactionType,
 )
@@ -50,7 +51,7 @@ def snapshot_to_opening_buy(snapshot: PositionSnapshot) -> Transaction:
         assert snapshot.total_cost_basis is not None
         price = snapshot.total_cost_basis / snapshot.quantity
 
-    return Transaction(
+    return SnapshotTransaction(
         ticker=snapshot.ticker.upper(),
         type=TransactionType.BUY,
         trade_date=snapshot.as_of or date.today(),

@@ -17,9 +17,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.portfolio import models
 from app.portfolio.schemas import (
     ClassificationSource,
+    HoldingImportHistory,
     HoldingInfo,
+    HoldingLedger,
+    ImportStatus,
+    LedgerOrigin,
     PortfolioCreate,
     PortfolioSummary,
+    SnapshotTransaction,
     Transaction,
 )
 from app.providers.statement_import_store import SqlAlchemyStatementImportStore
@@ -123,6 +128,41 @@ class SqlAlchemyPortfolioProvider:
 
     # --- writes -----------------------------------------------------------
 
+    async def get_holding_ledger(self, portfolio_id: int, ticker: str) -> HoldingLedger:
+        ticker = ticker.upper()
+        rows = (await self._session.scalars(
+            select(models.Transaction).where(
+                models.Transaction.portfolio_id == portfolio_id,
+                models.Transaction.ticker == ticker,
+            ).order_by(models.Transaction.trade_date, models.Transaction.id)
+        )).all()
+        jobs = await SqlAlchemyStatementImportStore(self._session).list_jobs(portfolio_id)
+        owned_jobs = {row.import_job_id for row in rows if row.import_job_id is not None}
+        relevant = [
+            job for job in jobs
+            if job.id in owned_jobs
+            or ticker in job.tickers
+            or any(item.ticker is None or item.ticker.upper() == ticker
+                   for item in job.unresolved_items)
+            # Unfinished jobs have not published a complete ticker inventory.
+            or (job.status != ImportStatus.SUCCEEDED and not job.tickers)
+        ]
+        return HoldingLedger(
+            transactions=tuple(Transaction(
+                ticker=row.ticker, type=row.type, trade_date=row.trade_date,
+                currency=row.currency, quantity=row.quantity, price=row.price,
+                fees=row.fees, amount=row.amount, split_ratio=row.split_ratio,
+            ) for row in rows),
+            origins=tuple(LedgerOrigin(row.history_origin) for row in rows),
+            imports=tuple(HoldingImportHistory(
+                status=job.status, history_complete=job.history_complete,
+            ) for job in relevant),
+            has_unresolved_events=any(
+                not item.resolved and (item.ticker is None or item.ticker.upper() == ticker)
+                for job in relevant for item in job.unresolved_items
+            ),
+        )
+
     async def create_portfolio(self, data: PortfolioCreate) -> PortfolioSummary:
         row = models.Portfolio(name=data.name, base_currency=data.base_currency.upper())
         self._session.add(row)
@@ -143,6 +183,10 @@ class SqlAlchemyPortfolioProvider:
                 fees=txn.fees,
                 amount=txn.amount,
                 split_ratio=txn.split_ratio,
+                history_origin=(
+                    LedgerOrigin.SNAPSHOT if isinstance(txn, SnapshotTransaction)
+                    else LedgerOrigin.OBSERVED
+                ).value,
             )
             for txn in transactions
         ]

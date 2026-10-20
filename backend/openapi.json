@@ -379,6 +379,61 @@
         }
       }
     },
+    "/api/v1/portfolios/{portfolio_id}/holdings/{ticker}/analytics": {
+      "get": {
+        "tags": [
+          "Portfolio"
+        ],
+        "summary": "Get Holding Analytics",
+        "description": "Ticker-only annualized XIRR, with explicit history/price/FX failure statuses.\n\nOpen positions append a terminal valuation; closed positions need no quote.\nUnavailable returns are null. Snapshot or unconfirmed import history is refused.",
+        "operationId": "get_holding_analytics_api_v1_portfolios__portfolio_id__holdings__ticker__analytics_get",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          },
+          {
+            "name": "ticker",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ticker"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldingAnalytics"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Portfolio or holding absent"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/portfolios/{portfolio_id}/analytics": {
       "get": {
         "tags": [
@@ -1111,6 +1166,68 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "HoldingAnalytics": {
+        "properties": {
+          "portfolio_id": {
+            "type": "integer",
+            "title": "Portfolio Id"
+          },
+          "ticker": {
+            "type": "string",
+            "title": "Ticker"
+          },
+          "base_currency": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Base Currency"
+          },
+          "money_weighted_return": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Money Weighted Return"
+          },
+          "money_weighted_return_status": {
+            "$ref": "#/components/schemas/HoldingReturnStatus"
+          },
+          "valuation_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Valuation Date"
+          },
+          "valuation_source": {
+            "$ref": "#/components/schemas/HoldingValuationSource",
+            "default": "UNAVAILABLE"
+          },
+          "valuation_provenance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MarketDataProvenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "portfolio_id",
+          "ticker",
+          "base_currency",
+          "money_weighted_return_status",
+          "valuation_date"
+        ],
+        "title": "HoldingAnalytics",
+        "description": "Ticker-only annualized XIRR; unavailable returns are null, never synthetic zero.\n\nOpen positions use valuation_date as the terminal-flow/FX date, with the\nlast-known quote's own source timestamp preserved in valuation_provenance.\nClosed positions use the final ledger date and need no external valuation."
+      },
       "HoldingClassificationResult": {
         "properties": {
           "portfolio_id": {
@@ -1256,6 +1373,27 @@
         "title": "HoldingInfo",
         "description": "A tracked security's classification metadata (provider output).\n\nGrouping keys for allocation roll-ups; the market value is joined in later once\nthe market-data layer (\u00a71.3) can price the position."
       },
+      "HoldingReturnStatus": {
+        "type": "string",
+        "enum": [
+          "OK",
+          "INCOMPLETE_HISTORY",
+          "UNPRICED_POSITION",
+          "MISSING_FX",
+          "INSUFFICIENT_FLOWS",
+          "INVALID_HISTORY"
+        ],
+        "title": "HoldingReturnStatus"
+      },
+      "HoldingValuationSource": {
+        "type": "string",
+        "enum": [
+          "LEDGER",
+          "QUOTE",
+          "UNAVAILABLE"
+        ],
+        "title": "HoldingValuationSource"
+      },
       "ImportStatus": {
         "type": "string",
         "enum": [
@@ -1311,6 +1449,33 @@
         ],
         "title": "LedgerIngestResult",
         "description": "What a write/import operation actually recorded (the endpoint's response)."
+      },
+      "MarketDataProvenance": {
+        "properties": {
+          "provider_code": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Provider Code"
+          },
+          "source_table": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Source Table"
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date-time",
+            "title": "As Of"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider_code",
+          "source_table",
+          "as_of"
+        ],
+        "title": "MarketDataProvenance",
+        "description": "Where a datum came from + as-of when (structured citation unit).\n\n* ``provider_code`` \u2014 the source system, e.g. ``\"ALPHAVANTAGE\"``.\n* ``source_table``  \u2014 the logical source within it (e.g. the AlphaVantage\n  function ``\"GLOBAL_QUOTE\"``), decoupled from any table formatting.\n* ``as_of``         \u2014 the timestamp the source attributes to the datum\n  (tz-aware), enabling restatement auditing."
       },
       "MoneyWeightedReturnStatus": {
         "type": "string",

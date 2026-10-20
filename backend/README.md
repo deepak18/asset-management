@@ -39,7 +39,7 @@ From the **repo root** first: `docker compose up -d --wait` (starts Postgres + p
 ```bash
 cd backend
 uv sync --extra dev --extra postgres
-uv run alembic upgrade head             # includes classification provenance + import recovery (0005)
+uv run alembic upgrade head             # includes holding return history provenance (0006)
 uv run python -m uvicorn app.main:app --reload    # http://localhost:8000/docs
 ```
 
@@ -49,6 +49,15 @@ Existing installations must also run `uv run alembic upgrade head` before restar
 the API. Revision `0005` conservatively marks existing non-null classification as
 `MANUAL`; old failed/interrupted imports lack ownership tags and cannot be safely
 retried automatically.
+
+Revision `0006` is required even if `0005` has already been applied. It adds
+transaction-origin tracking for holding-level returns; `0005` is unchanged.
+Existing ownership-tagged import rows retain observed origin and are checked
+against their job's completeness. Legacy unowned rows become `UNKNOWN`: old
+snapshots and manual trades were stored identically, so guessing would fabricate
+return history. This deliberately withholds holding XIRR for those rows until
+history is reconciled from source records (there is no automatic trust override).
+No existing transactions are deleted or financially changed by this migration.
 
 > 💡 **Why `python -m uvicorn` and not `uvicorn`?** `uv sync` installs a small
 > `uvicorn.exe` launcher shim in `.venv\Scripts\`. On locked-down Windows (Smart App
@@ -324,6 +333,64 @@ a return — **provided every open position can be priced**. Configure
 
 A bare `null` cannot distinguish "not enough history" from "market data is off",
 and those need opposite user action — hence the explicit reason.
+
+### Holding-level money-weighted return (XIRR)
+
+`GET /api/v1/portfolios/{portfolio_id}/holdings/{ticker}/analytics` returns a
+holding-only annualized fraction. Lookup is case-insensitive; a missing portfolio
+or holding returns `404`. Other unavailable results return `200` with a null
+`money_weighted_return` and a typed `money_weighted_return_status`.
+
+Response fields:
+
+| Field | Meaning |
+|---|---|
+| `portfolio_id`, `ticker`, `base_currency` | Identity and the portfolio's reporting currency (not necessarily the global default) |
+| `money_weighted_return` | Nullable decimal **string**; `"0.1"` means 10% annualized, not 0.1%. A genuinely flat return can be zero; unavailable is always null |
+| `money_weighted_return_status` | One of the statuses below |
+| `valuation_date` | Open: today's attempted terminal-flow/FX date. Closed: final ledger-event date. Withheld before replay: today's attempted valuation date |
+| `valuation_source` | `QUOTE` when a usable quote was obtained (even if FX/solver later fails), `LEDGER` for closed/no-position replay, otherwise `UNAVAILABLE` |
+| `valuation_provenance` | Quote's original `provider_code`, `source_table`, and `as_of`; null when no quote is used |
+
+| Status | Meaning / action |
+|---|---|
+| `OK` | Computed from this ticker's observed cash flows and, if open, its terminal value |
+| `INCOMPLETE_HISTORY` | Snapshot/unknown-origin rows, relevant import history not confirmed complete or not `SUCCEEDED`, or unresolved source events. Reconcile actual history; do not interpret a synthetic opening lot as a purchase |
+| `UNPRICED_POSITION` | Open quantity but no configured provider or usable quote (including outage/quota, wrong-symbol, negative or future-dated quotes) |
+| `MISSING_FX` | Required dated ledger or valuation FX unavailable; supply rates rather than inventing a conversion |
+| `INSUFFICIENT_FLOWS` | No computable rate: insufficient distinct dated net flows/signs, or the existing solver cannot converge |
+| `INVALID_HISTORY` | Impossible FIFO replay (e.g. sell before opening shares), invalid numeric inputs, or future-dated ledger events |
+
+The service uses **only that ticker's ledger**: buys and their fees are outflows;
+sells net of fees and dividends are inflows; standalone fees are outflows; splits
+change open quantity but have no cash flow. FIFO replay supplies split-adjusted
+remaining shares, including after partial sells. Open positions append those
+shares times the last-known quote, normalized with valuation-date FX, as today's
+terminal inflow. The provider/cache freshness policy is unchanged: this is not a
+promise of a live quote; inspect `valuation_provenance.as_of` for its actual source
+timestamp. Closed positions request **no quote** and need only historical FX.
+
+Snapshot opening lots remain useful for basis/valuation but are **never observed
+cash flows**, even with a supplied acquisition date, later sales, or when created
+by transfer repair. New manual ledger entries are treated as user-asserted observed
+history; the API cannot independently prove omitted trades. Imports must have been
+submitted with `history_complete=true` and finished successfully. An earlier
+incomplete import is not made complete merely by resolving one issue. Any relevant
+unresolved source event (even one with no `data_gaps`) prevents a trusted return.
+Taxonomy gaps alone do not block XIRR.
+Cash-only dividend/fee history without any observed acquisition is also incomplete,
+even if the cash flows alone would admit a mathematical root.
+
+Known unrelated tickers' missing quotes, FX, incomplete imports, and unresolved
+events do not block this endpoint. An unresolved item with **unknown ticker**, or
+an unfinished/failed import without a final ticker inventory, conservatively blocks
+holding returns because its scope cannot be ruled out yet. Status precedence is
+history completeness, ledger validation/FX, terminal price/FX, then solver outcome.
+FX rates injected for another base currency are never reinterpreted as portfolio
+rates; cross-currency returns remain unavailable without appropriate dated rates.
+
+This is independent of `/portfolios/{id}/analytics`: the existing portfolio-level
+calculation, statuses, and all-open-positions pricing requirement are unchanged.
 
 ### 4. Sector / industry classification
 

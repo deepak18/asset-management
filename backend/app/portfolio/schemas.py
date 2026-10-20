@@ -27,6 +27,14 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.marketdata.schemas import MarketDataProvenance
+
+
+class LedgerOrigin(StrEnum):
+    OBSERVED = "OBSERVED"
+    SNAPSHOT = "SNAPSHOT"
+    UNKNOWN = "UNKNOWN"
+
 
 class TransactionType(StrEnum):
     """Ledger event kinds supported by the deterministic calculators."""
@@ -76,6 +84,54 @@ class PositionValue(BaseModel):
     market_value: Decimal
     sector: str | None = None
     industry: str | None = None
+
+
+class SnapshotTransaction(Transaction):
+    """Internal marker; never accepted as a manual transaction request model."""
+
+
+class HoldingReturnStatus(StrEnum):
+    OK = "OK"
+    INCOMPLETE_HISTORY = "INCOMPLETE_HISTORY"
+    UNPRICED_POSITION = "UNPRICED_POSITION"
+    MISSING_FX = "MISSING_FX"
+    INSUFFICIENT_FLOWS = "INSUFFICIENT_FLOWS"
+    INVALID_HISTORY = "INVALID_HISTORY"
+
+
+class HoldingValuationSource(StrEnum):
+    LEDGER = "LEDGER"
+    QUOTE = "QUOTE"
+    UNAVAILABLE = "UNAVAILABLE"
+
+
+class HoldingAnalytics(BaseModel):
+    """Ticker-only annualized XIRR; unavailable returns are null, never synthetic zero.
+
+    Open positions use valuation_date as the terminal-flow/FX date, with the
+    last-known quote's own source timestamp preserved in valuation_provenance.
+    Closed positions use the final ledger date and need no external valuation.
+    """
+
+    model_config = ConfigDict(frozen=True)
+    portfolio_id: int
+    ticker: str
+    base_currency: str = Field(min_length=3, max_length=3)
+    money_weighted_return: Decimal | None = None
+    money_weighted_return_status: HoldingReturnStatus
+    valuation_date: date
+    valuation_source: HoldingValuationSource = HoldingValuationSource.UNAVAILABLE
+    valuation_provenance: MarketDataProvenance | None = None
+
+
+class HoldingLedger(BaseModel):
+    """Provider facts for a scoped return, separate from the public ledger API."""
+
+    model_config = ConfigDict(frozen=True)
+    transactions: tuple[Transaction, ...] = ()
+    origins: tuple[LedgerOrigin, ...] = ()
+    imports: tuple[HoldingImportHistory, ...] = ()
+    has_unresolved_events: bool = False
 
 
 class PortfolioSummary(BaseModel):
@@ -471,6 +527,12 @@ class StatementImportStatus(BaseModel):
     unresolved_items: tuple[UnresolvedItem, ...] = ()
 
 
+class HoldingImportHistory(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    status: ImportStatus
+    history_complete: bool
+
+
 class UnresolvedKind(StrEnum):
     SPLIT_RATIO_UNKNOWN = "SPLIT_RATIO_UNKNOWN"
     TRANSFER_IN_NO_COST_BASIS = "TRANSFER_IN_NO_COST_BASIS"
@@ -516,3 +578,4 @@ class UnresolvedResolution(BaseModel):
 
 ParsedStatement.model_rebuild()
 StatementImportStatus.model_rebuild()
+HoldingLedger.model_rebuild()

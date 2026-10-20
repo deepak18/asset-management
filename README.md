@@ -76,6 +76,12 @@ uv sync --extra dev --extra postgres
 uv run alembic upgrade head
 ```
 
+Existing installations, including those already on `0005`, must upgrade to `0006`
+before starting this backend. It records snapshot/observed transaction origins for
+holding XIRR; ambiguous legacy unowned transactions remain unknown rather than
+being trusted as observed purchases. No application-database migration is run
+automatically by the API.
+
 **5. Run the API.**
 ```powershell
 uv run python -m uvicorn app.main:app --reload
@@ -154,6 +160,17 @@ live mode works out of the box:
 
 See [`backend/README.md`](./backend/README.md#4-sector--industry-classification)
 for the full contract, edge cases, and repair workflow.
+
+### Holding-level XIRR (backend)
+
+`GET /api/v1/portfolios/{id}/holdings/{ticker}/analytics` computes this ticker's
+annualized return independently of unrelated positions. It returns a nullable
+decimal-string rate, typed status, valuation date/source, and quote provenance.
+Closed holdings need no current quote; open holdings use their split-adjusted
+remaining quantity as the terminal valuation. Snapshot/unknown or incomplete import
+history, missing prices/FX, and undefined returns are withheld, never replaced by
+zero. Portfolio-level behavior is unchanged. See the
+[response/status semantics](./backend/README.md#holding-level-money-weighted-return-xirr).
 
 ---
 

@@ -26,6 +26,7 @@ from app.marketdata.cache import ReadThroughCache
 from app.mcp.client import StreamableHttpMcpClient
 from app.mcp.registry import build_alphavantage_config
 from app.portfolio.classification import HoldingClassificationService
+from app.portfolio.holding_analytics import HoldingAnalyticsService
 from app.portfolio.imports import StatementImportService
 from app.portfolio.ingest import PortfolioIngestService
 from app.portfolio.service import PortfolioService
@@ -109,6 +110,14 @@ def get_portfolio_service(
     """Compose the orchestration service from the provider + FX + market-data seams."""
 
     return PortfolioService(provider, fx, market_data=market_data)
+
+
+def get_holding_analytics_service(
+    session: AsyncSession = Depends(get_session),
+    fx: FxRateTable = Depends(get_fx_table),
+    market_data: MarketDataProvider | None = Depends(get_market_data_provider),
+) -> HoldingAnalyticsService:
+    return HoldingAnalyticsService(SqlAlchemyPortfolioProvider(session), fx, market_data)
 
 
 def get_portfolio_ingest_service(
