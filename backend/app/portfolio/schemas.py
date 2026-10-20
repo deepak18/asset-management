@@ -88,6 +88,26 @@ class PortfolioSummary(BaseModel):
     base_currency: str = Field(min_length=3, max_length=3)
 
 
+class ClassificationSource(StrEnum):
+    MANUAL = "MANUAL"
+    PROVIDER = "PROVIDER"
+    NONE = "NONE"
+
+
+class DataGap(StrEnum):
+    """Missing facts a user can supply; provider price availability is separate."""
+
+    SECTOR = "SECTOR"
+    INDUSTRY = "INDUSTRY"
+    COST_BASIS = "COST_BASIS"
+    CURRENCY = "CURRENCY"
+    SPLIT_RATIO = "SPLIT_RATIO"
+    TICKER = "TICKER"
+    TRADE_DATE = "TRADE_DATE"
+    QUANTITY = "QUANTITY"
+    TRANSACTION = "TRANSACTION"
+
+
 class HoldingInfo(BaseModel):
     """A tracked security's classification metadata (provider output).
 
@@ -100,6 +120,18 @@ class HoldingInfo(BaseModel):
     ticker: str = Field(min_length=1)
     sector: str | None = None
     industry: str | None = None
+    classification_source: ClassificationSource = ClassificationSource.NONE
+    data_gaps: tuple[DataGap, ...] = ()
+
+    @model_validator(mode="after")
+    def _classification_gaps(self) -> HoldingInfo:
+        gaps = set(self.data_gaps) - {DataGap.SECTOR, DataGap.INDUSTRY}
+        if not self.sector:
+            gaps.add(DataGap.SECTOR)
+        if not self.industry:
+            gaps.add(DataGap.INDUSTRY)
+        object.__setattr__(self, "data_gaps", tuple(sorted(gaps)))
+        return self
 
 
 class AllocationWeight(BaseModel):
@@ -134,6 +166,8 @@ class CostBasisResult(BaseModel):
     dividends_base: Decimal
     fees_base: Decimal
     open_lots: tuple[OpenLot, ...]
+    classification_source: ClassificationSource = ClassificationSource.NONE
+    data_gaps: tuple[DataGap, ...] = ()
 
 
 class UnrealizedResult(BaseModel):
@@ -289,36 +323,42 @@ class PositionSnapshot(BaseModel):
     def _exactly_one_cost_basis(self) -> PositionSnapshot:
         """Require exactly one cost-basis form so the opening price is unambiguous."""
 
-        provided = (self.cost_basis_per_share is not None) + (
-            self.total_cost_basis is not None
-        )
+        provided = (self.cost_basis_per_share is not None) + (self.total_cost_basis is not None)
         if provided != 1:
-            raise ValueError(
-                "provide exactly one of 'cost_basis_per_share' or 'total_cost_basis'"
-            )
+            raise ValueError("provide exactly one of 'cost_basis_per_share' or 'total_cost_basis'")
         return self
 
 
 class HoldingClassificationUpdate(BaseModel):
     """Manual sector/industry override for one holding.
 
-    Both fields are optional so a caller can correct just one of them, but at
-    least one must be present — an empty body is a no-op request, not an
-    instruction to erase the classification. Clearing a value is deliberately not
-    expressible here: allocation grouping already represents "unknown" as the
-    ``UNCLASSIFIED`` bucket, so blanking a field has no separate meaning.
+    Omitted fields are preserved; explicit null clears a field. Every edit marks
+    the holding MANUAL, including clearing both fields.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     sector: str | None = Field(default=None, min_length=1, max_length=80)
     industry: str | None = Field(default=None, min_length=1, max_length=80)
 
     @model_validator(mode="after")
     def _at_least_one_field(self) -> HoldingClassificationUpdate:
-        if self.sector is None and self.industry is None:
+        if not self.model_fields_set:
             raise ValueError("provide at least one of 'sector' or 'industry'")
+        if any(value is not None and not value.strip() for value in (self.sector, self.industry)):
+            raise ValueError("use null to clear a field, not whitespace")
         return self
+
+
+class ClassificationFailureReason(StrEnum):
+    NO_PROFILE = "NO_PROFILE"
+    PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE"
+
+
+class ClassificationFailure(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    ticker: str
+    reason: ClassificationFailureReason
 
 
 class HoldingClassificationResult(BaseModel):
@@ -329,11 +369,15 @@ class HoldingClassificationResult(BaseModel):
     * ``classified`` — holdings that now carry a sector and/or industry.
     * ``unresolved`` — the provider returned nothing usable (unknown symbol,
       quota exhausted, upstream down). Retrying later may succeed.
-    * ``skipped``    — already classified, so no upstream call was spent on them.
+    * ``skipped`` — MANUAL or already carrying a classification; no lookup spent.
 
-    ``remaining`` reports how many unclassified holdings were left untouched
-    because the per-request ``limit`` was reached, so a caller knows to call again
-    rather than assuming the backfill is complete.
+    ``remaining`` counts eligible tickers after this batch, not unresolved lookups.
+    Continue with ``after_ticker=next_cursor`` using the same refresh policy until
+    it reaches zero. For unchanged holdings it strictly decreases along that
+    cursor chain, even on failure. Omitting the cursor starts a fresh sweep and
+    retries unresolved tickers; that sequence has no decreasing-count guarantee.
+    Repeats never create ledger events. Provider refreshes may change metadata as
+    upstream profiles change, so they are safe but not an immutable snapshot.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -343,6 +387,8 @@ class HoldingClassificationResult(BaseModel):
     unresolved: tuple[str, ...] = ()
     skipped: tuple[str, ...] = ()
     remaining: int = 0
+    next_cursor: str | None = None
+    failures: tuple[ClassificationFailure, ...] = ()
 
 
 class StatementFormat(StrEnum):
@@ -364,6 +410,7 @@ class ParsedStatement(BaseModel):
     source_format: StatementFormat
     transactions: tuple[Transaction, ...]
     warnings: tuple[str, ...] = ()
+    unresolved_items: tuple[ImportIssue, ...] = ()
 
 
 class LedgerIngestResult(BaseModel):
@@ -381,10 +428,10 @@ class LedgerIngestResult(BaseModel):
 class ImportStatus(StrEnum):
     """Lifecycle of an asynchronous statement import."""
 
-    PENDING = "PENDING"      # accepted + stored, not yet picked up
-    RUNNING = "RUNNING"      # actively parsing/inserting
+    PENDING = "PENDING"  # accepted + stored, not yet picked up
+    RUNNING = "RUNNING"  # actively parsing/inserting
     SUCCEEDED = "SUCCEEDED"  # finished; transactions are in the ledger
-    FAILED = "FAILED"        # aborted; see `error`
+    FAILED = "FAILED"  # aborted; see `error`
 
 
 class StatementImportStatus(BaseModel):
@@ -419,3 +466,53 @@ class StatementImportStatus(BaseModel):
     tickers: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
     error: str | None = None
+    history_complete: bool = False
+    retry_safe: bool = True
+    unresolved_items: tuple[UnresolvedItem, ...] = ()
+
+
+class UnresolvedKind(StrEnum):
+    SPLIT_RATIO_UNKNOWN = "SPLIT_RATIO_UNKNOWN"
+    TRANSFER_IN_NO_COST_BASIS = "TRANSFER_IN_NO_COST_BASIS"
+    MISSING_DATA = "MISSING_DATA"
+    UNSUPPORTED_ROW = "UNSUPPORTED_ROW"
+
+
+class ImportIssue(BaseModel):
+    """A source record requiring user review, independent of warning wording."""
+
+    model_config = ConfigDict(frozen=True)
+    kind: UnresolvedKind
+    source_line: int
+    ticker: str | None = None
+    trade_date: date | None = None
+    quantity: Decimal | None = None
+    currency: str | None = None
+    description: str = ""
+    code: str = ""
+    data_gaps: tuple[DataGap, ...] = ()
+
+
+class UnresolvedItem(ImportIssue):
+    id: int
+    import_id: int
+    portfolio_id: int
+    resolved: bool = False
+
+
+class UnresolvedResolution(BaseModel):
+    """Supply a split, transfer opening lot, or corrected transaction explicitly."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    transaction: Transaction | None = None
+    snapshot: PositionSnapshot | None = None
+
+    @model_validator(mode="after")
+    def _one_resolution(self) -> UnresolvedResolution:
+        if (self.transaction is None) == (self.snapshot is None):
+            raise ValueError("provide exactly one of transaction or snapshot")
+        return self
+
+
+ParsedStatement.model_rebuild()
+StatementImportStatus.model_rebuild()

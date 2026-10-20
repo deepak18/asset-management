@@ -16,11 +16,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.portfolio import models
 from app.portfolio.schemas import (
+    ClassificationSource,
     HoldingInfo,
     PortfolioCreate,
     PortfolioSummary,
     Transaction,
 )
+from app.providers.statement_import_store import SqlAlchemyStatementImportStore
 
 
 class SqlAlchemyPortfolioProvider:
@@ -77,8 +79,24 @@ class SqlAlchemyPortfolioProvider:
             .order_by(models.Holding.ticker)
         )
         rows = (await self._session.scalars(stmt)).all()
+        issues = await SqlAlchemyStatementImportStore(self._session).list_unresolved(portfolio_id)
         return [
-            HoldingInfo(ticker=row.ticker, sector=row.sector, industry=row.industry)
+            HoldingInfo(
+                ticker=row.ticker,
+                sector=row.sector,
+                industry=row.industry,
+                classification_source=ClassificationSource(row.classification_source),
+                data_gaps=tuple(
+                    sorted(
+                        {
+                            gap
+                            for item in issues
+                            if item.ticker == row.ticker
+                            for gap in item.data_gaps
+                        }
+                    )
+                ),
+            )
             for row in rows
         ]
 
@@ -90,24 +108,29 @@ class SqlAlchemyPortfolioProvider:
         row = (await self._session.scalars(stmt)).first()
         if row is None:
             return None
-        return HoldingInfo(ticker=row.ticker, sector=row.sector, industry=row.industry)
+        issues = await SqlAlchemyStatementImportStore(self._session).list_unresolved(portfolio_id)
+        return HoldingInfo(
+            ticker=row.ticker,
+            sector=row.sector,
+            industry=row.industry,
+            classification_source=ClassificationSource(row.classification_source),
+            data_gaps=tuple(
+                sorted(
+                    {gap for item in issues if item.ticker == row.ticker for gap in item.data_gaps}
+                )
+            ),
+        )
 
     # --- writes -----------------------------------------------------------
 
     async def create_portfolio(self, data: PortfolioCreate) -> PortfolioSummary:
-        row = models.Portfolio(
-            name=data.name, base_currency=data.base_currency.upper()
-        )
+        row = models.Portfolio(name=data.name, base_currency=data.base_currency.upper())
         self._session.add(row)
         await self._session.flush()  # assigns row.id
         await self._session.commit()
-        return PortfolioSummary(
-            id=row.id, name=row.name, base_currency=row.base_currency
-        )
+        return PortfolioSummary(id=row.id, name=row.name, base_currency=row.base_currency)
 
-    async def add_transactions(
-        self, portfolio_id: int, transactions: Sequence[Transaction]
-    ) -> int:
+    async def add_transactions(self, portfolio_id: int, transactions: Sequence[Transaction]) -> int:
         rows = [
             models.Transaction(
                 portfolio_id=portfolio_id,
@@ -133,6 +156,9 @@ class SqlAlchemyPortfolioProvider:
         ticker: str,
         sector: str | None = None,
         industry: str | None = None,
+        *,
+        classification_source: ClassificationSource | None = None,
+        clear_fields: tuple[str, ...] = (),
     ) -> None:
         stmt = select(models.Holding).where(
             models.Holding.portfolio_id == portfolio_id,
@@ -146,6 +172,14 @@ class SqlAlchemyPortfolioProvider:
                     ticker=ticker,
                     sector=sector,
                     industry=industry,
+                    classification_source=(
+                        classification_source
+                        or (
+                            ClassificationSource.MANUAL
+                            if sector or industry
+                            else ClassificationSource.NONE
+                        )
+                    ).value,
                 )
             )
         else:
@@ -154,4 +188,12 @@ class SqlAlchemyPortfolioProvider:
                 existing.sector = sector
             if industry is not None:
                 existing.industry = industry
+            if "sector" in clear_fields:
+                existing.sector = None
+            if "industry" in clear_fields:
+                existing.industry = None
+            if classification_source is not None:
+                existing.classification_source = classification_source.value
+            elif sector is not None or industry is not None:
+                existing.classification_source = ClassificationSource.MANUAL.value
         await self._session.commit()

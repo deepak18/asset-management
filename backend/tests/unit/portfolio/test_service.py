@@ -15,6 +15,8 @@ from app.core.currency import FxRateTable
 from app.marketdata.errors import MarketDataUnavailableError
 from app.marketdata.schemas import MarketDataProvenance, Quote
 from app.portfolio.schemas import (
+    ClassificationSource,
+    DataGap,
     HoldingInfo,
     MoneyWeightedReturnStatus,
     PortfolioSummary,
@@ -40,11 +42,17 @@ class FakePortfolioProvider:
     async def get_portfolio(self, portfolio_id: int) -> PortfolioSummary | None:
         return self._summary
 
+    async def list_portfolios(self) -> list[PortfolioSummary]:
+        return [self._summary] if self._summary is not None else []
+
     async def list_transactions(self, portfolio_id: int) -> list[Transaction]:
         return self._transactions
 
     async def list_holdings(self, portfolio_id: int) -> list[HoldingInfo]:
         return self._holdings
+
+    async def get_holding(self, portfolio_id: int, ticker: str) -> HoldingInfo | None:
+        return next((h for h in self._holdings if h.ticker == ticker.upper()), None)
 
 
 class FakeMarketData:
@@ -80,9 +88,11 @@ class FakeMarketData:
         return None
 
 
-def _txn(type_: TransactionType, month: int, day: int, **kwargs: Decimal) -> Transaction:
+def _txn(
+    type_: TransactionType, month: int, day: int, *, ticker: str = "AAPL", **kwargs: Decimal
+) -> Transaction:
     return Transaction(
-        ticker=str(kwargs.pop("ticker", "AAPL")),
+        ticker=ticker,
         type=type_,
         trade_date=date(2026, month, day),
         currency="USD",
@@ -158,6 +168,7 @@ async def test_fully_closed_book_needs_no_terminal_value(usd_only_fx: FxRateTabl
     assert analytics.money_weighted_return is not None
     # Bought at 100, sold at 110 roughly half a year later -> strongly positive.
     assert analytics.money_weighted_return > Decimal("0")
+    assert analytics.unpriced_tickers == ()
 
 
 async def test_terminal_market_value_makes_buy_only_xirr_computable(
@@ -239,7 +250,7 @@ async def test_without_market_data_market_fields_are_empty(usd_only_fx: FxRateTa
     assert analytics.unrealized_pnl_base is None
     assert analytics.positions_unrealized == ()
     assert analytics.allocation_by_ticker == ()
-    assert analytics.unpriced_tickers == ()
+    assert analytics.unpriced_tickers == ("AAPL",)
 
 
 async def test_market_values_and_allocations_are_computed(usd_only_fx: FxRateTable) -> None:
@@ -300,3 +311,22 @@ async def test_market_data_unavailable_degrades_to_unpriced(usd_only_fx: FxRateT
     # A rate-limited/unreachable upstream must not 500 the analytics call.
     assert analytics.unpriced_tickers == ("AAPL",)
     assert analytics.market_value_base is None
+
+
+async def test_position_gaps_are_user_fixable_not_missing_prices(usd_only_fx: FxRateTable) -> None:
+    summary = PortfolioSummary(id=1, name="Main", base_currency="USD")
+    transactions = [_txn(TransactionType.BUY, 1, 1, quantity=Decimal("10"), price=Decimal("100"))]
+    holding = HoldingInfo(
+        ticker="AAPL", sector="Tech", classification_source=ClassificationSource.MANUAL,
+        data_gaps=(DataGap.COST_BASIS, DataGap.CURRENCY),
+    )
+    service = PortfolioService(FakePortfolioProvider(summary, transactions, [holding]), usd_only_fx)
+
+    analytics = await service.get_analytics(1)
+
+    assert analytics is not None
+    position = analytics.positions[0]
+    assert position.classification_source == ClassificationSource.MANUAL
+    assert set(position.data_gaps) == {DataGap.INDUSTRY, DataGap.COST_BASIS, DataGap.CURRENCY}
+    assert analytics.unpriced_tickers == ("AAPL",)
+    assert "PRICE" not in DataGap.__members__

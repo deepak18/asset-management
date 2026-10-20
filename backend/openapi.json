@@ -264,6 +264,121 @@
         }
       }
     },
+    "/api/v1/portfolios/{portfolio_id}/holdings/{ticker}": {
+      "get": {
+        "tags": [
+          "Portfolio"
+        ],
+        "summary": "Get Holding",
+        "description": "Return a single holding, including provenance and user-correctable gaps.",
+        "operationId": "get_holding_api_v1_portfolios__portfolio_id__holdings__ticker__get",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          },
+          {
+            "name": "ticker",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ticker"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldingInfo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Holding absent"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Portfolio"
+        ],
+        "summary": "Update Holding Classification",
+        "description": "Manually set a holding's sector and/or industry (404 if it isn't held).\n\nThe manual path intentionally does not depend on market data: classification\nmust stay editable when the provider is unconfigured, rate-limited, or simply\nwrong about a symbol.\n\nOmission preserves a field; explicit null clears it. Always sets source MANUAL.\nCommits before returning: the next analytics GET uses the new grouping labels,\nwith allocation weights computed on read when prices are available.",
+        "operationId": "update_holding_classification_api_v1_portfolios__portfolio_id__holdings__ticker__patch",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          },
+          {
+            "name": "ticker",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ticker"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HoldingClassificationUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldingInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/portfolios/{portfolio_id}/analytics": {
       "get": {
         "tags": [
@@ -370,7 +485,7 @@
           "Portfolio"
         ],
         "summary": "Classify Holdings",
-        "description": "Backfill sector/industry for this portfolio's holdings from company profiles.\n\nA broker statement carries no classification data, so imported holdings start\nunclassified and the allocation breakdown groups them under ``UNCLASSIFIED``.\nThis fills them in from the market-data provider.\n\nAlready-classified holdings are skipped (so hand-entered labels survive) unless\n``refresh=true``. At most ``limit`` tickers are processed per call to bound both\nrequest time and free-tier quota use; repeat while ``remaining`` is non-zero.\n\nResponds ``503`` when no market-data provider is configured \u2014 the remedy is an\nAPI key, not a retry.",
+        "description": "Backfill sector/industry for this portfolio's holdings from company profiles.\n\nA broker statement carries no classification data, so imported holdings start\nunclassified and the allocation breakdown groups them under ``UNCLASSIFIED``.\nThis fills them in from the market-data provider.\n\nMANUAL holdings (including manually cleared ones) and already-classified\nholdings are skipped unless ``refresh=true``. Process at most ``limit`` tickers.\nContinue with ``after_ticker=next_cursor`` until ``remaining=0``. Remaining\nstrictly decreases along that cursor chain for an unchanged portfolio, even\nwhen lookups fail; repeating without a cursor has no such guarantee.\nUnresolved tickers are retried on a new sweep. Repeating a request is safe:\nit changes metadata only, never creates ledger events or duplicate holdings.\n\nResponds ``503`` when no market-data provider is configured \u2014 the remedy is an\nURL/key configuration, not a retry. Quota exhaustion or upstream outages\ninstead return 200 with per-ticker ``PROVIDER_UNAVAILABLE`` failures (retry\nlater). ``NO_PROFILE`` means no usable taxonomy was returned; manual entry\nremains available. No classification failure is treated as permanently final.",
         "operationId": "classify_holdings_api_v1_portfolios__portfolio_id__holdings_classify_post",
         "parameters": [
           {
@@ -403,6 +518,24 @@
               "default": 25,
               "title": "Limit"
             }
+          },
+          {
+            "name": "after_ticker",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Pass next_cursor to advance past successful and unresolved tickers",
+              "title": "After Ticker"
+            },
+            "description": "Pass next_cursor to advance past successful and unresolved tickers"
           }
         ],
         "responses": {
@@ -416,67 +549,8 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/portfolios/{portfolio_id}/holdings/{ticker}": {
-      "patch": {
-        "tags": [
-          "Portfolio"
-        ],
-        "summary": "Update Holding Classification",
-        "description": "Manually set a holding's sector and/or industry (404 if it isn't held).\n\nThe manual path intentionally does not depend on market data: classification\nmust stay editable when the provider is unconfigured, rate-limited, or simply\nwrong about a symbol.",
-        "operationId": "update_holding_classification_api_v1_portfolios__portfolio_id__holdings__ticker__patch",
-        "parameters": [
-          {
-            "name": "portfolio_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Portfolio Id"
-            }
-          },
-          {
-            "name": "ticker",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Ticker"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/HoldingClassificationUpdate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HoldingInfo"
-                }
-              }
-            }
+          "503": {
+            "description": "Market-data provider not configured"
           },
           "422": {
             "description": "Validation Error",
@@ -527,6 +601,18 @@
               "default": false,
               "title": "Allow Duplicate"
             }
+          },
+          {
+            "name": "history_complete",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Confirm complete opening history to enable conservative split inference",
+              "default": false,
+              "title": "History Complete"
+            },
+            "description": "Confirm complete opening history to enable conservative split inference"
           }
         ],
         "requestBody": {
@@ -604,6 +690,175 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/imports/{job_id}/retry": {
+      "post": {
+        "tags": [
+          "Portfolio"
+        ],
+        "summary": "Retry Import",
+        "description": "Re-run a failed import from retained bytes; remove only its owned partial rows.",
+        "operationId": "retry_import_api_v1_portfolios__portfolio_id__imports__job_id__retry_post",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          },
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatementImportStatus"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Import absent"
+          },
+          "409": {
+            "description": "Not safely retryable"
+          },
+          "422": {
+            "description": "Stored bytes unavailable or corrupt"
+          }
+        }
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/unresolved": {
+      "get": {
+        "tags": [
+          "Portfolio"
+        ],
+        "summary": "List Unresolved",
+        "description": "List structured source items requiring user review across successful imports.",
+        "operationId": "list_unresolved_api_v1_portfolios__portfolio_id__unresolved_get",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          },
+          {
+            "name": "include_resolved",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Resolved"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UnresolvedItem"
+                  },
+                  "title": "Response List Unresolved Api V1 Portfolios  Portfolio Id  Unresolved Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/unresolved/{item_id}/resolve": {
+      "post": {
+        "tags": [
+          "Portfolio"
+        ],
+        "summary": "Resolve Unresolved",
+        "description": "Write a user correction and resolve its item atomically; duplicate resolution is rejected.",
+        "operationId": "resolve_unresolved_api_v1_portfolios__portfolio_id__unresolved__item_id__resolve_post",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnresolvedResolution"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnresolvedItem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Item absent"
+          },
+          "409": {
+            "description": "Item already resolved"
+          },
+          "422": {
+            "description": "Invalid correction"
           }
         }
       }
@@ -729,6 +984,40 @@
         ],
         "title": "Body_create_import_api_v1_portfolios__portfolio_id__imports_post"
       },
+      "ClassificationFailure": {
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "title": "Ticker"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/ClassificationFailureReason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ticker",
+          "reason"
+        ],
+        "title": "ClassificationFailure"
+      },
+      "ClassificationFailureReason": {
+        "type": "string",
+        "enum": [
+          "NO_PROFILE",
+          "PROVIDER_UNAVAILABLE"
+        ],
+        "title": "ClassificationFailureReason"
+      },
+      "ClassificationSource": {
+        "type": "string",
+        "enum": [
+          "MANUAL",
+          "PROVIDER",
+          "NONE"
+        ],
+        "title": "ClassificationSource"
+      },
       "CostBasisResult": {
         "properties": {
           "ticker": {
@@ -766,6 +1055,18 @@
             },
             "type": "array",
             "title": "Open Lots"
+          },
+          "classification_source": {
+            "$ref": "#/components/schemas/ClassificationSource",
+            "default": "NONE"
+          },
+          "data_gaps": {
+            "items": {
+              "$ref": "#/components/schemas/DataGap"
+            },
+            "type": "array",
+            "title": "Data Gaps",
+            "default": []
           }
         },
         "type": "object",
@@ -780,6 +1081,22 @@
         ],
         "title": "CostBasisResult",
         "description": "Outcome of replaying a ticker's ledger under FIFO lot accounting."
+      },
+      "DataGap": {
+        "type": "string",
+        "enum": [
+          "SECTOR",
+          "INDUSTRY",
+          "COST_BASIS",
+          "CURRENCY",
+          "SPLIT_RATIO",
+          "TICKER",
+          "TRADE_DATE",
+          "QUANTITY",
+          "TRANSACTION"
+        ],
+        "title": "DataGap",
+        "description": "Missing facts a user can supply; provider price availability is separate."
       },
       "HTTPValidationError": {
         "properties": {
@@ -828,6 +1145,25 @@
             "type": "integer",
             "title": "Remaining",
             "default": 0
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "failures": {
+            "items": {
+              "$ref": "#/components/schemas/ClassificationFailure"
+            },
+            "type": "array",
+            "title": "Failures",
+            "default": []
           }
         },
         "type": "object",
@@ -835,7 +1171,7 @@
           "portfolio_id"
         ],
         "title": "HoldingClassificationResult",
-        "description": "Outcome of backfilling holdings' sector/industry from company profiles.\n\nSplit three ways so the caller can tell progress from failure:\n\n* ``classified`` \u2014 holdings that now carry a sector and/or industry.\n* ``unresolved`` \u2014 the provider returned nothing usable (unknown symbol,\n  quota exhausted, upstream down). Retrying later may succeed.\n* ``skipped``    \u2014 already classified, so no upstream call was spent on them.\n\n``remaining`` reports how many unclassified holdings were left untouched\nbecause the per-request ``limit`` was reached, so a caller knows to call again\nrather than assuming the backfill is complete."
+        "description": "Outcome of backfilling holdings' sector/industry from company profiles.\n\nSplit three ways so the caller can tell progress from failure:\n\n* ``classified`` \u2014 holdings that now carry a sector and/or industry.\n* ``unresolved`` \u2014 the provider returned nothing usable (unknown symbol,\n  quota exhausted, upstream down). Retrying later may succeed.\n* ``skipped`` \u2014 MANUAL or already carrying a classification; no lookup spent.\n\n``remaining`` counts eligible tickers after this batch, not unresolved lookups.\nContinue with ``after_ticker=next_cursor`` using the same refresh policy until\nit reaches zero. For unchanged holdings it strictly decreases along that\ncursor chain, even on failure. Omitting the cursor starts a fresh sweep and\nretries unresolved tickers; that sequence has no decreasing-count guarantee.\nRepeats never create ledger events. Provider refreshes may change metadata as\nupstream profiles change, so they are safe but not an immutable snapshot."
       },
       "HoldingClassificationUpdate": {
         "properties": {
@@ -866,9 +1202,10 @@
             "title": "Industry"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "HoldingClassificationUpdate",
-        "description": "Manual sector/industry override for one holding.\n\nBoth fields are optional so a caller can correct just one of them, but at\nleast one must be present \u2014 an empty body is a no-op request, not an\ninstruction to erase the classification. Clearing a value is deliberately not\nexpressible here: allocation grouping already represents \"unknown\" as the\n``UNCLASSIFIED`` bucket, so blanking a field has no separate meaning."
+        "description": "Manual sector/industry override for one holding.\n\nOmitted fields are preserved; explicit null clears a field. Every edit marks\nthe holding MANUAL, including clearing both fields."
       },
       "HoldingInfo": {
         "properties": {
@@ -898,6 +1235,18 @@
               }
             ],
             "title": "Industry"
+          },
+          "classification_source": {
+            "$ref": "#/components/schemas/ClassificationSource",
+            "default": "NONE"
+          },
+          "data_gaps": {
+            "items": {
+              "$ref": "#/components/schemas/DataGap"
+            },
+            "type": "array",
+            "title": "Data Gaps",
+            "default": []
           }
         },
         "type": "object",
@@ -1410,6 +1759,24 @@
               }
             ],
             "title": "Error"
+          },
+          "history_complete": {
+            "type": "boolean",
+            "title": "History Complete",
+            "default": false
+          },
+          "retry_safe": {
+            "type": "boolean",
+            "title": "Retry Safe",
+            "default": true
+          },
+          "unresolved_items": {
+            "items": {
+              "$ref": "#/components/schemas/UnresolvedItem"
+            },
+            "type": "array",
+            "title": "Unresolved Items",
+            "default": []
           }
         },
         "type": "object",
@@ -1678,6 +2045,145 @@
         ],
         "title": "UnrealizedResult",
         "description": "Mark-to-market of open lots against a current price."
+      },
+      "UnresolvedItem": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/UnresolvedKind"
+          },
+          "source_line": {
+            "type": "integer",
+            "title": "Source Line"
+          },
+          "ticker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticker"
+          },
+          "trade_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trade Date"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "default": ""
+          },
+          "data_gaps": {
+            "items": {
+              "$ref": "#/components/schemas/DataGap"
+            },
+            "type": "array",
+            "title": "Data Gaps",
+            "default": []
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "import_id": {
+            "type": "integer",
+            "title": "Import Id"
+          },
+          "portfolio_id": {
+            "type": "integer",
+            "title": "Portfolio Id"
+          },
+          "resolved": {
+            "type": "boolean",
+            "title": "Resolved",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "source_line",
+          "id",
+          "import_id",
+          "portfolio_id"
+        ],
+        "title": "UnresolvedItem"
+      },
+      "UnresolvedKind": {
+        "type": "string",
+        "enum": [
+          "SPLIT_RATIO_UNKNOWN",
+          "TRANSFER_IN_NO_COST_BASIS",
+          "MISSING_DATA",
+          "UNSUPPORTED_ROW"
+        ],
+        "title": "UnresolvedKind"
+      },
+      "UnresolvedResolution": {
+        "properties": {
+          "transaction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Transaction-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PositionSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "UnresolvedResolution",
+        "description": "Supply a split, transfer opening lot, or corrected transaction explicitly."
       },
       "ValidationError": {
         "properties": {

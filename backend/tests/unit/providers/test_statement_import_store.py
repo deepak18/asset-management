@@ -111,14 +111,15 @@ async def test_mark_failed_records_reason(async_session: AsyncSession) -> None:
     assert job.error == "boom"
 
 
-async def test_find_completed_by_checksum_only_matches_succeeded(
+async def test_checksum_blocks_pending_and_succeeded_uploads(
     async_session: AsyncSession,
 ) -> None:
     store = SqlAlchemyStatementImportStore(async_session)
     job_id = await _new_job(store, checksum="deadbeef")
 
-    # Still pending -> not a duplicate blocker yet.
-    assert await store.find_completed_by_checksum(1, "deadbeef") is None
+    # Concurrent or interrupted uploads must not silently duplicate partial rows.
+    pending = await store.find_completed_by_checksum(1, "deadbeef")
+    assert pending is not None and pending.id == job_id
 
     await store.mark_succeeded(job_id, 1, ["AAPL"], [])
     found = await store.find_completed_by_checksum(1, "deadbeef")

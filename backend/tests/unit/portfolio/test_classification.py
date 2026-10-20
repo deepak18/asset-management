@@ -15,7 +15,7 @@ import pytest
 from app.marketdata.errors import MarketDataUnavailableError
 from app.marketdata.schemas import CompanyProfile, MarketDataProvenance
 from app.portfolio.classification import HoldingClassificationService
-from app.portfolio.schemas import HoldingInfo, PortfolioSummary
+from app.portfolio.schemas import ClassificationSource, DataGap, HoldingInfo, PortfolioSummary
 
 _PROVENANCE = MarketDataProvenance(
     provider_code="ALPHAVANTAGE",
@@ -48,14 +48,23 @@ class _FakeHoldings:
         ticker: str,
         sector: str | None = None,
         industry: str | None = None,
+        *,
+        classification_source: ClassificationSource | None = None,
+        clear_fields: tuple[str, ...] = (),
     ) -> None:
         prev = self.holdings.get(ticker)
         self.holdings[ticker] = HoldingInfo(
             ticker=ticker,
-            sector=sector if sector is not None else (prev.sector if prev else None),
-            industry=(
-                industry if industry is not None else (prev.industry if prev else None)
+            classification_source=classification_source or ClassificationSource.NONE,
+            sector=(
+                None if "sector" in clear_fields
+                else sector if sector is not None else (prev.sector if prev else None)
             ),
+            industry=(
+                None if "industry" in clear_fields
+                else industry if industry is not None else (prev.industry if prev else None)
+            ),
+            data_gaps=prev.data_gaps if prev else (),
         )
 
 
@@ -168,9 +177,7 @@ async def test_upstream_failure_degrades_one_ticker_not_the_batch() -> None:
     """A rate-limited provider must not abort the tickers it could still answer."""
 
     holdings = _FakeHoldings([HoldingInfo(ticker="AAA"), HoldingInfo(ticker="BBB")])
-    profiles = _FakeProfiles(
-        {"BBB": _profile("BBB", "Energy", "Oil")}, failing={"AAA"}
-    )
+    profiles = _FakeProfiles({"BBB": _profile("BBB", "Energy", "Oil")}, failing={"AAA"})
 
     result = await _service(holdings, profiles).classify(1)
 
@@ -183,9 +190,7 @@ async def test_limit_bounds_work_and_reports_remaining() -> None:
     """Quota and request time are both bounded; the caller is told to come back."""
 
     holdings = _FakeHoldings([HoldingInfo(ticker=t) for t in ("AAA", "BBB", "CCC")])
-    profiles = _FakeProfiles(
-        {t: _profile(t, "Sector", "Industry") for t in ("AAA", "BBB", "CCC")}
-    )
+    profiles = _FakeProfiles({t: _profile(t, "Sector", "Industry") for t in ("AAA", "BBB", "CCC")})
 
     result = await _service(holdings, profiles).classify(1, limit=2)
 
@@ -198,9 +203,7 @@ async def test_limit_bounds_work_and_reports_remaining() -> None:
 @pytest.mark.parametrize("limit", [1, 5])
 async def test_repeated_calls_converge_to_zero_remaining(limit: int) -> None:
     holdings = _FakeHoldings([HoldingInfo(ticker=t) for t in ("AAA", "BBB", "CCC")])
-    profiles = _FakeProfiles(
-        {t: _profile(t, "Sector", "Industry") for t in ("AAA", "BBB", "CCC")}
-    )
+    profiles = _FakeProfiles({t: _profile(t, "Sector", "Industry") for t in ("AAA", "BBB", "CCC")})
     service = _service(holdings, profiles)
 
     remaining = None
@@ -213,4 +216,96 @@ async def test_repeated_calls_converge_to_zero_remaining(limit: int) -> None:
 
     assert remaining == 0
     assert all(h.sector == "Sector" for h in holdings.holdings.values())
+
+
+@pytest.mark.parametrize("refresh", [False, True])
+async def test_cursor_advances_past_permanent_failures(refresh: bool) -> None:
+    holdings = _FakeHoldings([HoldingInfo(ticker=t) for t in ("AAA", "BBB", "CCC")])
+    profiles = _FakeProfiles({}, failing={"AAA", "BBB", "CCC"})
+    service = _service(holdings, profiles)
+    first = await service.classify(1, limit=1, refresh=refresh)
+    assert first is not None and first.remaining == 2 and first.next_cursor == "AAA"
+    second = await service.classify(1, limit=1, refresh=refresh, after_ticker=first.next_cursor)
+    assert second is not None and second.remaining == 1 and second.next_cursor == "BBB"
+    third = await service.classify(1, limit=1, refresh=refresh, after_ticker=second.next_cursor)
+    assert third is not None and third.remaining == 0 and third.next_cursor is None
+    assert profiles.requested == ["AAA", "BBB", "CCC"]
+    assert third.failures[0].reason == "PROVIDER_UNAVAILABLE"
+    # A new sweep explicitly retries; a continuation never loops on AAA.
+    await service.classify(1, limit=1)
+    assert profiles.requested[-1] == "AAA"
+
+
+async def test_manual_empty_classification_is_protected_until_refresh() -> None:
+    holdings = _FakeHoldings(
+        [HoldingInfo(ticker="AAA", classification_source=ClassificationSource.MANUAL)]
+    )
+    profiles = _FakeProfiles({"AAA": _profile("AAA", "Vendor", "Industry")})
+    service = _service(holdings, profiles)
+    first = await service.classify(1)
+    assert first is not None and first.skipped == ("AAA",)
+    assert profiles.requested == []
+    refreshed = await service.classify(1, refresh=True)
+    assert refreshed is not None
+    assert holdings.holdings["AAA"].classification_source == ClassificationSource.PROVIDER
+
+
+@pytest.mark.parametrize(
+    ("sector", "industry", "gap"),
+    [("Vendor", None, "INDUSTRY"), (None, "Vendor", "SECTOR")],
+)
+async def test_refresh_replaces_manual_taxonomy_with_partial_profile(
+    sector: str | None, industry: str | None, gap: str
+) -> None:
+    holdings = _FakeHoldings([
+        HoldingInfo(
+            ticker="AAA", sector="Manual sector", industry="Manual industry",
+            classification_source=ClassificationSource.MANUAL,
+            data_gaps=(DataGap.COST_BASIS,),
+        )
+    ])
+    profiles = _FakeProfiles({"AAA": _profile("AAA", sector, industry)})
+    result = await _service(holdings, profiles).classify(1, refresh=True)
+
+    assert result is not None
+    holding = holdings.holdings["AAA"]
+    assert result.classified == (holding,)
+    assert holding.sector == sector and holding.industry == industry
+    assert holding.classification_source == ClassificationSource.PROVIDER
+    assert set(holding.data_gaps) == {"COST_BASIS", gap}
+
+
+@pytest.mark.parametrize("unavailable", [False, True])
+async def test_unsuccessful_refresh_preserves_manual_labels(unavailable: bool) -> None:
+    original = HoldingInfo(
+        ticker="AAA", sector="Manual", classification_source=ClassificationSource.MANUAL
+    )
+    holdings = _FakeHoldings([original])
+    profiles = _FakeProfiles({}, failing={"AAA"} if unavailable else set())
+    result = await _service(holdings, profiles).classify(1, refresh=True)
+
+    assert result is not None and result.unresolved == ("AAA",)
+    assert holdings.holdings["AAA"] == original
+
+
+async def test_repeat_classification_is_safe_and_avoids_successful_lookups() -> None:
+    holdings = _FakeHoldings([HoldingInfo(ticker="AAA"), HoldingInfo(ticker="ZZZ")])
+    profiles = _FakeProfiles({"AAA": _profile("AAA", "Vendor", "Industry")})
+    service = _service(holdings, profiles)
+    await service.classify(1)
+    original = holdings.holdings.copy()
+    repeated = await service.classify(1)
+
+    assert repeated is not None and repeated.skipped == ("AAA",)
+    assert repeated.unresolved == ("ZZZ",) and repeated.remaining == 0
+    assert profiles.requested == ["AAA", "ZZZ", "ZZZ"]
+    assert holdings.holdings == original
+
+
+@pytest.mark.parametrize("limit", [0, -1])
+async def test_invalid_limit_is_rejected(limit: int) -> None:
+    profiles = _FakeProfiles({})
+    with pytest.raises(ValueError, match="limit must be positive"):
+        await _service(_FakeHoldings([]), profiles).classify(1, limit=limit)
+    assert profiles.requested == []
 

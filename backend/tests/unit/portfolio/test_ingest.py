@@ -17,6 +17,7 @@ from app.core.currency import FxRateTable
 from app.portfolio.calculators import cost_basis_fifo
 from app.portfolio.ingest import PortfolioIngestService, snapshot_to_opening_buy
 from app.portfolio.schemas import (
+    ClassificationSource,
     HoldingClassificationUpdate,
     HoldingInfo,
     PortfolioCreate,
@@ -69,22 +70,27 @@ class _FakeProvider:
         ticker: str,
         sector: str | None = None,
         industry: str | None = None,
+        *,
+        classification_source: ClassificationSource | None = None,
+        clear_fields: tuple[str, ...] = (),
     ) -> None:
         # Mirrors the real provider: a None field never blanks a stored value.
         prev = self.holdings.get((portfolio_id, ticker))
         self.holdings[(portfolio_id, ticker)] = HoldingInfo(
             ticker=ticker,
+            classification_source=classification_source or ClassificationSource.NONE,
             sector=sector if sector is not None else (prev.sector if prev else None),
-            industry=(
-                industry if industry is not None else (prev.industry if prev else None)
-            ),
+            industry=(industry if industry is not None else (prev.industry if prev else None)),
         )
 
 
 def test_snapshot_total_cost_basis_derives_price() -> None:
     snap = PositionSnapshot(
-        ticker="aapl", quantity=Decimal("10"), currency="USD",
-        as_of=date(2020, 1, 1), total_cost_basis=Decimal("1500"),
+        ticker="aapl",
+        quantity=Decimal("10"),
+        currency="USD",
+        as_of=date(2020, 1, 1),
+        total_cost_basis=Decimal("1500"),
     )
     buy = snapshot_to_opening_buy(snap)
     assert buy.type is TransactionType.BUY
@@ -100,8 +106,11 @@ def test_snapshot_total_cost_basis_derives_price() -> None:
 
 def test_snapshot_per_share_used_directly() -> None:
     snap = PositionSnapshot(
-        ticker="MSFT", quantity=Decimal("3"), currency="USD",
-        as_of=date(2019, 5, 5), cost_basis_per_share=Decimal("90"),
+        ticker="MSFT",
+        quantity=Decimal("3"),
+        currency="USD",
+        as_of=date(2019, 5, 5),
+        cost_basis_per_share=Decimal("90"),
     )
     assert snapshot_to_opening_buy(snap).price == Decimal("90")
 
@@ -114,9 +123,13 @@ async def test_add_snapshots_records_lots_and_holdings() -> None:
         1,
         [
             PositionSnapshot(
-                ticker="AAPL", quantity=Decimal("10"), currency="USD",
-                as_of=date(2020, 1, 1), total_cost_basis=Decimal("1000"),
-                sector="Tech", industry="Hardware",
+                ticker="AAPL",
+                quantity=Decimal("10"),
+                currency="USD",
+                as_of=date(2020, 1, 1),
+                total_cost_basis=Decimal("1000"),
+                sector="Tech",
+                industry="Hardware",
             )
         ],
     )
@@ -157,9 +170,7 @@ async def test_manual_classification_on_unheld_ticker_returns_none() -> None:
     provider = _FakeProvider({1: PortfolioSummary(id=1, name="M", base_currency="USD")})
     service = PortfolioIngestService(writer=provider, reader=provider)
 
-    result = await service.set_classification(
-        1, "TYPO", HoldingClassificationUpdate(sector="Tech")
-    )
+    result = await service.set_classification(1, "TYPO", HoldingClassificationUpdate(sector="Tech"))
 
     assert result is None
     assert provider.holdings == {}
@@ -170,5 +181,3 @@ def test_classification_update_requires_at_least_one_field() -> None:
 
     with pytest.raises(ValidationError):
         HoldingClassificationUpdate()
-
-

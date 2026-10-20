@@ -17,11 +17,14 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from app.portfolio.schemas import (
+    ClassificationSource,
     HoldingInfo,
+    ImportIssue,
     PortfolioCreate,
     PortfolioSummary,
     StatementImportStatus,
     Transaction,
+    UnresolvedItem,
 )
 
 
@@ -66,9 +69,7 @@ class PortfolioWriter(Protocol):
         """Persist a new empty portfolio and return its assigned identity."""
         ...
 
-    async def add_transactions(
-        self, portfolio_id: int, transactions: Sequence[Transaction]
-    ) -> int:
+    async def add_transactions(self, portfolio_id: int, transactions: Sequence[Transaction]) -> int:
         """Append ledger events, returning how many were written."""
         ...
 
@@ -78,6 +79,9 @@ class PortfolioWriter(Protocol):
         ticker: str,
         sector: str | None = None,
         industry: str | None = None,
+        *,
+        classification_source: ClassificationSource | None = None,
+        clear_fields: tuple[str, ...] = (),
     ) -> None:
         """Create or update a holding's classification metadata (idempotent by ticker).
 
@@ -103,6 +107,7 @@ class StatementImportStore(Protocol):
         storage_key: str,
         checksum: str,
         size_bytes: int,
+        history_complete: bool = False,
     ) -> StatementImportStatus:
         """Record a newly accepted upload in the ``PENDING`` state."""
         ...
@@ -139,10 +144,37 @@ class StatementImportStore(Protocol):
         created_transactions: int,
         tickers: list[str],
         warnings: list[str],
+        unresolved_items: Sequence[ImportIssue] = (),
     ) -> None:
         """Transition a job to ``SUCCEEDED`` with its final counts + diagnostics."""
         ...
 
     async def mark_failed(self, job_id: int, error: str) -> None:
         """Transition a job to ``FAILED`` with a human-readable reason."""
+        ...
+
+    async def claim_job(self, job_id: int) -> bool:
+        """Atomically claim a pending job; duplicate runners must not write."""
+        ...
+
+    async def append_batch(self, job_id: int, transactions: Sequence[Transaction]) -> int:
+        """Commit owned events, holding rows and progress together."""
+        ...
+
+    async def reconcile_interrupted(self) -> int:
+        """Mark orphaned pending/running jobs failed at single-process startup."""
+        ...
+
+    async def reset_failed(self, portfolio_id: int, job_id: int) -> StatementImportStatus | None:
+        """Delete only owned partial rows and queue a failed job atomically."""
+        ...
+
+    async def list_unresolved(
+        self, portfolio_id: int, include_resolved: bool = False
+    ) -> list[UnresolvedItem]: ...
+
+    async def resolve_item(
+        self, portfolio_id: int, item_id: int, transaction: Transaction
+    ) -> UnresolvedItem | None:
+        """Atomically insert one correction and mark its source item resolved."""
         ...

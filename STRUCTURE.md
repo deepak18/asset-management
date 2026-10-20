@@ -46,10 +46,11 @@ backend/
 │       ├── 0001_initial_portfolio_schema.py  # ✅ Creates portfolios/holdings/transactions/cash_balances
 │       ├── 0002_enable_pgvector.py            # ✅ Enables pgvector extension (Postgres-only, no-op on SQLite)
 │       ├── 0003_market_data_cache.py          # ✅ Creates market_data_cache (read-through cache table)
-│       └── 0004_statement_imports.py          # ✅ Creates statement_imports (async import job metadata/progress; checksum indexed)
+│       ├── 0004_statement_imports.py          # ✅ Creates statement_imports (async import job metadata/progress; checksum indexed)
+│       └── 0005_import_recovery_and_provenance.py # ✅ Adds classification provenance (legacy labels → MANUAL), import ownership, retry safety, and unresolved records
 ├── tests/                     # 🟡 pytest suites — mirrors app/ layout one-to-one (see AGENTS.md §11)
 │   ├── conftest.py            # ✅ Shared fixtures (FX rate tables + in-memory async SQLite session)
-│   ├── test_migrations.py     # ✅ Alembic upgrade/downgrade + model-vs-migration column drift guard
+│   ├── test_migrations.py     # ✅ Alembic upgrade/downgrade, column drift guard, populated legacy provenance/retry-safety backfill
 │   ├── factories/             # ⬜ Fixture builders (portfolios, transactions, filings, documents)
 │   ├── unit/                  # 🟡 Pure/isolated tests — all provider boundaries mocked
     │   │   ├── core/             # ✅ currency (FX normalization) + config edge cases + engine factory
@@ -61,14 +62,16 @@ backend/
     │   │   │   ├── test_cost_basis.py # ✅ FIFO realized/unrealized, splits, dividends, fees, mixed-ccy
     │   │   │   ├── test_ingest.py      # ✅ snapshot→opening-BUY, holding upsert, missing-portfolio None (faked provider)
     │   │   │   ├── test_imports.py     # ✅ async pipeline: accept→PENDING, background process→SUCCEEDED, per-batch progress, duplicate 409/override, failure recorded not raised
-    │   │   │   ├── test_service.py    # ✅ service orchestration (grouping, roll-ups, XIRR terminal value + status enum, market values/allocation, unpriced) — faked providers
-    │   │   │   ├── test_classification.py # ✅ backfill policy: skip vs refresh, unknown/empty profile → unresolved, upstream failure degrades one ticker, limit + remaining
+    │   │   │   ├── test_service.py    # ✅ Read orchestration, XIRR, allocation, offline unpriced tickers, and typed position gaps/provenance — faked providers
+    │   │   │   ├── test_classification.py # ✅ MANUAL protection, partial-profile replacement, failed-refresh preservation, retry safety, and finite cursor sweeps
+    │   │   │   ├── test_reconciliation.py # ✅ Pure split inference from confirmed history, ambiguity/rounding guards, and source-matching correction validation
     │   │   │   ├── test_statements.py  # ✅ Robinhood 9-col export: trade/dividend/tax mapping, Activity-Date keying, derived price, money-cell cleaning, option/transfer/split warnings, non-activity CSV rejected
     │   │   │   └── test_xirr.py       # ✅ pinned XIRR (10%/20%/neg, Excel ref), mixed-ccy, error paths
     │   │   ├── providers/         # ✅ SQLAlchemy portfolio provider round-trip (in-memory SQLite)
     │   │   │   ├── test_portfolio_provider.py # ✅ ORM→schema mapping, exact Decimals, feeds calculators
     │   │   │   ├── test_portfolio_writer.py   # ✅ write half: create portfolio, list portfolios, add txns, idempotent holding upsert
-    │   │   │   └── test_statement_import_store.py # ✅ local-disk blob store (round-trip, traversal guard, atomic write) + job lifecycle/checksum lookup
+    │   │   │   ├── test_statement_import_store.py # ✅ local-disk blob store (round-trip, traversal guard, atomic write) + job lifecycle/checksum lookup
+    │   │   │   └── test_import_recovery.py # ✅ Partial-failure retry ownership, startup reconciliation, corrupt-byte refusal, persisted repair gaps, and exactly-once correction
 │   │   ├── marketdata/        # ✅ read-through cache + AlphaVantage provider (mocked MCP) + throttle
 │   │   │   ├── test_schemas.py    # ✅ provenance required, frozen, statement container, optional fields
 │   │   │   ├── test_cache.py      # ✅ hit / miss-refresh / TTL-expiry / stale-fallback / per-symbol keys
@@ -87,7 +90,9 @@ backend/
     │   │   │   ├── conftest.py        # ✅ Seeded in-memory SQLite (incl. an unclassified holding) + get_session/market-data/profile/statement-storage overrides + AsyncClient fixtures
     │   │   │   ├── test_portfolio_routes.py # ✅ health, summary/txns/holdings/analytics (cost-basis + market values + XIRR status), 200 + 404
     │   │   │   ├── test_ingest_routes.py    # ✅ GET list + POST create/transactions/positions; async import 202→poll→SUCCEEDED→analytics, duplicate 409, 404/422
-    │   │   │   ├── test_classification_routes.py # ✅ classify backfill/refresh/limit, 503 without market data, PATCH partial edit + 404/422
+    │   │   │   ├── test_classification_routes.py # ✅ Single holding GET, nullable MANUAL PATCH, immediate analytics, finite cursor sweeps, safe repeats, and configuration-vs-quota failures
+    │   │   │   ├── test_unresolved_routes.py # ✅ Typed import issues, atomic source-matching repairs, cleared gaps, retry errors, and complete-history opt-in
+    │   │   │   ├── test_openapi.py    # ✅ Checked-in OpenAPI contract must match the application schema exactly
     │   │   │   └── test_cors.py        # ✅ config-driven CORS: allowed/disallowed origin headers + preflight (OPTIONS)
 │   └── integration/           # 🟡 @pytest.mark.integration — real Postgres/pgvector + MCP/Ollama wiring (opt-in)
 │       ├── test_postgres_pgvector.py # ✅ connect + CREATE EXTENSION vector + vector column round-trip
@@ -98,7 +103,7 @@ backend/
 │   ├── import_demo.py         # ✅ Create portfolio → upload broker CSV → analytics over the real app (in-memory; dry-runs your own export)
 │   └── ollama_healthcheck.py  # ✅ Ollama connectivity/latency diagnostic (reachability, installed models, timed completion)
 └── app/
-    ├── main.py                # ✅ FastAPI app factory + lifespan (DB engine on state) + /health; config-driven CORS; mounts v1 router
+    ├── main.py                # ✅ FastAPI app factory + lifespan (DB engine on state, interrupted imports → FAILED) + /health; CORS and v1 router
     ├── core/                  # 🟡 Cross-cutting infra (NOT business logic)
     │   ├── config.py          # ✅ Pydantic Settings — env-driven (base/supported currency, DB URL, AI provider, CORS origins)
     │   ├── database.py        # ✅ Async engine (pooled + pre_ping for Postgres) + session factory + declarative Base; missing optional DB drivers raise an actionable "sync this extra" error
@@ -107,29 +112,30 @@ backend/
     │   ├── currency.py        # ✅ FX normalization seam (Money/FxRate/FxRateTable) — USD now, INR-ready
     │   └── exceptions.py      # ⬜ App-wide error types + handlers
     ├── api/                   # 🟡 HTTP layer only (thin controllers, no business logic)
-    │   ├── deps.py            # ✅ Shared FastAPI dependencies (session → provider(s) → service DI chain; market data optional; ingest + statement-import services; BackgroundImportRunner with its own session)
+    │   ├── deps.py            # ✅ Shared FastAPI dependencies (session → typed providers → portfolio analytics, ingest/import services; optional market data; BackgroundImportRunner with its own session)
     │   └── v1/
     │       ├── router.py      # ✅ Aggregates all v1 routes
     │       └── routes/        # 🟡 portfolio.py ✅; research.py, documents.py, marketdata.py, workspace.py ⬜
-    │           └── portfolio.py   # ✅ GET list/portfolio/transactions/holdings/analytics/imports(+id) + POST create/transactions/positions/imports/holdings-classify + PATCH holdings/{ticker} (thin controllers, 202/404/409/413/422/503)
+    │           └── portfolio.py   # ✅ Portfolio/ledger/import routes + holding detail, cursor classification, nullable PATCH, import retry, and unresolved-item list/resolve
     ├── providers/             # 🟡 Strongly-typed abstraction interfaces (§2) — the ONLY I/O boundary
-    │   ├── base.py            # ✅ PortfolioProvider (read, incl. get_holding) + PortfolioWriter (write) + StatementImportStore (job state) Protocols (interface-segregated structural typing)
-    │   ├── portfolio_provider.py  # ✅ SqlAlchemyPortfolioProvider — ORM rows ↔ typed domain objects (reads incl. list_portfolios; writes: create/add-txns/upsert-holding)
+    │   ├── base.py            # ✅ PortfolioProvider, PortfolioWriter and StatementImportStore Protocols (interface-segregated structural typing)
+    │   ├── portfolio_provider.py  # ✅ ORM ↔ portfolio/holding reads, classification provenance, unresolved gaps and committed nullable classification edits
     │   ├── statement_storage.py   # ✅ StatementStorage Protocol — raw blob put/get, kept OUT of the relational DB (local disk now, S3 later)
-    │   ├── statement_import_store.py # ✅ SqlAlchemyStatementImportStore — import-job metadata/progress; commits per mutation so pollers see live progress
+    │   ├── statement_import_store.py # ✅ Import state/progress, owned atomic batches, startup recovery, safe retry cleanup, persisted unresolved items, and atomic corrections
     │   ├── marketdata_provider.py  # ✅ MarketDataProvider Protocol — quotes/profiles/statements (cache-first)
     │   ├── competitor_matrix_engine.py
     │   ├── sec_provider.py
     │   ├── news_streaming_engine.py
     │   └── document_provider.py
     ├── portfolio/             # 🟡 Ledger, allocation weights, investor returns (XIRR), valuations (pure Python)
-    │   ├── models.py          # ✅ SQLAlchemy 2.0 mapped: Portfolio, Holding, Transaction, Cash, StatementImport (exact Decimal, currency-aware)
-    │   ├── schemas.py         # ✅ Pydantic typed I/O — read models (Transaction, PortfolioSummary, HoldingInfo, PortfolioAnalytics, MoneyWeightedReturnStatus) + write inputs (PortfolioCreate, PositionSnapshot, HoldingClassificationUpdate, ParsedStatement, LedgerIngestResult, HoldingClassificationResult) + job status (ImportStatus, StatementImportStatus) — no dict/Any
-    │   ├── service.py         # ✅ Read orchestration: provider I/O × pure calculators → PortfolioAnalytics (+ market values; no math, no I/O)
+    │   ├── models.py          # ✅ SQLAlchemy portfolio/holding/ledger/cash/import/unresolved-item models, classification provenance, import ownership
+    │   ├── schemas.py         # ✅ Frozen read/write/import/correction models and classification/gap enums
+    │   ├── service.py         # ✅ Read orchestration → analytics with per-position provenance/gaps and explicit unpriced tickers; allocation labels read fresh after edits
     │   ├── ingest.py          # ✅ Write orchestration: manual trades + current-holding snapshots (→ opening BUY lot) behind the PortfolioWriter seam
-    │   ├── imports.py         # ✅ Async statement-import pipeline: accept (checksum/store/queue) → background process (batched inserts + progress) → terminal state; duplicate-content guard
-    │   ├── classification.py  # ✅ HoldingClassificationService — backfills sector/industry from company profiles; skips user-set labels unless refresh, bounded per call (limit/remaining), upstream failure → unresolved
-    │   ├── statements.py      # ✅ Broker-statement parsing seam: StatementParser Protocol + RobinhoodCsvParser (9-column export → typed txns; trades/dividends/taxes mapped, options/transfers/splits warned); content-validated, MIME-untrusted
+    │   ├── imports.py         # ✅ Accept/checksum/store → claimed background batches → terminal state, retained-byte retry verification, and typed source correction orchestration
+    │   ├── classification.py  # ✅ MANUAL-protected company-profile backfill; refresh replaces taxonomy/provenance, finite cursor sweeps, and typed per-ticker retryable failures
+    │   ├── reconciliation.py  # ✅ Pure conservative split inference for confirmed full history and source-matching validation for user corrections
+    │   ├── statements.py      # ✅ Content-validated Robinhood CSV parser → typed ledger events, warnings, and structured unresolved source issues; no guessed transfer cost basis
     │   └── calculators.py     # ✅ Pure math: FIFO cost-basis P&L, realized/unrealized, allocation, XIRR (unit-tested)
     ├── research/              # ⬜ Competitor matrix (manual peer seed), news streaming, evaluation workspaces
     ├── documents/             # ⬜ Ingestion pipeline, PDF/TXT/MD parsing, pgvector embeddings
@@ -279,5 +285,6 @@ mcp/
 - **Tests ship with code, every turn** (`AGENTS.md` §11) — a change is incomplete without them.
 - **Backend:** `pytest` + `pytest-asyncio` + `pytest-cov`. `backend/tests/` mirrors `backend/app/` one-to-one; provider boundaries are mocked in unit tests. Integration tests are marked `@pytest.mark.integration` and excluded from the fast default run.
   - Run: `uv run pytest` · integration: `uv run pytest -m integration` · coverage: `uv run pytest --cov=app`.
+  - `tests/api/test_openapi.py` guards the published contract: regenerate `backend/openapi.json` from `create_app().openapi()` after API/schema changes (command in `backend/README.md`).
 - **Frontend:** Vitest + React Testing Library, specs co-located under `src/__tests__/`. Run: `npm run test`.
 - **What to assert for AI code:** structured output schemas, tool routing, LangGraph state transitions, and citation presence/shape — never exact LLM wording.

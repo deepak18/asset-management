@@ -33,6 +33,7 @@ from app.portfolio.schemas import (
     AllocationWeight,
     CashFlow,
     CostBasisResult,
+    HoldingInfo,
     MoneyWeightedReturnStatus,
     PortfolioAnalytics,
     PositionValue,
@@ -99,6 +100,18 @@ class PortfolioService:
         # sorted() keeps position order deterministic (stable API responses/tests).
         positions: list[CostBasisResult] = [
             cost_basis_fifo(by_ticker[ticker], self._fx) for ticker in sorted(by_ticker)
+        ]
+        metadata = {h.ticker: h for h in await self._provider.list_holdings(portfolio_id)}
+        positions = [
+            p.model_copy(
+                update={
+                    "classification_source": metadata.get(
+                        p.ticker, HoldingInfo(ticker=p.ticker)
+                    ).classification_source,
+                    "data_gaps": metadata.get(p.ticker, HoldingInfo(ticker=p.ticker)).data_gaps,
+                }
+            )
+            for p in positions
         ]
 
         realized = sum((p.realized_pnl_base for p in positions), Decimal(0))
@@ -183,7 +196,9 @@ class PortfolioService:
         """
 
         if self._market_data is None:
-            return _MarketValues()
+            return _MarketValues(
+                unpriced_tickers=tuple(p.ticker for p in positions if p.open_quantity > 0)
+            )
 
         holdings = await self._provider.list_holdings(portfolio_id)
         meta = {h.ticker: h for h in holdings}
@@ -204,9 +219,7 @@ class PortfolioService:
                 unpriced.append(pos.ticker)
                 continue
             try:
-                marked = unrealized_pnl(
-                    pos, quote.price, quote.currency, as_of_date, self._fx
-                )
+                marked = unrealized_pnl(pos, quote.price, quote.currency, as_of_date, self._fx)
             except MissingFxRateError:
                 unpriced.append(pos.ticker)
                 continue

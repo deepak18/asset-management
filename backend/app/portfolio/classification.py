@@ -14,8 +14,8 @@ written here, which is what lets the whole thing be tested with two small fakes.
 
 Two deliberate design choices are worth calling out:
 
-*User edits win.* ``upsert_holding`` never overwrites an existing value with
-``None``, and by default we skip holdings that are already classified. A vendor
+*User edits win.* By default we skip MANUAL holdings, even when both fields have
+been explicitly cleared, and skip already-classified provider holdings. A vendor
 taxonomy is a convenience, not an authority — if you have hand-labelled a holding,
 a later backfill must not silently relabel it. ``refresh=True`` opts into
 re-fetching everything when you *do* want the vendor's answer.
@@ -24,7 +24,8 @@ re-fetching everything when you *do* want the vendor's answer.
 ticker, and free-tier providers are slow and quota-limited. Rather than let a
 large portfolio hang an HTTP request (or silently blow the daily quota), each call
 processes at most ``limit`` tickers and reports how many are ``remaining``. The
-caller repeats until ``remaining`` is zero. That keeps the endpoint synchronous
+caller passes ``next_cursor`` as ``after_ticker`` until ``remaining`` is zero.
+Failures advance the cursor too; starting a new sweep retries them. This stays synchronous
 and simple; if portfolios ever grow large enough for this to chafe, it can move
 behind the same background-job machinery the statement importer already uses,
 without changing this service's logic.
@@ -33,8 +34,10 @@ without changing this service's logic.
 from __future__ import annotations
 
 from app.marketdata.errors import MarketDataError
-from app.marketdata.schemas import CompanyProfile
 from app.portfolio.schemas import (
+    ClassificationFailure,
+    ClassificationFailureReason,
+    ClassificationSource,
     HoldingClassificationResult,
     HoldingInfo,
 )
@@ -65,13 +68,18 @@ class HoldingClassificationService:
         *,
         refresh: bool = False,
         limit: int = DEFAULT_CLASSIFY_LIMIT,
+        after_ticker: str | None = None,
     ) -> HoldingClassificationResult | None:
         """Fetch company profiles for unclassified holdings and persist the result.
 
         Returns ``None`` when the portfolio does not exist. With ``refresh=True``
         every holding is re-fetched, replacing existing classification with the
-        provider's current answer.
+        provider's current answer, including clearing fields absent in a usable
+        profile. Failed or empty lookups preserve the existing classification.
         """
+
+        if limit < 1:
+            raise ValueError("limit must be positive")
 
         if await self._reader.get_portfolio(portfolio_id) is None:
             return None
@@ -82,22 +90,45 @@ class HoldingClassificationService:
         unresolved: list[str] = []
         skipped: list[str] = []
         pending: list[HoldingInfo] = []
+        failures: list[ClassificationFailure] = []
 
         for holding in holdings:
-            already = holding.sector is not None or holding.industry is not None
+            if after_ticker is not None and holding.ticker <= after_ticker.upper():
+                continue
+            already = (
+                holding.classification_source == ClassificationSource.MANUAL
+                or holding.sector is not None
+                or holding.industry is not None
+            )
             if already and not refresh:
                 skipped.append(holding.ticker)
             else:
                 pending.append(holding)
 
+        pending.sort(key=lambda h: h.ticker)
         remaining = max(0, len(pending) - limit)
         for holding in pending[:limit]:
-            profile = await self._fetch_profile(holding.ticker)
+            try:
+                profile = await self._market_data.get_company_profile(holding.ticker)
+            except MarketDataError:
+                unresolved.append(holding.ticker)
+                failures.append(
+                    ClassificationFailure(
+                        ticker=holding.ticker,
+                        reason=ClassificationFailureReason.PROVIDER_UNAVAILABLE,
+                    )
+                )
+                continue
             if profile is None or (profile.sector is None and profile.industry is None):
                 # Either the symbol is unknown upstream or the profile carries no
                 # taxonomy. Both are "try again later", not a failure worth
                 # aborting the whole batch for.
                 unresolved.append(holding.ticker)
+                failures.append(
+                    ClassificationFailure(
+                        ticker=holding.ticker, reason=ClassificationFailureReason.NO_PROFILE
+                    )
+                )
                 continue
 
             await self._writer.upsert_holding(
@@ -105,14 +136,20 @@ class HoldingClassificationService:
                 holding.ticker,
                 sector=profile.sector,
                 industry=profile.industry,
+                classification_source=ClassificationSource.PROVIDER,
+                clear_fields=tuple(
+                    name for name in ("sector", "industry") if getattr(profile, name) is None
+                ),
             )
             classified.append(
                 HoldingInfo(
                     ticker=holding.ticker,
-                    # upsert_holding leaves a field untouched when given None, so
-                    # the resulting row keeps any value we did not replace.
-                    sector=profile.sector or holding.sector,
-                    industry=profile.industry or holding.industry,
+                    # A provider-owned classification must not retain manual
+                    # labels absent from the replacement profile.
+                    sector=profile.sector,
+                    industry=profile.industry,
+                    classification_source=ClassificationSource.PROVIDER,
+                    data_gaps=holding.data_gaps,
                 )
             )
 
@@ -122,25 +159,9 @@ class HoldingClassificationService:
             unresolved=tuple(unresolved),
             skipped=tuple(skipped),
             remaining=remaining,
+            next_cursor=pending[min(limit, len(pending)) - 1].ticker if remaining else None,
+            failures=tuple(failures),
         )
-
-    async def _fetch_profile(self, ticker: str) -> CompanyProfile | None:
-        """Return a company profile, treating upstream failure as "unresolved".
-
-        A rate-limited or unreachable provider must degrade one ticker, not fail
-        the whole backfill — the partial result is still useful and the caller can
-        retry the leftovers.
-        """
-
-        try:
-            return await self._market_data.get_company_profile(ticker)
-        except MarketDataError:
-            return None
 
 
 __all__ = ["DEFAULT_CLASSIFY_LIMIT", "HoldingClassificationService"]
-
-
-
-
-

@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import MetaData, Table, create_engine, inspect, select
 
 import app.marketdata.models  # noqa: F401  (registers the cache table on Base.metadata)
 import app.portfolio.models  # noqa: F401  (registers ORM tables on Base.metadata)
@@ -75,3 +75,48 @@ def test_downgrade_removes_domain_tables(
     assert "portfolios" not in tables
     assert "transactions" not in tables
     assert "market_data_cache" not in tables
+
+
+def test_existing_labels_and_legacy_partial_jobs_are_protected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _isolate_settings: None
+) -> None:
+    db_path = tmp_path / "legacy.db"
+    cfg = _alembic_config(db_path, monkeypatch)
+    command.upgrade(cfg, "0004")
+    engine = create_engine(f"sqlite:///{db_path.as_posix()}")
+    try:
+        metadata = MetaData()
+        portfolios = Table("portfolios", metadata, autoload_with=engine)
+        holdings = Table("holdings", metadata, autoload_with=engine)
+        jobs = Table("statement_imports", metadata, autoload_with=engine)
+        with engine.begin() as conn:
+            conn.execute(portfolios.insert().values(id=1, name="Legacy", base_currency="USD"))
+            conn.execute(holdings.insert(), [
+                {"portfolio_id": 1, "ticker": "AAA", "sector": "Manual", "industry": None},
+                {"portfolio_id": 1, "ticker": "BBB", "sector": None, "industry": "Manual"},
+                {"portfolio_id": 1, "ticker": "CCC", "sector": None, "industry": None},
+            ])
+            for status in ("PENDING", "RUNNING", "FAILED", "SUCCEEDED"):
+                conn.execute(jobs.insert().values(
+                    portfolio_id=1, status=status, source_format="robinhood_csv",
+                    original_filename="old.csv", storage_key="old.raw", checksum="a" * 64,
+                    size_bytes=1, processed_rows=0, created_transactions=0,
+                    tickers_json="[]", warnings_json="[]",
+                ))
+        command.upgrade(cfg, "head")
+        upgraded = MetaData()
+        holdings = Table("holdings", upgraded, autoload_with=engine)
+        jobs = Table("statement_imports", upgraded, autoload_with=engine)
+        with engine.connect() as conn:
+            sources = dict(conn.execute(select(
+                holdings.c.ticker, holdings.c.classification_source
+            )).tuples().all())
+            retry_safety = dict(conn.execute(select(
+                jobs.c.status, jobs.c.retry_safe
+            )).tuples().all())
+        assert sources == {"AAA": "MANUAL", "BBB": "MANUAL", "CCC": "NONE"}
+        assert retry_safety == {
+            "PENDING": False, "RUNNING": False, "FAILED": False, "SUCCEEDED": True,
+        }
+    finally:
+        engine.dispose()

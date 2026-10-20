@@ -23,6 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.database import create_engine, create_session_factory
+from app.providers.statement_import_store import SqlAlchemyStatementImportStore
 
 
 @asynccontextmanager
@@ -38,6 +39,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.engine = engine
     app.state.session_factory = create_session_factory(engine)
     try:
+        async with app.state.session_factory() as session:
+            await SqlAlchemyStatementImportStore(session).reconcile_interrupted()
         yield
     finally:
         await engine.dispose()

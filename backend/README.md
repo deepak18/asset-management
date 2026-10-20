@@ -39,11 +39,16 @@ From the **repo root** first: `docker compose up -d --wait` (starts Postgres + p
 ```bash
 cd backend
 uv sync --extra dev --extra postgres
-uv run alembic upgrade head             # create tables + enable pgvector + import-job table
+uv run alembic upgrade head             # includes classification provenance + import recovery (0005)
 uv run python -m uvicorn app.main:app --reload    # http://localhost:8000/docs
 ```
 
 Config comes from the repo-root `.env` (see the main [README](../README.md)); `DATABASE_URL` selects the database. With no `.env`/env override, the app falls back to a local SQLite file for zero-infra runs.
+
+Existing installations must also run `uv run alembic upgrade head` before restarting
+the API. Revision `0005` conservatively marks existing non-null classification as
+`MANUAL`; old failed/interrupted imports lack ownership tags and cannot be safely
+retried automatically.
 
 > 💡 **Why `python -m uvicorn` and not `uvicorn`?** `uv sync` installs a small
 > `uvicorn.exe` launcher shim in `.venv\Scripts\`. On locked-down Windows (Smart App
@@ -178,11 +183,17 @@ Key properties:
 - **Duplicate uploads are refused (`409`).** Re-importing the same file would double
   every position and silently corrupt cost basis. Detection is by content checksum,
   scoped per portfolio. Override deliberately with `?allow_duplicate=true`.
-- **Trade-off:** execution uses in-process background tasks, which fits a
-  single-user local workstation. They do not survive a restart — an interrupted job
-  stays visibly `RUNNING` rather than vanishing, because state is in the database.
-  Moving to a durable worker (arq/Celery/RQ) later replaces the runner only; the job
-  model, storage, and API contract stay unchanged.
+- **Recovery:** startup marks leftover `PENDING`/`RUNNING` jobs `FAILED`, preserving
+  their progress and committed rows. `POST /portfolios/{id}/imports/{job_id}/retry`
+  verifies retained bytes against their checksum, removes only that job's owned
+  transactions, resets the same job to `PENDING`, and returns `202` to process it
+  again. Manual entries and other imports are untouched. `404` means absent,
+  `409` means not failed or legacy/untracked, and `422` means bytes are unavailable
+  or corrupt; failed verification never deletes partial writes.
+- **Trade-off:** tasks remain in-process, not durable or automatically resumed.
+  Run a **single API process**: startup recovery assumes no other process is still
+  executing those jobs. Multi-worker deployment needs leases or a durable queue
+  before this recovery policy is safe.
 
 **Full history beats snapshots.** If you have the complete CSV, import it: the real
 dated cash flows make the money-weighted return (XIRR) computable. A position
@@ -209,27 +220,28 @@ Quantity, Price, Amount`. Notes:
 | `Buy`, `Sell` | imported as `BUY` / `SELL` |
 | `CDIV` | imported as `DIVIDEND` |
 | `DTAX`, `AFEE`, `DFEE` | imported as `FEE` (reduces realized P&L) |
-| `SPL`, `SPR` | **skipped with a warning** — enter the split manually with its ratio |
+| `SPL`, `SPR` | structured unresolved split; conservative inference only with `history_complete=true`, otherwise supply the ratio |
 | `ITRF`/`ACH`/`RTP`/`WIRE` **with** an instrument + quantity | **skipped with a warning** — a transferred-in position has no price in the export; add it via the position-snapshot form so its cost basis is real, not zero |
 | `ITRF`/`ACH`/`RTP`/`WIRE` cash-only | skipped (not a security transaction) |
 | options (`BTO`/`STO`/`BTC`/`STC`/`OEXP`/`OASGN`), `INT`, `GOLD`, `MINT`, `REC`, `SOFF` | skipped with a warning explaining why |
 
 Every skipped row comes back in `warnings` (with its line number, code, and
-description), so nothing is silently lost. Dry-run a file before uploading:
+description) and `unresolved_items`, so nothing is silently lost. Dry-run a file before uploading:
 
 ```bash
 uv run python scripts/import_demo.py path/to/robinhood_activity.csv
 ```
 
-All four write endpoints return `201` with a `LedgerIngestResult`
-(`created_transactions`, `tickers`, `warnings`, `source_format`).
+Transaction and position writes return `201` with a `LedgerIngestResult`.
+Portfolio creation returns a `PortfolioSummary`; uploads/retries return `202`
+with a `StatementImportStatus`.
 
 ## Known gaps & follow-ups
 
 Deliberate, documented limitations — each one is a *correct* refusal to guess
 rather than a bug. They are listed in the order they distort reported numbers.
 
-### 1. Stock splits from broker exports are skipped (needs manual entry)
+### 1. Stock splits require confirmed history or a supplied ratio
 
 **What happens:** a Robinhood `SPL` / `SPR` row is skipped with a warning, e.g.
 `row 44: skipped SPL — stock split — enter it manually with its ratio (Booking Holdings)`.
@@ -253,13 +265,13 @@ curl -X POST localhost:8000/api/v1/portfolios/1/transactions \
   -d '[{"ticker":"BKNG","type":"SPLIT","trade_date":"2026-04-06","currency":"USD","split_ratio":"20"}]'
 ```
 
-**Recommendation:** resolve splits in a *post-parse* pass, not in the parser.
-After all rows are staged, replay the ledger up to each `SPL` date, compute
-`ratio = (open_qty + shares_added) / open_qty`, and emit a real `SPLIT` event —
-but **only** when the ledger genuinely starts before the split date (otherwise the
-opening quantity is unknown and the inference is invalid). Keep the warning as the
-fallback. A corroborating `SPLITS` feed from the market-data provider would let us
-verify the inferred ratio against the official one before accepting it.
+**Opt-in inference:** upload with `?history_complete=true` only when the file
+contains complete opening history. A pure post-parse pass replays earlier rows and
+accepts only near-integral forward or reciprocal reverse ratios whose share delta
+agrees within `0.000001` shares. Unknown earlier events, currency mismatches,
+negative/zero opening quantities, and ambiguous same-day events block inference.
+This uses the export, not an independent corporate-actions feed. Uncertain cases
+remain typed unresolved items; no ratio is guessed from incomplete history.
 
 ### 2. Transferred-in positions (`ITRF`) carry no cost basis
 
@@ -279,12 +291,16 @@ simply not in this file.
 **Workaround today:** add each transferred-in position via
 `POST /api/v1/portfolios/{id}/positions` with its real acquisition date and cost.
 
-**Recommendation:** keep the refusal, but make the follow-up actionable instead of
-prose. Promote these warnings into a typed, structured payload on the import job —
-a list of "unresolved items" (`kind`, `ticker`, `trade_date`, `quantity`,
-`description`) — so the UI can render a *pre-filled* snapshot/split form per item
-and the user just supplies the missing number. That turns each warning into a
-one-click fix and removes the need to read line numbers out of a text list.
+**Structured repair:** import jobs now include `unresolved_items` with enum `kind`,
+source line, ticker, date, quantity, currency, and enum `data_gaps`. List outstanding
+items with `GET /api/v1/portfolios/{id}/unresolved` (or `?include_resolved=true`).
+Submit a correction to `POST /api/v1/portfolios/{id}/unresolved/{item_id}/resolve`:
+use a `snapshot` for transferred shares with real cost basis, or a `transaction`
+for a split/corrected event. Exactly one is required, and known source facts must
+match. The correction and resolved flag commit atomically; a second submission
+returns `409`, not duplicate ledger events. Gaps disappear on subsequent reads.
+Use this endpoint rather than a separate snapshot write when resolving a tracked
+item, so the ledger and its repair state stay consistent.
 
 ### 3. Money-weighted return (XIRR) needs a terminal value — and therefore prices
 
@@ -320,7 +336,7 @@ Two complementary fixes, both wired up:
 
 ```bash
 # Backfill from company profiles (needs ALPHAVANTAGE_API_KEY; 503 without it).
-# Already-classified holdings are skipped so hand-entered labels survive.
+# MANUAL holdings (even cleared ones) and already-classified holdings are skipped.
 curl -X POST 'localhost:8000/api/v1/portfolios/1/holdings/classify'
 
 # Re-fetch everything, overwriting existing values with the vendor's answer:
@@ -332,24 +348,55 @@ curl -X PATCH localhost:8000/api/v1/portfolios/1/holdings/NFLX \
   -d '{"sector":"Communication Services","industry":"Entertainment"}'
 ```
 
-The backfill response splits results into `classified`, `unresolved` (unknown
-symbol, or quota spent — retry later), `skipped` (already classified), and
-`remaining`. Each call processes at most `limit` tickers (default 25) so one
-request can neither hang nor silently burn a day's free-tier quota; repeat while
-`remaining` is non-zero.
+**Read contract:** `GET /api/v1/portfolios/{id}/holdings/{ticker}` returns one
+`HoldingInfo` (case-insensitive ticker), or `404` if absent. Holdings and analytics
+positions include `classification_source: MANUAL | PROVIDER | NONE` and a
+`data_gaps` array of enum values: `SECTOR`, `INDUSTRY`, `COST_BASIS`, `CURRENCY`,
+`SPLIT_RATIO`, `TICKER`, `TRADE_DATE`, `QUANTITY`, `TRANSACTION`. These describe
+missing facts a user can supply, not flags or parseable warning text. Missing
+quotes, disabled market data, and quote-FX unavailability live in
+`unpriced_tickers`, never in `data_gaps`. A valid zero cost basis is not a gap.
 
-`PATCH` only ever *edits*: it 404s on a ticker the portfolio doesn't hold, so a
-typo cannot conjure a phantom holding into the allocation chart. Omitted fields
-keep their previous value.
+**Backfill policy:** `MANUAL` is always protected by default, including explicit
+clears. Holdings with either taxonomy field already set are also skipped; use
+manual editing or `refresh=true` to fill a partial classification. Refresh opts
+into replacing both fields with a usable provider profile, clearing fields the
+profile omits and setting `PROVIDER`. Failed or empty lookups preserve old values
+and provenance. A new bare holding starts with `NONE`.
+
+**Loop contract:** each request attempts at most `limit` tickers (default 25,
+range 1–200) in ticker order. `remaining` counts eligible, **unattempted** tickers
+after this batch, not failures. Pass the returned `next_cursor` as `after_ticker`,
+keeping `refresh` unchanged, until `remaining=0` and `next_cursor=null`. For unchanged
+holdings this count strictly decreases along the cursor chain even when every
+lookup fails. Without a cursor, a call starts a **new sweep** and retries unresolved
+tickers; repeated fresh sweeps have no decreasing-count guarantee. Concurrent
+holding edits/additions can change the count; the cursor is not a snapshot token.
+
+**Failure messages:** `503` means the provider is not configured (both URL and key
+are required; URL has a default): configure `ALPHAVANTAGE_API_KEY` and
+`ALPHAVANTAGE_MCP_URL`, not "wait and retry". A configured provider exhausting quota
+or becoming unavailable returns `200` with the ticker in `unresolved` and a typed
+`failures[].reason=PROVIDER_UNAVAILABLE`: retry later. `NO_PROFILE` means no usable
+taxonomy; consider manual entry. Neither is permanently final. Repeating calls is
+safe: no duplicate holdings or ledger entries. Default repeats skip successes;
+refresh may change metadata if the provider's answer has changed.
+
+**Manual edits:** `PATCH` only edits an existing holding (`404` if absent), always
+sets `MANUAL`, preserves omitted fields, and clears explicitly null fields, e.g.
+`{"sector":null}`. Empty bodies, whitespace-only labels, and unknown fields return
+`422`. No market-data dependency is required. Persistence commits before success;
+the very next `/analytics` GET computes allocations with the new labels (when
+prices are available). No cached allocation or background recomputation is involved.
 
 ### 5. Remaining follow-ups
 
-* **Structured unresolved items.** Import warnings are still free text. Promoting
-  them to a typed payload (`kind`, `ticker`, `trade_date`, `quantity`) would let
-  the UI render a pre-filled split/snapshot form per item instead of asking the
-  user to read line numbers out of prose.
-* **Post-parse split inference** (see above).
-* **Durable background jobs.** In-process tasks don't survive a restart.
+* **Frontend repair workflow.** The backend supplies typed repair items; a dedicated
+  UI still needs to consume the resolution and retry endpoints.
+* **Independent corporate-actions corroboration.** Split inference currently relies
+  on the user-confirmed export history, not an official split feed.
+* **Durable background jobs / multi-process leases.** Restart recovery permits
+  explicit safe retry, but does not resume tasks or coordinate multiple API workers.
 
 ## Regenerate the OpenAPI contract
 

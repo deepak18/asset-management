@@ -78,7 +78,7 @@ uv run alembic upgrade head
 
 **5. Run the API.**
 ```powershell
-uv run uvicorn app.main:app --reload
+uv run python -m uvicorn app.main:app --reload
 ```
 Open **http://localhost:8000/docs** for interactive Swagger UI. `GET /health` works immediately; the portfolio routes serve data once a portfolio is seeded.
 
@@ -110,7 +110,7 @@ Two terminals — backend on `:8000`, frontend on `:3000`:
 ```powershell
 # terminal 1 — API (see backend/README.md; SQLite fallback needs no Docker)
 cd backend
-uv run uvicorn app.main:app --reload      # http://localhost:8000/docs
+uv run python -m uvicorn app.main:app --reload      # http://localhost:8000/docs
 
 # terminal 2 — UI in live mode (no mocking flag = calls the real API)
 cd frontend
@@ -122,10 +122,38 @@ live mode works out of the box:
 
 1. **CORS** — the backend enables config-driven CORS for the dev origin
    `http://localhost:3000`, so the dashboard's cross-origin `GET`s go through.
-2. **Seeded data** — the dashboard reads portfolio **id `1`**
-   (`GET /api/v1/portfolios/1` + `/transactions`, `/holdings`, `/analytics`), and
-   the backend serves a demo portfolio there. Against a fresh, unseeded DB every
-   panel would show its (correct) empty/error state instead.
+2. **Data entry** — a fresh database is empty, not automatically seeded. Create a
+   portfolio through the UI or `POST /api/v1/portfolios`, then add snapshots,
+   transactions, or import a statement. The portfolio picker reads the API list.
+
+### Holding classification and import repair (backend)
+
+- Holdings and analytics positions expose `classification_source`
+  (`MANUAL | PROVIDER | NONE`) and enum `data_gaps` for user-correctable facts.
+  Missing prices are reported separately in `unpriced_tickers`.
+- `GET /api/v1/portfolios/{id}/holdings/{ticker}` returns a single holding or `404`.
+  `PATCH` preserves omitted fields, clears explicit nulls, and always sets `MANUAL`.
+  Successful edits are visible in the next analytics GET; allocations are computed
+  on read when prices are available.
+- `POST .../holdings/classify` protects `MANUAL` by default; `?refresh=true` opts
+  into replacement. Follow `next_cursor` as `after_ticker` until `remaining=0`.
+  Unresolved lookups advance the cursor and are retried on a new sweep. Repeated
+  fresh sweeps are safe but need not decrease `remaining`.
+- Classification `503` means configure the market-data URL/key. Quota exhaustion
+  or an upstream outage instead returns `200` with per-ticker
+  `PROVIDER_UNAVAILABLE`; wait and retry rather than asking for a new key.
+- Import jobs expose structured `unresolved_items`; list them at
+  `GET .../unresolved` and submit a source-matching correction at
+  `POST .../unresolved/{item_id}/resolve`. Resolution is atomic and rejects repeats.
+  Optional `?history_complete=true` enables conservative split inference only for
+  user-confirmed complete opening history.
+- On startup, interrupted imports become `FAILED`. `POST .../imports/{job_id}/retry`
+  verifies retained bytes and replaces only that job's owned partial transactions.
+  Legacy imports without ownership tags are refused rather than risking data loss.
+  Use **one API process**: this recovery policy is not multi-worker coordination.
+
+See [`backend/README.md`](./backend/README.md#4-sector--industry-classification)
+for the full contract, edge cases, and repair workflow.
 
 ---
 

@@ -33,10 +33,13 @@ from decimal import Decimal, InvalidOperation
 from typing import Protocol
 
 from app.portfolio.schemas import (
+    DataGap,
+    ImportIssue,
     ParsedStatement,
     StatementFormat,
     Transaction,
     TransactionType,
+    UnresolvedKind,
 )
 
 
@@ -54,6 +57,10 @@ class StatementParser(Protocol):
 
     def parse(self, data: bytes) -> ParsedStatement:
         """Decode ``data`` into ledger transactions (+ warnings for unmapped rows)."""
+        ...
+
+    def validate(self, data: bytes) -> None:
+        """Validate encoding and headers without translating every record."""
         ...
 
 
@@ -77,6 +84,8 @@ def _clean_decimal(raw: str) -> Decimal | None:
     try:
         value = Decimal(text)
     except InvalidOperation:
+        return None
+    if not value.is_finite():
         return None
     return -value if negative else value
 
@@ -177,7 +186,10 @@ class RobinhoodCsvParser:
     def source_format(self) -> StatementFormat:
         return StatementFormat.ROBINHOOD_CSV
 
-    def parse(self, data: bytes) -> ParsedStatement:
+    def validate(self, data: bytes) -> None:
+        self._reader(data)
+
+    def _reader(self, data: bytes) -> csv.DictReader[str]:
         try:
             # utf-8-sig transparently strips a BOM many exporters prepend.
             text = data.decode("utf-8-sig")
@@ -193,12 +205,16 @@ class RobinhoodCsvParser:
         headers = {(h or "").strip().lower() for h in reader.fieldnames}
         if "trans code" not in headers or "instrument" not in headers:
             raise StatementParseError(
-                "not a Robinhood activity CSV: expected 'Trans Code' and "
-                "'Instrument' columns"
+                "not a Robinhood activity CSV: expected 'Trans Code' and 'Instrument' columns"
             )
 
+        return reader
+
+    def parse(self, data: bytes) -> ParsedStatement:
+        reader = self._reader(data)
         transactions: list[Transaction] = []
         warnings: list[str] = []
+        issues: list[ImportIssue] = []
 
         for row in reader:
             # reader.line_num is the *physical* line just consumed. Robinhood wraps
@@ -214,10 +230,43 @@ class RobinhoodCsvParser:
             description = _pick(row, "Description").strip()
             ticker = _pick(row, "Instrument", "Symbol", "Ticker").strip().upper()
             quantity_raw = _pick(row, "Quantity")
+            trade_date = _parse_date(
+                _pick(row, "Activity Date", "Trade Date", "Date", "Process Date")
+            )
+            quantity = _clean_decimal(quantity_raw)
+
+            source = ImportIssue(
+                kind=UnresolvedKind.MISSING_DATA,
+                source_line=line_no,
+                ticker=ticker or None,
+                trade_date=trade_date,
+                quantity=quantity,
+                currency=self._currency,
+                description=" ".join(description.split()),
+                code=code.upper(),
+            )
+
+            def issue(
+                kind: UnresolvedKind, gaps: tuple[DataGap, ...], source: ImportIssue = source
+            ) -> ImportIssue:
+                return source.model_copy(update={"kind": kind, "data_gaps": gaps})
 
             reason = self._unsupported_reason(code, ticker, quantity_raw)
             if reason is not None:
                 warnings.append(self._warn(line_no, code, reason, description))
+                if code in {"spl", "spr"}:
+                    issues.append(issue(UnresolvedKind.SPLIT_RATIO_UNKNOWN, (DataGap.SPLIT_RATIO,)))
+                elif (
+                    code in self._TRANSFER_CODES
+                    and ticker
+                    and quantity is not None
+                    and quantity > 0
+                ):
+                    issues.append(
+                        issue(UnresolvedKind.TRANSFER_IN_NO_COST_BASIS, (DataGap.COST_BASIS,))
+                    )
+                elif ticker or code not in self._TRANSFER_CODES | {"int", "gold", "mint"}:
+                    issues.append(issue(UnresolvedKind.UNSUPPORTED_ROW, (DataGap.TRANSACTION,)))
                 continue
 
             ttype = self._resolve_type(code)
@@ -225,12 +274,12 @@ class RobinhoodCsvParser:
                 warnings.append(
                     self._warn(line_no, code, "unrecognized transaction code", description)
                 )
+                issues.append(issue(UnresolvedKind.UNSUPPORTED_ROW, (DataGap.TRANSACTION,)))
                 continue
 
             if not ticker:
-                warnings.append(
-                    self._warn(line_no, code, "missing instrument/ticker", description)
-                )
+                warnings.append(self._warn(line_no, code, "missing instrument/ticker", description))
+                issues.append(issue(UnresolvedKind.MISSING_DATA, (DataGap.TICKER,)))
                 continue
 
             trade_date = _parse_date(
@@ -240,21 +289,24 @@ class RobinhoodCsvParser:
                 warnings.append(
                     self._warn(line_no, code, "unparseable or missing date", description)
                 )
+                issues.append(issue(UnresolvedKind.MISSING_DATA, (DataGap.TRADE_DATE,)))
                 continue
 
             txn = self._build_txn(line_no, code, ttype, ticker, trade_date, row, warnings)
             if txn is not None:
                 transactions.append(txn)
+            else:
+                gap = DataGap.QUANTITY if quantity is None or quantity <= 0 else DataGap.COST_BASIS
+                issues.append(issue(UnresolvedKind.MISSING_DATA, (gap,)))
 
         return ParsedStatement(
             source_format=self.source_format,
             transactions=tuple(transactions),
             warnings=tuple(warnings),
+            unresolved_items=tuple(issues),
         )
 
-    def _unsupported_reason(
-        self, code: str, ticker: str, quantity_raw: str
-    ) -> str | None:
+    def _unsupported_reason(self, code: str, ticker: str, quantity_raw: str) -> str | None:
         """Return why ``code`` can't become a ledger event, or ``None`` if it can.
 
         Most codes map statically, but transfers are **context-dependent**: the same
@@ -315,9 +367,7 @@ class RobinhoodCsvParser:
 
         if ttype in (TransactionType.BUY, TransactionType.SELL):
             if quantity <= 0:
-                warnings.append(
-                    self._warn(line_no, code, "needs a positive quantity", "")
-                )
+                warnings.append(self._warn(line_no, code, "needs a positive quantity", ""))
                 return None
             if price <= 0:
                 # Some rows (dividend reinvestments, fractional fills) leave Price
@@ -325,9 +375,7 @@ class RobinhoodCsvParser:
                 # price keeps the lot's cost basis correct instead of recording a
                 # zero-cost position.
                 if amount == 0:
-                    warnings.append(
-                        self._warn(line_no, code, "no usable price or amount", "")
-                    )
+                    warnings.append(self._warn(line_no, code, "no usable price or amount", ""))
                     return None
                 price = abs(amount) / quantity
             return Transaction(

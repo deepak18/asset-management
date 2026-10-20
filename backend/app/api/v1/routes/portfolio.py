@@ -50,10 +50,13 @@ from app.portfolio.schemas import (
     StatementFormat,
     StatementImportStatus,
     Transaction,
+    UnresolvedItem,
+    UnresolvedResolution,
 )
 from app.portfolio.service import PortfolioService
 from app.portfolio.statements import StatementParseError
 from app.providers.base import PortfolioProvider, StatementImportStore
+from app.providers.statement_storage import StatementStorageError
 
 router = APIRouter(prefix="/portfolios", tags=["Portfolio"])
 
@@ -109,6 +112,20 @@ async def list_holdings(
     """Return the portfolio's tracked securities + classification metadata."""
 
     return await provider.list_holdings(portfolio_id)
+
+
+@router.get("/{portfolio_id}/holdings/{ticker}", responses={404: {"description": "Holding absent"}})
+async def get_holding(
+    portfolio_id: int,
+    ticker: str,
+    provider: PortfolioProvider = Depends(get_portfolio_provider),
+) -> HoldingInfo:
+    """Return a single holding, including provenance and user-correctable gaps."""
+
+    holding = await provider.get_holding(portfolio_id, ticker)
+    if holding is None:
+        raise HTTPException(status_code=404, detail="Holding not found")
+    return holding
 
 
 @router.get("/{portfolio_id}/analytics")
@@ -180,14 +197,20 @@ async def add_positions(
     return result
 
 
-@router.post("/{portfolio_id}/holdings/classify", status_code=status.HTTP_200_OK)
+@router.post(
+    "/{portfolio_id}/holdings/classify",
+    status_code=status.HTTP_200_OK,
+    responses={503: {"description": "Market-data provider not configured"}},
+)
 async def classify_holdings(
     portfolio_id: int,
     refresh: bool = Query(False),
     limit: int = Query(DEFAULT_CLASSIFY_LIMIT, ge=1, le=200),
-    service: HoldingClassificationService | None = Depends(
-        get_holding_classification_service
+    after_ticker: str | None = Query(
+        None,
+        description="Pass next_cursor to advance past successful and unresolved tickers",
     ),
+    service: HoldingClassificationService | None = Depends(get_holding_classification_service),
 ) -> HoldingClassificationResult:
     """Backfill sector/industry for this portfolio's holdings from company profiles.
 
@@ -195,12 +218,19 @@ async def classify_holdings(
     unclassified and the allocation breakdown groups them under ``UNCLASSIFIED``.
     This fills them in from the market-data provider.
 
-    Already-classified holdings are skipped (so hand-entered labels survive) unless
-    ``refresh=true``. At most ``limit`` tickers are processed per call to bound both
-    request time and free-tier quota use; repeat while ``remaining`` is non-zero.
+    MANUAL holdings (including manually cleared ones) and already-classified
+    holdings are skipped unless ``refresh=true``. Process at most ``limit`` tickers.
+    Continue with ``after_ticker=next_cursor`` until ``remaining=0``. Remaining
+    strictly decreases along that cursor chain for an unchanged portfolio, even
+    when lookups fail; repeating without a cursor has no such guarantee.
+    Unresolved tickers are retried on a new sweep. Repeating a request is safe:
+    it changes metadata only, never creates ledger events or duplicate holdings.
 
     Responds ``503`` when no market-data provider is configured — the remedy is an
-    API key, not a retry.
+    URL/key configuration, not a retry. Quota exhaustion or upstream outages
+    instead return 200 with per-ticker ``PROVIDER_UNAVAILABLE`` failures (retry
+    later). ``NO_PROFILE`` means no usable taxonomy was returned; manual entry
+    remains available. No classification failure is treated as permanently final.
     """
 
     if service is None:
@@ -213,7 +243,9 @@ async def classify_holdings(
             ),
         )
 
-    result = await service.classify(portfolio_id, refresh=refresh, limit=limit)
+    result = await service.classify(
+        portfolio_id, refresh=refresh, limit=limit, after_ticker=after_ticker
+    )
     if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -234,6 +266,10 @@ async def update_holding_classification(
     The manual path intentionally does not depend on market data: classification
     must stay editable when the provider is unconfigured, rate-limited, or simply
     wrong about a symbol.
+
+    Omission preserves a field; explicit null clears it. Always sets source MANUAL.
+    Commits before returning: the next analytics GET uses the new grouping labels,
+    with allocation weights computed on read when prices are available.
     """
 
     updated = await ingest.set_classification(portfolio_id, ticker, body)
@@ -252,6 +288,10 @@ async def create_import(
     file: UploadFile = File(...),
     source_format: StatementFormat = Query(StatementFormat.ROBINHOOD_CSV),
     allow_duplicate: bool = Query(False),
+    history_complete: bool = Query(
+        False,
+        description="Confirm complete opening history to enable conservative split inference",
+    ),
     service: StatementImportService = Depends(get_statement_import_service),
     runner: BackgroundImportRunner = Depends(get_background_import_runner),
 ) -> StatementImportStatus:
@@ -268,7 +308,7 @@ async def create_import(
     the whole ledger); pass ``allow_duplicate=true`` to override deliberately.
     """
 
-    data = await file.read()
+    data = await file.read(_MAX_UPLOAD_BYTES + 1)
     if len(data) > _MAX_UPLOAD_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
@@ -282,6 +322,7 @@ async def create_import(
             original_filename=file.filename or "statement",
             data=data,
             allow_duplicate=allow_duplicate,
+            history_complete=history_complete,
         )
     except DuplicateStatementError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
@@ -304,6 +345,79 @@ async def create_import(
         portfolio_id,
     )
     return job
+
+
+@router.post(
+    "/{portfolio_id}/imports/{job_id}/retry",
+    status_code=202,
+    responses={
+        404: {"description": "Import absent"},
+        409: {"description": "Not safely retryable"},
+        422: {"description": "Stored bytes unavailable or corrupt"},
+    },
+)
+async def retry_import(
+    portfolio_id: int,
+    job_id: int,
+    background: BackgroundTasks,
+    service: StatementImportService = Depends(get_statement_import_service),
+    runner: BackgroundImportRunner = Depends(get_background_import_runner),
+) -> StatementImportStatus:
+    """Re-run a failed import from retained bytes; remove only its owned partial rows."""
+
+    try:
+        job = await service.retry(portfolio_id, job_id)
+    except StatementStorageError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if job is None:
+        raise HTTPException(status_code=404, detail="Import not found")
+    background.add_task(
+        runner.run, job.id, storage_key_for(job.checksum, job.source_format), portfolio_id
+    )
+    return job
+
+
+@router.get("/{portfolio_id}/unresolved")
+async def list_unresolved(
+    portfolio_id: int,
+    include_resolved: bool = Query(False),
+    store: StatementImportStore = Depends(get_statement_import_store),
+) -> list[UnresolvedItem]:
+    """List structured source items requiring user review across successful imports."""
+
+    return await store.list_unresolved(portfolio_id, include_resolved)
+
+
+@router.post(
+    "/{portfolio_id}/unresolved/{item_id}/resolve",
+    responses={
+        404: {"description": "Item absent"},
+        409: {"description": "Item already resolved"},
+        422: {"description": "Invalid correction"},
+    },
+)
+async def resolve_unresolved(
+    portfolio_id: int,
+    item_id: int,
+    body: UnresolvedResolution,
+    service: StatementImportService = Depends(get_statement_import_service),
+    store: StatementImportStore = Depends(get_statement_import_store),
+) -> UnresolvedItem:
+    """Write a user correction and resolve its item atomically; duplicate resolution is rejected."""
+
+    items = await store.list_unresolved(portfolio_id, include_resolved=True)
+    if any(item.id == item_id and item.resolved for item in items):
+        raise HTTPException(status_code=409, detail="Item already resolved")
+    try:
+        result = await service.resolve(portfolio_id, item_id, body)
+    except ValueError as exc:
+        code = 409 if str(exc) == "Item is already resolved" else 422
+        raise HTTPException(status_code=code, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Unresolved item not found")
+    return result
 
 
 @router.get("/{portfolio_id}/imports")
@@ -331,4 +445,3 @@ async def get_import(
             detail=f"Import {job_id} not found for portfolio {portfolio_id}",
         )
     return job
-

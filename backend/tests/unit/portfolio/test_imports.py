@@ -7,6 +7,7 @@ progress publication, duplicate detection, and terminal-state error recording.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 
 import pytest
@@ -19,6 +20,7 @@ from app.portfolio.imports import (
 )
 from app.portfolio.schemas import (
     HoldingInfo,
+    ImportIssue,
     ImportStatus,
     PortfolioCreate,
     PortfolioSummary,
@@ -61,6 +63,7 @@ class _MemoryJobStore:
         self.jobs: dict[int, StatementImportStatus] = {}
         self.progress_calls: list[int] = []
         self._next_id = 1
+        self.portfolio: _FakePortfolio | None = None
 
     async def create_job(
         self,
@@ -70,6 +73,7 @@ class _MemoryJobStore:
         storage_key: str,
         checksum: str,
         size_bytes: int,
+        history_complete: bool = False,
     ) -> StatementImportStatus:
         job_id = self._next_id
         self._next_id += 1
@@ -82,6 +86,7 @@ class _MemoryJobStore:
             checksum=checksum,
             size_bytes=size_bytes,
             created_at=datetime.now(UTC),
+            history_complete=history_complete,
         )
         self.jobs[job_id] = job
         return job
@@ -120,12 +125,28 @@ class _MemoryJobStore:
         self.progress_calls.append(processed_rows)
         self._update(job_id, processed_rows=processed_rows)
 
+    async def claim_job(self, job_id: int) -> bool:
+        if self.jobs[job_id].status != ImportStatus.PENDING:
+            return False
+        await self.mark_running(job_id)
+        return True
+
+    async def append_batch(self, job_id: int, transactions: Sequence[Transaction]) -> int:
+        assert self.portfolio is not None
+        job = self.jobs[job_id]
+        count = await self.portfolio.add_transactions(job.portfolio_id, transactions)
+        for txn in transactions:
+            await self.portfolio.upsert_holding(job.portfolio_id, txn.ticker)
+        await self.record_progress(job_id, job.processed_rows + count)
+        return count
+
     async def mark_succeeded(
         self,
         job_id: int,
         created_transactions: int,
         tickers: list[str],
         warnings: list[str],
+        unresolved_items: Sequence[ImportIssue] = (),
     ) -> None:
         self._update(
             job_id,
@@ -182,15 +203,14 @@ class _FakePortfolio:
         sector: str | None = None,
         industry: str | None = None,
     ) -> None:
-        self.holdings[ticker] = HoldingInfo(
-            ticker=ticker, sector=sector, industry=industry
-        )
+        self.holdings[ticker] = HoldingInfo(ticker=ticker, sector=sector, industry=industry)
 
 
 def _build(
     batch_size: int = 500, exists: bool = True
 ) -> tuple[StatementImportService, _MemoryJobStore, _MemoryStorage, _FakePortfolio]:
     store, storage, portfolio = _MemoryJobStore(), _MemoryStorage(), _FakePortfolio(exists)
+    store.portfolio = portfolio
     service = StatementImportService(
         store=store,
         storage=storage,
@@ -286,4 +306,3 @@ async def test_process_records_failure_instead_of_raising() -> None:
     assert final is not None
     assert final.status is ImportStatus.FAILED
     assert final.error is not None
-

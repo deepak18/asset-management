@@ -35,12 +35,16 @@ Design choices worth stating
 from __future__ import annotations
 
 import hashlib
+from asyncio import to_thread
 from collections.abc import Sequence
 
+from app.portfolio.reconciliation import correction_transaction, infer_splits
 from app.portfolio.schemas import (
     StatementFormat,
     StatementImportStatus,
     Transaction,
+    UnresolvedItem,
+    UnresolvedResolution,
 )
 from app.portfolio.statements import StatementParseError, get_parser
 from app.providers.base import (
@@ -104,6 +108,7 @@ class StatementImportService:
         original_filename: str,
         data: bytes,
         allow_duplicate: bool = False,
+        history_complete: bool = False,
     ) -> StatementImportStatus | None:
         """Store the upload and queue it. ``None`` if the portfolio doesn't exist.
 
@@ -130,7 +135,7 @@ class StatementImportService:
         # Validate the format up front (cheap header check) so an obviously wrong
         # file is rejected at upload time rather than surfacing as a failed job.
         parser = get_parser(source_format)
-        parser.parse(data)
+        parser.validate(data)
 
         key = storage_key_for(checksum, source_format)
         await self._storage.put(key, data)
@@ -142,7 +147,29 @@ class StatementImportService:
             storage_key=key,
             checksum=checksum,
             size_bytes=len(data),
+            history_complete=history_complete,
         )
+
+    async def retry(self, portfolio_id: int, job_id: int) -> StatementImportStatus | None:
+        """Verify retained bytes before atomically replacing a failed job's writes."""
+
+        job = await self._store.get_job(job_id)
+        if job is None or job.portfolio_id != portfolio_id:
+            return None
+        data = await self._storage.get(storage_key_for(job.checksum, job.source_format))
+        if compute_checksum(data) != job.checksum:
+            raise StatementStorageError("Stored statement checksum mismatch; retry refused")
+        return await self._store.reset_failed(portfolio_id, job_id)
+
+    async def resolve(
+        self, portfolio_id: int, item_id: int, resolution: UnresolvedResolution
+    ) -> UnresolvedItem | None:
+        items = await self._store.list_unresolved(portfolio_id, include_resolved=True)
+        item = next((i for i in items if i.id == item_id), None)
+        if item is None:
+            return None
+        txn = correction_transaction(item, resolution)
+        return await self._store.resolve_item(portfolio_id, item_id, txn)
 
     async def process(self, job_id: int, storage_key: str, portfolio_id: int) -> None:
         """Run one queued import to a terminal state.
@@ -152,6 +179,8 @@ class StatementImportService:
         background-task handler that would swallow it.
         """
 
+        if not await self._store.claim_job(job_id):
+            return
         try:
             data = await self._storage.get(storage_key)
             job = await self._store.get_job(job_id)
@@ -159,19 +188,21 @@ class StatementImportService:
                 return
 
             parser = get_parser(StatementFormat(job.source_format))
-            parsed = parser.parse(data)
+            if job.portfolio_id != portfolio_id or compute_checksum(data) != job.checksum:
+                raise StatementStorageError("Stored statement identity/checksum mismatch")
+            parsed = await to_thread(parser.parse, data)
+            parsed = await to_thread(infer_splits, parsed, job.history_complete)
             transactions = list(parsed.transactions)
 
             await self._store.mark_running(job_id, total_rows=len(transactions))
-            created, tickers = await self._insert_in_batches(
-                job_id, portfolio_id, transactions
-            )
+            created, tickers = await self._insert_in_batches(job_id, portfolio_id, transactions)
 
             await self._store.mark_succeeded(
                 job_id,
                 created_transactions=created,
                 tickers=tickers,
                 warnings=list(parsed.warnings)[: self._max_warnings],
+                unresolved_items=parsed.unresolved_items,
             )
         except (StatementParseError, StatementStorageError) as exc:
             await self._store.mark_failed(job_id, str(exc))
@@ -187,26 +218,18 @@ class StatementImportService:
         """Insert transactions in committed batches, publishing progress as we go."""
 
         created = 0
-        classification: dict[str, tuple[str | None, str | None]] = {}
+        tickers: set[str] = set()
 
         for start in range(0, len(transactions), self._batch_size):
             batch = transactions[start : start + self._batch_size]
-            created += await self._writer.add_transactions(portfolio_id, batch)
+            created += await self._store.append_batch(job_id, batch)
             for txn in batch:
-                prev = classification.get(txn.ticker, (None, None))
-                classification[txn.ticker] = (
-                    txn.sector or prev[0],
-                    txn.industry or prev[1],
-                )
-            await self._store.record_progress(job_id, created)
+                tickers.add(txn.ticker)
 
         # Ensure every touched ticker is a tracked holding so it shows up in the
         # holdings/allocation views. Done once at the end rather than per batch:
         # it is idempotent, and repeating it per batch would be wasted writes.
-        for ticker, (sector, industry) in classification.items():
-            await self._writer.upsert_holding(portfolio_id, ticker, sector, industry)
-
-        return created, sorted(classification)
+        return created, sorted(tickers)
 
 
 __all__ = [

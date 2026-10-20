@@ -21,6 +21,7 @@ from __future__ import annotations
 from datetime import date
 
 from app.portfolio.schemas import (
+    ClassificationSource,
     HoldingClassificationUpdate,
     HoldingInfo,
     LedgerIngestResult,
@@ -117,13 +118,12 @@ class PortfolioIngestService:
             existing.ticker,
             sector=update.sector,
             industry=update.industry,
+            classification_source=ClassificationSource.MANUAL,
+            clear_fields=tuple(
+                name for name in update.model_fields_set if getattr(update, name) is None
+            ),
         )
-        # upsert_holding ignores None, so an omitted field keeps its prior value.
-        return HoldingInfo(
-            ticker=existing.ticker,
-            sector=update.sector or existing.sector,
-            industry=update.industry or existing.industry,
-        )
+        return await self._reader.get_holding(portfolio_id, existing.ticker)
 
     async def _record(
         self, portfolio_id: int, transactions: list[Transaction]

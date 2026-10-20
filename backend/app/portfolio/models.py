@@ -20,6 +20,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     ForeignKey,
@@ -66,9 +67,7 @@ class Portfolio(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120))
     base_currency: Mapped[str] = mapped_column(String(3))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Holding(Base):
@@ -86,6 +85,9 @@ class Holding(Base):
     ticker: Mapped[str] = mapped_column(String(20))
     sector: Mapped[str | None] = mapped_column(String(80), default=None)
     industry: Mapped[str | None] = mapped_column(String(80), default=None)
+    classification_source: Mapped[str] = mapped_column(
+        String(20), default="NONE", server_default="NONE"
+    )
 
 
 class Transaction(Base):
@@ -105,6 +107,9 @@ class Transaction(Base):
     fees: Mapped[Decimal] = mapped_column(ExactDecimal, default=Decimal(0))
     amount: Mapped[Decimal] = mapped_column(ExactDecimal, default=Decimal(0))
     split_ratio: Mapped[Decimal] = mapped_column(ExactDecimal, default=Decimal(1))
+    import_job_id: Mapped[int | None] = mapped_column(
+        ForeignKey("statement_imports.id"), index=True
+    )
 
 
 class Cash(Base):
@@ -147,15 +152,9 @@ class StatementImport(Base):
     checksum: Mapped[str] = mapped_column(String(64), index=True)
     size_bytes: Mapped[int] = mapped_column(Integer)
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    started_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), default=None
-    )
-    finished_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), default=None
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
     total_rows: Mapped[int | None] = mapped_column(Integer, default=None)
     processed_rows: Mapped[int] = mapped_column(Integer, default=0)
@@ -165,4 +164,20 @@ class StatementImport(Base):
     tickers_json: Mapped[str] = mapped_column(Text, default="[]")
     warnings_json: Mapped[str] = mapped_column(Text, default="[]")
     error: Mapped[str | None] = mapped_column(Text, default=None)
+    history_complete: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    retry_safe: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
 
+
+class ImportUnresolvedItem(Base):
+    """An actionable source record; resolving it and writing its event is atomic."""
+
+    __tablename__ = "import_unresolved_items"
+    __table_args__ = (UniqueConstraint("import_id", "source_line", name="uq_import_issue_line"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    import_id: Mapped[int] = mapped_column(ForeignKey("statement_imports.id"), index=True)
+    portfolio_id: Mapped[int] = mapped_column(ForeignKey("portfolios.id"), index=True)
+    ticker: Mapped[str | None] = mapped_column(String(20), default=None)
+    payload_json: Mapped[str] = mapped_column(Text)
+    source_line: Mapped[int] = mapped_column(Integer)
+    resolved: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
