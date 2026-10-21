@@ -156,6 +156,13 @@ Testing is a **build-time discipline, not a phase.** Each task below is only com
 - [x] Preserve draft/error recovery and portfolio isolation; ship 12 focused regression tests alongside the implementation (182 frontend tests total), lint and typecheck validation.
 - [x] Update root/frontend runbooks and `STRUCTURE.md`; include them with the validated local feature commit.
 
+### Interactive allocation donuts delivery
+
+- [x] Add linked slice/legend hover and focus previews, click/tap/keyboard pinning, expanded outlined active arcs, and a theme-aware anchored detail card.
+- [x] Support Escape and Clear Selection, independent sector/industry charts, reduced-motion styles and portfolio-scoped reset without altering decimal-string display or the analytics contract.
+- [x] Ship real-SVG interaction and portfolio-switch regressions; update dashboard/button-label assertions for accessible category controls; verify 194 frontend tests, lint and typecheck.
+- [x] Update root/frontend runbooks and `STRUCTURE.md`; preserve existing changes and include feature documentation with its local commit.
+
 ### Commit delivery policy
 
 - Local, dependency-ordered Conventional Commits are part of delivery by default; commit each validated slice with its tests and required documentation before starting the next slice.

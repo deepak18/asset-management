@@ -340,6 +340,45 @@ deletion provenance and strict writes are covered by
 late GET responses after close/account switch and detail-ledger/XIRR refresh after
 adding a missing dividend while the review remains open.
 
+## Allocation donut interactions
+
+Allocation remains read-only reporting: selecting a category does not edit labels,
+filter holdings, fetch market data, or write to the API. Hover a wedge or hover/focus
+its legend button to preview category, market value and percentage in the anchored
+detail card. The matching legend gains a border/background and the active wedge
+expands with a foreground stroke; other wedges dim slightly. Click/tap a wedge or
+legend button to pin; selecting the same category unpins. Other hover/focus previews
+return to the pinned category on leave/blur. Native Enter/Space activates legend
+buttons (`aria-pressed`); Escape or **Clear Selection** resets the chart. Clear
+restores focus to the selected legend button without reopening the preview.
+
+The detail card uses light/dark popover tokens and stable description IDs. Legend
+buttons expose all values to keyboard/screen-reader users; the equivalent SVG is
+decorative, not a second keyboard navigation system. No live region repeats every
+pointer movement. Recharts animation is disabled; small CSS transitions honor
+reduced motion. No center text competes for the 160px donut's limited space.
+Original Decimal strings feed existing formatters; floats size arcs only. Zero or
+non-renderable weights retain usable, honestly labeled legend entries. Empty
+allocations retain the existing unavailable message and no ring.
+
+Sector/industry states are independent. Refreshing chart props reconciles selection
+by category key and drops removed categories. The data wrapper is keyed by portfolio
+so neither previous data nor selection carries across accounts. Its existing loading
+state remounts charts during a network refresh (pins reset on that refresh).
+
+- `src/components/portfolio/allocation-chart.tsx`: linked Recharts 2.15
+  `activeIndex`/`activeShape` and indexed `Pie` events, accessible legend and anchored
+  details. The built-in Tooltip's chart-local hover/click trigger is not used because
+  keyboard legend previews and persistent pins need one shared interaction state.
+- `src/components/portfolio/allocation-section.tsx`: portfolio-keyed resource boundary,
+  existing typed analytics read, loading/error and refresh-token behavior.
+- `src/__tests__/components/allocation-chart.test.tsx`: real SVG paths (not chart mocks),
+  hover/pin/clear/keyboard, separate donuts, reordered/removed data, exact decimals,
+  unavailable/no-arc states and reduced-motion class assertions.
+- `src/__tests__/components/allocation-section.test.tsx`: contract-shaped MSW reads,
+  portfolio selection isolation, ignored stale responses, refresh, API errors and
+  unavailable allocations. No contract or dependency change is needed.
+
 ## Button naming and confirmation dismissal
 
 Button text and icon-button accessible names use explicit Title Case, including

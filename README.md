@@ -163,6 +163,17 @@ live mode works out of the box:
 See [`backend/README.md`](./backend/README.md#4-sector--industry-classification)
 for the full contract, edge cases, and repair workflow.
 
+### Allocation donut interactions
+
+Hover a sector/industry slice or its legend row to highlight both and inspect the
+category, market value and allocation percentage in the detail card below. Click
+or tap a slice or legend row to pin it; selecting it again unpins it. Hovering
+another category previews it temporarily, then returns to the pinned selection.
+Legend buttons also support keyboard focus and Enter/Space. Press Escape or choose
+**Clear Selection** to reset. The two charts are independent, use light/dark theme
+tokens and respect reduced-motion preferences. Switching portfolios resets selection.
+Displayed financial values remain formatted from the API's original decimal strings.
+
 ### Classification suggestions
 
 On the Holdings table or holding detail page, edit **Sector** or **Industry** to

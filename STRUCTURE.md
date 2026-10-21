@@ -227,8 +227,8 @@ frontend/
     │   ├── shared/            # ✅ states.tsx — loading / error / empty blocks (honest "—", no fake 0)
     │   ├── portfolio/         # ✅ views
     │   │   ├── portfolio-summary.tsx       # ✅ Headline stats and status-driven XIRR guidance; unavailable values stay "—"
-    │   │   ├── allocation-chart.tsx        # ✅ Recharts donut + accessible legend (sector/industry)
-    │   │   ├── allocation-section.tsx      # ✅ Data wrapper feeding the donuts from analytics; refreshToken-aware
+    │   │   ├── allocation-chart.tsx        # ✅ Recharts v2 linked wedge/legend previews, accessible pin/clear controls and Decimal-string detail card
+    │   │   ├── allocation-section.tsx      # ✅ Portfolio-keyed analytics resource boundary feeding independent donuts; loading/error and refreshToken-aware
     │   │   ├── transaction-ledger.tsx      # ✅ Stable-ID/origin-labeled ledger with provenance-aware confirmed deletion and scoped refresh
     │   │   ├── holdings-table.tsx          # ✅ Holding links/history diagnostics and classification with suggestions shared from full holdings
     │   │   ├── holding-history.tsx         # ✅ Shared history diagnostics and exhaustive typed reason labels
@@ -321,6 +321,14 @@ mcp/
 
 ---
 
+## Allocation Interaction Regression Inventory
+
+- `frontend/src/__tests__/components/allocation-chart.test.tsx` — Real Recharts SVG hover/click paths, legend focus/Enter/Space/Escape, clear/focus restoration, separate chart states and IDs, keyed data reconciliation, exact decimal display, empty/no-arc states and reduced-motion styling.
+- `frontend/src/__tests__/components/allocation-section.test.tsx` — Contract-shaped MSW analytics reads, portfolio-keyed selection isolation, stale-response dismissal, token refresh, API failure recovery and unavailable allocations.
+- `frontend/README.md` documents read-only selection semantics, theme/accessibility choices, the installed Recharts v2 API seam and network-refresh pin resets.
+
+---
+
 ## Frontend UI Regression Inventory
 
 - `frontend/src/__tests__/components/history-confirm-dismissal.test.tsx` — Table/detail confirmation waits for server success, dismisses and restores focus, refreshes XIRR, reopens persisted confirmation, and stays open on failures.
@@ -329,3 +337,5 @@ mcp/
 - `frontend/src/__tests__/components/classification-suggestions.test.tsx` — Field-specific trimmed/deduplicated/sorted suggestions, table/detail other-holding values, shared reads, keyboard/mouse/ARIA behavior, scope/delayed reads, refreshed options, failure drafts, blank clears and cancellation.
 - `frontend/src/__tests__/components/holdings.test.tsx` and `dashboard.test.tsx` query classification editors by their combobox role while retaining existing draft/history/allocation regressions.
 - `frontend/README.md` documents suggestion matching, explicit selection vs save, nonblocking detail reads and the new frontend file map.
+- `frontend/src/__tests__/components/dashboard.test.tsx` — Accessible category buttons and meaningful detail summaries, click/Enter/Space pinning, exact Clear Selection action, requested-portfolio scope and inline-edit allocation refresh.
+- `frontend/src/__tests__/components/button-labels.test.tsx` — Fixed-action Title Case checks classify data-driven category controls separately; independent uppercase/lowercase/mixed-case category assertions preserve API spelling in both donuts and require exact Clear Selection labels.

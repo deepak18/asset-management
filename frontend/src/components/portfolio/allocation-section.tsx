@@ -17,6 +17,24 @@ export function AllocationSection({
   portfolioId: number;
   refreshToken?: number;
 }) {
+  return (
+    <ScopedAllocationSection
+      key={portfolioId}
+      portfolioId={portfolioId}
+      refreshToken={refreshToken}
+    />
+  );
+}
+
+function ScopedAllocationSection({
+  portfolioId,
+  refreshToken,
+}: {
+  portfolioId: number;
+  refreshToken: number;
+}) {
+  // The resource hook retains its previous result until its effect runs.
+  // Keying this boundary prevents even a transient cross-portfolio render.
   const state = usePortfolioAnalytics(portfolioId, refreshToken);
 
   if (state.status === "loading") {
