@@ -57,7 +57,7 @@ class Transaction(BaseModel):
     * ``SPLIT``: ``split_ratio`` (e.g. ``2`` for a 2-for-1); other fields ignored.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     ticker: str = Field(min_length=1)
     type: TransactionType
@@ -84,6 +84,24 @@ class PositionValue(BaseModel):
     market_value: Decimal
     sector: str | None = None
     industry: str | None = None
+
+
+class TransactionRecord(Transaction):
+    """Persisted ledger read; IDs are deliberately absent from write inputs."""
+
+    id: int
+    portfolio_id: int
+
+
+class HoldingHistoryGap(StrEnum):
+    NO_TRANSACTIONS = "NO_TRANSACTIONS"
+    NO_ACQUISITION = "NO_ACQUISITION"
+    UNKNOWN_ORIGIN = "UNKNOWN_ORIGIN"
+    SNAPSHOT = "SNAPSHOT"
+    IMPORT_NOT_COMPLETE = "IMPORT_NOT_COMPLETE"
+    IMPORT_NOT_SUCCEEDED = "IMPORT_NOT_SUCCEEDED"
+    UNRESOLVED_EVENTS = "UNRESOLVED_EVENTS"
+    DELETED_TRANSACTION = "DELETED_TRANSACTION"
 
 
 class SnapshotTransaction(Transaction):
@@ -132,6 +150,7 @@ class HoldingLedger(BaseModel):
     origins: tuple[LedgerOrigin, ...] = ()
     imports: tuple[HoldingImportHistory, ...] = ()
     has_unresolved_events: bool = False
+    has_deleted_transactions: bool = False
 
 
 class PortfolioSummary(BaseModel):
@@ -178,6 +197,8 @@ class HoldingInfo(BaseModel):
     industry: str | None = None
     classification_source: ClassificationSource = ClassificationSource.NONE
     data_gaps: tuple[DataGap, ...] = ()
+    history_complete: bool = False
+    history_gaps: tuple[HoldingHistoryGap, ...] = ()
 
     @model_validator(mode="after")
     def _classification_gaps(self) -> HoldingInfo:
@@ -224,6 +245,8 @@ class CostBasisResult(BaseModel):
     open_lots: tuple[OpenLot, ...]
     classification_source: ClassificationSource = ClassificationSource.NONE
     data_gaps: tuple[DataGap, ...] = ()
+    history_complete: bool = False
+    history_gaps: tuple[HoldingHistoryGap, ...] = ()
 
 
 class UnrealizedResult(BaseModel):

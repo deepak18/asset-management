@@ -9,7 +9,7 @@ forgets the corresponding migration, catching schema/model divergence early.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
@@ -156,6 +156,40 @@ def test_holding_history_backfill_and_downgrade(
         assert origins == ["UNKNOWN", "OBSERVED"]
         command.downgrade(cfg, "0005")
         assert "history_origin" not in {c["name"] for c in inspect(engine).get_columns("transactions")}
+        command.upgrade(cfg, "head")
+    finally:
+        engine.dispose()
+
+
+def test_deletion_migration_preserves_active_rows_and_never_resurrects_deleted_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _isolate_settings: None,
+) -> None:
+    db_path = tmp_path / "deletion.db"
+    cfg = _alembic_config(db_path, monkeypatch)
+    command.upgrade(cfg, "0006")
+    engine = create_engine(f"sqlite:///{db_path.as_posix()}")
+    try:
+        metadata = MetaData()
+        portfolios = Table("portfolios", metadata, autoload_with=engine)
+        txns = Table("transactions", metadata, autoload_with=engine)
+        with engine.begin() as conn:
+            conn.execute(portfolios.insert().values(id=1, name="Existing", base_currency="USD"))
+            for txn_id in (1, 2):
+                conn.execute(txns.insert().values(
+                    id=txn_id, portfolio_id=1, ticker="AAA", type="BUY", trade_date=date(2024, 1, 1),
+                    currency="USD", quantity=1, price=100, fees=0, amount=0, split_ratio=1,
+                    history_origin="OBSERVED",
+                ))
+        command.upgrade(cfg, "head")
+        txns = Table("transactions", MetaData(), autoload_with=engine)
+        with engine.begin() as conn:
+            assert conn.execute(select(txns.c.deleted_at)).scalars().all() == [None, None]
+            conn.execute(txns.update().where(txns.c.id == 2).values(deleted_at=datetime.now(UTC)))
+        command.downgrade(cfg, "0006")
+        txns = Table("transactions", MetaData(), autoload_with=engine)
+        with engine.connect() as conn:
+            assert conn.execute(select(txns.c.id)).scalars().all() == [1]
+        assert "deleted_at" not in txns.c
         command.upgrade(cfg, "head")
     finally:
         engine.dispose()

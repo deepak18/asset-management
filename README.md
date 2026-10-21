@@ -76,11 +76,11 @@ uv sync --extra dev --extra postgres
 uv run alembic upgrade head
 ```
 
-Existing installations, including those already on `0005`, must upgrade to `0006`
-before starting this backend. It records snapshot/observed transaction origins for
-holding XIRR; ambiguous legacy unowned transactions remain unknown rather than
-being trusted as observed purchases. No application-database migration is run
-automatically by the API.
+Existing installations, including those already on `0006`, must upgrade to `0007`
+before starting this backend. Revision `0006` records snapshot/observed origins for
+holding XIRR; `0007` adds transaction-deletion audit tombstones. Ambiguous legacy
+unowned transactions remain unknown rather than being trusted as observed purchases.
+No application-database migration is run automatically by the API.
 
 **5. Run the API.**
 ```powershell
@@ -171,6 +171,17 @@ remaining quantity as the terminal valuation. Snapshot/unknown or incomplete imp
 history, missing prices/FX, and undefined returns are withheld, never replaced by
 zero. Portfolio-level behavior is unchanged. See the
 [response/status semantics](./backend/README.md#holding-level-money-weighted-return-xirr).
+
+### Holding history and ledger deletion (backend)
+
+Holdings and analytics positions include read-only `history_complete` and typed
+`history_gaps` for a **History not confirmed** table indicator, independent of prices
+and classification. Ledger GET responses now expose stable transaction `id` and
+`portfolio_id`; DELETE is scoped to both. A successful deletion returns `204` after
+commit, retains an audit tombstone, and marks affected holding history unconfirmed.
+Active imports or deletions that orphan later sales return `409`, not partial writes.
+Frontend work is separate: see the [implementation prompt](./backend/FRONTEND_HANDOFF.md)
+and [backend semantics](./backend/README.md#holding-history-indicators-and-transaction-deletion).
 
 ---
 

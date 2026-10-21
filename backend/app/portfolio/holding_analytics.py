@@ -13,13 +13,13 @@ from app.portfolio.calculators import (
     unrealized_pnl,
     xirr,
 )
+from app.portfolio.history import holding_history_gaps
 from app.portfolio.schemas import (
     CashFlow,
     HoldingAnalytics,
+    HoldingHistoryGap,
     HoldingReturnStatus,
     HoldingValuationSource,
-    ImportStatus,
-    LedgerOrigin,
     TransactionType,
 )
 from app.providers.base import HoldingAnalyticsProvider
@@ -61,13 +61,12 @@ class HoldingAnalyticsService:
             valuation_date=today,
         )
         ledger = await self._provider.get_holding_ledger(portfolio_id, holding.ticker)
-        if (
-            len(ledger.origins) != len(ledger.transactions)
-            or any(origin != LedgerOrigin.OBSERVED for origin in ledger.origins)
-            or ledger.has_unresolved_events
-            or any(job.status != ImportStatus.SUCCEEDED or not job.history_complete
-                   for job in ledger.imports)
-        ):
+        # Empty/cash-only ledgers retain the existing numerical/invalid-history
+        # handling below; all provenance and deletion blockers are shared.
+        blockers = set(holding_history_gaps(ledger)) - {
+            HoldingHistoryGap.NO_TRANSACTIONS, HoldingHistoryGap.NO_ACQUISITION,
+        }
+        if blockers:
             return result
         transactions = list(ledger.transactions)
         if any(

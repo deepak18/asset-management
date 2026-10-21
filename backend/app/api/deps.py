@@ -30,7 +30,7 @@ from app.portfolio.holding_analytics import HoldingAnalyticsService
 from app.portfolio.imports import StatementImportService
 from app.portfolio.ingest import PortfolioIngestService
 from app.portfolio.service import PortfolioService
-from app.providers.base import PortfolioProvider, StatementImportStore
+from app.providers.base import PortfolioProvider, StatementImportStore, TransactionLedgerProvider
 from app.providers.marketdata_provider import MarketDataProvider
 from app.providers.portfolio_provider import SqlAlchemyPortfolioProvider
 from app.providers.statement_import_store import SqlAlchemyStatementImportStore
@@ -64,6 +64,12 @@ def get_portfolio_provider(
 ) -> PortfolioProvider:
     """Build the SQLAlchemy provider for this request (returned as the interface)."""
 
+    return SqlAlchemyPortfolioProvider(session)
+
+
+def get_transaction_ledger_provider(
+    session: AsyncSession = Depends(get_session),
+) -> TransactionLedgerProvider:
     return SqlAlchemyPortfolioProvider(session)
 
 

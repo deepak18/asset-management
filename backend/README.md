@@ -39,7 +39,7 @@ From the **repo root** first: `docker compose up -d --wait` (starts Postgres + p
 ```bash
 cd backend
 uv sync --extra dev --extra postgres
-uv run alembic upgrade head             # includes holding return history provenance (0006)
+uv run alembic upgrade head             # includes transaction deletion tombstones (0007)
 uv run python -m uvicorn app.main:app --reload    # http://localhost:8000/docs
 ```
 
@@ -58,6 +58,12 @@ snapshots and manual trades were stored identically, so guessing would fabricate
 return history. This deliberately withholds holding XIRR for those rows until
 history is reconciled from source records (there is no automatic trust override).
 No existing transactions are deleted or financially changed by this migration.
+
+Revision `0007` is required even on installations already upgraded to `0006`.
+It adds nullable `transactions.deleted_at`; all existing events remain active.
+Upgrade before restarting the API. Downgrading `0007` permanently removes tombstoned
+events before dropping the column, so a downgrade cannot resurrect deleted trades;
+back up the database before downgrading. No application migration is automatic.
 
 > 💡 **Why `python -m uvicorn` and not `uvicorn`?** `uv sync` installs a small
 > `uvicorn.exe` launcher shim in `.venv\Scripts\`. On locked-down Windows (Smart App
@@ -244,6 +250,86 @@ uv run python scripts/import_demo.py path/to/robinhood_activity.csv
 Transaction and position writes return `201` with a `LedgerIngestResult`.
 Portfolio creation returns a `PortfolioSummary`; uploads/retries return `202`
 with a `StatementImportStatus`.
+
+## Holding history indicators and transaction deletion
+
+### History indicators for the holdings table
+
+`GET /api/v1/portfolios/{id}/holdings`, the single-holding GET, classification
+responses, and `/analytics` positions expose:
+
+- `history_complete: boolean`: no known history blockers under the existing
+  holding-return policy. This is read-only, not independent proof that the owner
+  supplied every real-world event. Manual observed purchases are user assertions.
+- `history_gaps: HoldingHistoryGap[]`: deterministic, sorted reasons below.
+
+| Reason | Meaning |
+|---|---|
+| `NO_TRANSACTIONS` | No active ledger events for the tracked holding |
+| `NO_ACQUISITION` | Events exist but no observed acquisition can be established from a BUY |
+| `UNKNOWN_ORIGIN` | Legacy/unknown provenance, or incomplete origin metadata |
+| `SNAPSHOT` | At least one active synthetic snapshot opening lot |
+| `IMPORT_NOT_COMPLETE` | A relevant import was not asserted complete |
+| `IMPORT_NOT_SUCCEEDED` | A relevant import is pending/running/failed |
+| `UNRESOLVED_EVENTS` | Relevant unresolved financial source events remain |
+| `DELETED_TRANSACTION` | An event was deliberately removed from this ticker's active ledger |
+
+Use a neutral warning such as **History not confirmed** when false, with the
+specific reasons available in a tooltip/detail. Do not assert that transactions
+are actually missing, or that a holding is necessarily a snapshot. Multiple reasons
+can coexist. These indicators do not fetch quotes and are separate from taxonomy
+`data_gaps`, price availability, FX, and mathematical XIRR sufficiency. A complete
+history can still have unavailable prices or an undefined return. Relevant imports
+and unknown-ticker source issues use the same conservative scope as holding XIRR.
+The holdings list loads ledger/history facts in bulk rather than calling an
+analytics/quote service once per ticker.
+
+### Ledger identity and deletion
+
+`GET /api/v1/portfolios/{id}/transactions` now returns `TransactionRecord[]`:
+the existing financial fields plus stable integer `id` and `portfolio_id`.
+Write bodies still use `Transaction`, not `TransactionRecord`; read-only IDs and
+other unknown transaction input fields are rejected (`422`). Never identify a row
+by its displayed index, ticker/date, or amount: identical transactions can coexist.
+
+`DELETE /api/v1/portfolios/{portfolio_id}/transactions/{transaction_id}`:
+
+- `204 No Content`: deletion committed; there is no JSON success body.
+- `404`: absent portfolio/transaction, wrong portfolio, or already deleted.
+- `409`: an import in the account is pending/running, or deleting the event would
+  leave an invalid share replay (for example, removing a BUY/SPLIT needed by a later
+  SELL). Remove/correct dependent sales first; a failed request changes nothing.
+
+The confirmation dialog belongs in the frontend. Cancel must not call DELETE.
+After success, refetch the ledger, holdings, portfolio analytics, affected holding
+analytics, and import history. The account and row IDs selected for confirmation
+must remain bound to that request even if portfolio selection changes.
+
+Deletion uses an audit tombstone: financial facts/origin remain stored, but all
+active ledger reads and analytics exclude the deleted event. It is **not** a fake
+sale and does not book proceeds. The affected holding's classification is retained;
+when its last event is deleted it stays tracked, while its analytics position
+disappears. Its history remains unconfirmed, including after later new entries;
+deletion does not provide a history-completeness attestation or an undo operation.
+Holding XIRR is withheld; existing portfolio-level return policy/formulas remain
+unchanged and simply recompute over the surviving active ledger.
+
+Tombstone and retry-safety changes commit atomically. Deleting an owned imported
+event sets that job's `retry_safe=false`; retry also explicitly refuses jobs with
+owned tombstones. For unowned `UNKNOWN` legacy events, ownership is ambiguous, so
+existing account import retries are conservatively disabled. Original import
+counts, checksums and `history_complete` attestations remain audit facts, not counts
+of surviving rows. Retained source bytes and duplicate-upload detection are unchanged;
+a deliberate new duplicate-override upload is not a same-job retry and can insert
+events again. Deleting a correction does not reopen its resolved source issue;
+the tombstone flags the holding for reconciliation instead of silently duplicating
+that correction. There is no new history-certification or restoration endpoint.
+
+This retains the existing single-API-process deployment restriction. Job row locks
+coordinate deletion with existing import claims/retries on Postgres; SQLite tests
+verify offline behavior, not multi-worker execution.
+
+Frontend implementation prompt: [FRONTEND_HANDOFF.md](./FRONTEND_HANDOFF.md).
 
 ## Known gaps & follow-ups
 
@@ -480,4 +566,3 @@ uv run python scripts/portfolio_demo_1_2.py     # end-to-end deterministic-core 
 uv run python scripts/import_demo.py            # create portfolio → upload CSV → analytics (in-memory; pass a path to dry-run your own export)
 uv run python scripts/ollama_healthcheck.py     # diagnose an Ollama connection (reachability, models, timed completion)
 ```
-

@@ -25,6 +25,7 @@ from app.portfolio.schemas import (
     PortfolioSummary,
     StatementImportStatus,
     Transaction,
+    TransactionRecord,
     UnresolvedItem,
 )
 
@@ -65,6 +66,16 @@ class HoldingAnalyticsProvider(Protocol):
     async def get_holding(self, portfolio_id: int, ticker: str) -> HoldingInfo | None: ...
 
     async def get_holding_ledger(self, portfolio_id: int, ticker: str) -> HoldingLedger: ...
+
+
+class TransactionLedgerProvider(Protocol):
+    """Stable ledger identities and deletion, separate from calculator inputs."""
+
+    async def list_transaction_records(self, portfolio_id: int) -> list[TransactionRecord]: ...
+
+    async def delete_transaction(self, portfolio_id: int, transaction_id: int) -> bool:
+        """Commit deletion or return False if absent; conflicts must not change rows."""
+        ...
 
 
 class PortfolioWriter(Protocol):

@@ -109,6 +109,12 @@ class PortfolioService:
                         p.ticker, HoldingInfo(ticker=p.ticker)
                     ).classification_source,
                     "data_gaps": metadata.get(p.ticker, HoldingInfo(ticker=p.ticker)).data_gaps,
+                    "history_complete": metadata.get(
+                        p.ticker, HoldingInfo(ticker=p.ticker)
+                    ).history_complete,
+                    "history_gaps": metadata.get(
+                        p.ticker, HoldingInfo(ticker=p.ticker)
+                    ).history_gaps,
                 }
             )
             for p in positions

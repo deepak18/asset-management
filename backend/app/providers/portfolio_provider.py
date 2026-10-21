@@ -9,12 +9,19 @@ concern isolated behind the provider boundary.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Sequence
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.portfolio import models
+from app.portfolio.history import (
+    TransactionDeletionConflict,
+    holding_history_gaps,
+    validate_share_replay,
+)
 from app.portfolio.schemas import (
     ClassificationSource,
     HoldingImportHistory,
@@ -25,7 +32,9 @@ from app.portfolio.schemas import (
     PortfolioCreate,
     PortfolioSummary,
     SnapshotTransaction,
+    StatementImportStatus,
     Transaction,
+    TransactionRecord,
 )
 from app.providers.statement_import_store import SqlAlchemyStatementImportStore
 
@@ -58,7 +67,10 @@ class SqlAlchemyPortfolioProvider:
     async def list_transactions(self, portfolio_id: int) -> list[Transaction]:
         stmt = (
             select(models.Transaction)
-            .where(models.Transaction.portfolio_id == portfolio_id)
+            .where(
+                models.Transaction.portfolio_id == portfolio_id,
+                models.Transaction.deleted_at.is_(None),
+            )
             .order_by(models.Transaction.trade_date, models.Transaction.id)
         )
         rows = (await self._session.scalars(stmt)).all()
@@ -84,24 +96,12 @@ class SqlAlchemyPortfolioProvider:
             .order_by(models.Holding.ticker)
         )
         rows = (await self._session.scalars(stmt)).all()
-        issues = await SqlAlchemyStatementImportStore(self._session).list_unresolved(portfolio_id)
+        jobs = await SqlAlchemyStatementImportStore(self._session).list_jobs(portfolio_id)
+        by_ticker: dict[str, list[models.Transaction]] = defaultdict(list)
+        for txn in await self._ledger_rows(portfolio_id):
+            by_ticker[txn.ticker].append(txn)
         return [
-            HoldingInfo(
-                ticker=row.ticker,
-                sector=row.sector,
-                industry=row.industry,
-                classification_source=ClassificationSource(row.classification_source),
-                data_gaps=tuple(
-                    sorted(
-                        {
-                            gap
-                            for item in issues
-                            if item.ticker == row.ticker
-                            for gap in item.data_gaps
-                        }
-                    )
-                ),
-            )
+            _holding_info(row, _holding_ledger(row.ticker, by_ticker[row.ticker], jobs), jobs)
             for row in rows
         ]
 
@@ -113,55 +113,82 @@ class SqlAlchemyPortfolioProvider:
         row = (await self._session.scalars(stmt)).first()
         if row is None:
             return None
-        issues = await SqlAlchemyStatementImportStore(self._session).list_unresolved(portfolio_id)
-        return HoldingInfo(
-            ticker=row.ticker,
-            sector=row.sector,
-            industry=row.industry,
-            classification_source=ClassificationSource(row.classification_source),
-            data_gaps=tuple(
-                sorted(
-                    {gap for item in issues if item.ticker == row.ticker for gap in item.data_gaps}
-                )
-            ),
+        jobs = await SqlAlchemyStatementImportStore(self._session).list_jobs(portfolio_id)
+        ledger = _holding_ledger(
+            row.ticker, await self._ledger_rows(portfolio_id, row.ticker), jobs,
         )
-
-    # --- writes -----------------------------------------------------------
+        return _holding_info(row, ledger, jobs)
 
     async def get_holding_ledger(self, portfolio_id: int, ticker: str) -> HoldingLedger:
-        ticker = ticker.upper()
-        rows = (await self._session.scalars(
-            select(models.Transaction).where(
-                models.Transaction.portfolio_id == portfolio_id,
-                models.Transaction.ticker == ticker,
-            ).order_by(models.Transaction.trade_date, models.Transaction.id)
-        )).all()
         jobs = await SqlAlchemyStatementImportStore(self._session).list_jobs(portfolio_id)
-        owned_jobs = {row.import_job_id for row in rows if row.import_job_id is not None}
-        relevant = [
-            job for job in jobs
-            if job.id in owned_jobs
-            or ticker in job.tickers
-            or any(item.ticker is None or item.ticker.upper() == ticker
-                   for item in job.unresolved_items)
-            # Unfinished jobs have not published a complete ticker inventory.
-            or (job.status != ImportStatus.SUCCEEDED and not job.tickers)
+        return _holding_ledger(ticker.upper(), await self._ledger_rows(portfolio_id, ticker), jobs)
+
+    async def _ledger_rows(
+        self, portfolio_id: int, ticker: str | None = None,
+    ) -> Sequence[models.Transaction]:
+        stmt = select(models.Transaction).where(models.Transaction.portfolio_id == portfolio_id)
+        if ticker is not None:
+            stmt = stmt.where(models.Transaction.ticker == ticker.upper())
+        return (await self._session.scalars(
+            stmt.order_by(models.Transaction.trade_date, models.Transaction.id)
+        )).all()
+
+    async def list_transaction_records(self, portfolio_id: int) -> list[TransactionRecord]:
+        return [
+            TransactionRecord.model_validate(row, from_attributes=True)
+            for row in await self._ledger_rows(portfolio_id) if row.deleted_at is None
         ]
-        return HoldingLedger(
-            transactions=tuple(Transaction(
-                ticker=row.ticker, type=row.type, trade_date=row.trade_date,
-                currency=row.currency, quantity=row.quantity, price=row.price,
-                fees=row.fees, amount=row.amount, split_ratio=row.split_ratio,
-            ) for row in rows),
-            origins=tuple(LedgerOrigin(row.history_origin) for row in rows),
-            imports=tuple(HoldingImportHistory(
-                status=job.status, history_complete=job.history_complete,
-            ) for job in relevant),
-            has_unresolved_events=any(
-                not item.resolved and (item.ticker is None or item.ticker.upper() == ticker)
-                for job in relevant for item in job.unresolved_items
-            ),
-        )
+
+    async def delete_transaction(self, portfolio_id: int, transaction_id: int) -> bool:
+        try:
+            # Serialize deletes within the account; job locks coordinate with
+            # import claims/retries before a row can become user-edited history.
+            portfolio = await self._session.scalar(
+                select(models.Portfolio).where(
+                    models.Portfolio.id == portfolio_id,
+                ).with_for_update()
+            )
+            if portfolio is None:
+                await self._session.rollback()
+                return False
+            jobs = (await self._session.scalars(
+                select(models.StatementImport).where(
+                    models.StatementImport.portfolio_id == portfolio_id,
+                ).order_by(models.StatementImport.id).with_for_update()
+            )).all()
+            row = await self._session.scalar(select(models.Transaction).where(
+                models.Transaction.id == transaction_id,
+                models.Transaction.portfolio_id == portfolio_id,
+                models.Transaction.deleted_at.is_(None),
+            ).with_for_update())
+            if row is None:
+                await self._session.rollback()
+                return False
+            if any(job.status in (ImportStatus.PENDING, ImportStatus.RUNNING) for job in jobs):
+                raise TransactionDeletionConflict(
+                    "Wait for pending/running imports before deleting"
+                )
+            remaining = [
+                Transaction.model_validate(event, from_attributes=True)
+                for event in await self._ledger_rows(portfolio_id, row.ticker)
+                if event.deleted_at is None and event.id != row.id
+            ]
+            validate_share_replay(remaining)
+            row.deleted_at = datetime.now(UTC)
+            for job in jobs:
+                if job.id == row.import_job_id or (
+                    row.import_job_id is None and row.history_origin == LedgerOrigin.UNKNOWN
+                ):
+                    # Unowned legacy rows cannot safely be assigned to a job;
+                    # disable account import retries conservatively in that case.
+                    job.retry_safe = False
+            await self._session.commit()
+            return True
+        except Exception:
+            await self._session.rollback()
+            raise
+
+    # --- writes -----------------------------------------------------------
 
     async def create_portfolio(self, data: PortfolioCreate) -> PortfolioSummary:
         row = models.Portfolio(name=data.name, base_currency=data.base_currency.upper())
@@ -241,3 +268,45 @@ class SqlAlchemyPortfolioProvider:
             elif sector is not None or industry is not None:
                 existing.classification_source = ClassificationSource.MANUAL.value
         await self._session.commit()
+
+
+def _holding_ledger(
+    ticker: str, rows: Sequence[models.Transaction], jobs: Sequence[StatementImportStatus],
+) -> HoldingLedger:
+    owned_jobs = {row.import_job_id for row in rows if row.import_job_id is not None}
+    relevant = [
+        job for job in jobs
+        if job.id in owned_jobs or ticker in job.tickers
+        or any(item.ticker is None or item.ticker.upper() == ticker
+               for item in job.unresolved_items)
+        or (job.status != ImportStatus.SUCCEEDED and not job.tickers)
+    ]
+    active = [row for row in rows if row.deleted_at is None]
+    return HoldingLedger(
+        transactions=tuple(Transaction.model_validate(row, from_attributes=True) for row in active),
+        origins=tuple(LedgerOrigin(row.history_origin) for row in active),
+        imports=tuple(HoldingImportHistory(
+            status=job.status, history_complete=job.history_complete,
+        ) for job in relevant),
+        has_unresolved_events=any(
+            not item.resolved and (item.ticker is None or item.ticker.upper() == ticker)
+            for job in relevant for item in job.unresolved_items
+        ),
+        has_deleted_transactions=any(row.deleted_at is not None for row in rows),
+    )
+
+
+def _holding_info(
+    row: models.Holding, ledger: HoldingLedger, jobs: Sequence[StatementImportStatus],
+) -> HoldingInfo:
+    gaps = holding_history_gaps(ledger)
+    return HoldingInfo(
+        ticker=row.ticker, sector=row.sector, industry=row.industry,
+        classification_source=ClassificationSource(row.classification_source),
+        history_complete=not gaps, history_gaps=gaps,
+        data_gaps=tuple(sorted({
+            gap for job in jobs if job.status == ImportStatus.SUCCEEDED
+            for item in job.unresolved_items if not item.resolved and item.ticker == row.ticker
+            for gap in item.data_gaps
+        })),
+    )

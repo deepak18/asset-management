@@ -121,7 +121,7 @@
           "Portfolio"
         ],
         "summary": "List Transactions",
-        "description": "Return the portfolio's full ledger as typed transactions.",
+        "description": "Return active ledger rows with stable IDs for deletion; no tombstones.",
         "operationId": "list_transactions_api_v1_portfolios__portfolio_id__transactions_get",
         "parameters": [
           {
@@ -142,7 +142,7 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/Transaction-Output"
+                    "$ref": "#/components/schemas/TransactionRecord"
                   },
                   "title": "Response List Transactions Api V1 Portfolios  Portfolio Id  Transactions Get"
                 }
@@ -186,7 +186,7 @@
               "schema": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/components/schemas/Transaction-Input"
+                  "$ref": "#/components/schemas/Transaction"
                 },
                 "title": "Body"
               }
@@ -203,6 +203,57 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/transactions/{transaction_id}": {
+      "delete": {
+        "tags": [
+          "Portfolio"
+        ],
+        "summary": "Delete Transaction",
+        "description": "Remove a row from active calculations after frontend confirmation.\n\nCommits an audit tombstone, marks holding history incomplete, and disables\naffected import retries. This operation does not confirm history completeness.",
+        "operationId": "delete_transaction_api_v1_portfolios__portfolio_id__transactions__transaction_id__delete",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          },
+          {
+            "name": "transaction_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Transaction Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Transaction absent in this portfolio"
+          },
+          "409": {
+            "description": "Import active or deletion would invalidate share history"
           },
           "422": {
             "description": "Validation Error",
@@ -1122,6 +1173,19 @@
             "type": "array",
             "title": "Data Gaps",
             "default": []
+          },
+          "history_complete": {
+            "type": "boolean",
+            "title": "History Complete",
+            "default": false
+          },
+          "history_gaps": {
+            "items": {
+              "$ref": "#/components/schemas/HoldingHistoryGap"
+            },
+            "type": "array",
+            "title": "History Gaps",
+            "default": []
           }
         },
         "type": "object",
@@ -1324,6 +1388,20 @@
         "title": "HoldingClassificationUpdate",
         "description": "Manual sector/industry override for one holding.\n\nOmitted fields are preserved; explicit null clears a field. Every edit marks\nthe holding MANUAL, including clearing both fields."
       },
+      "HoldingHistoryGap": {
+        "type": "string",
+        "enum": [
+          "NO_TRANSACTIONS",
+          "NO_ACQUISITION",
+          "UNKNOWN_ORIGIN",
+          "SNAPSHOT",
+          "IMPORT_NOT_COMPLETE",
+          "IMPORT_NOT_SUCCEEDED",
+          "UNRESOLVED_EVENTS",
+          "DELETED_TRANSACTION"
+        ],
+        "title": "HoldingHistoryGap"
+      },
       "HoldingInfo": {
         "properties": {
           "ticker": {
@@ -1363,6 +1441,19 @@
             },
             "type": "array",
             "title": "Data Gaps",
+            "default": []
+          },
+          "history_complete": {
+            "type": "boolean",
+            "title": "History Complete",
+            "default": false
+          },
+          "history_gaps": {
+            "items": {
+              "$ref": "#/components/schemas/HoldingHistoryGap"
+            },
+            "type": "array",
+            "title": "History Gaps",
             "default": []
           }
         },
@@ -1958,7 +2049,7 @@
         "title": "StatementImportStatus",
         "description": "Progress + outcome of one statement import (what the UI polls).\n\nA decade-long export can hold thousands of rows, so the upload endpoint returns\nimmediately with this record in ``PENDING`` and the work continues in the\nbackground. The client polls until ``status`` is terminal.\n\n``processed_rows``/``total_rows`` drive a progress bar. ``total_rows`` is\n``None`` until parsing has counted the file, because an honest \"unknown\" is\nbetter than a fake denominator that makes a progress bar jump backwards."
       },
-      "Transaction-Input": {
+      "Transaction": {
         "properties": {
           "ticker": {
             "type": "string",
@@ -2067,6 +2158,7 @@
             "title": "Industry"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "ticker",
@@ -2077,7 +2169,7 @@
         "title": "Transaction",
         "description": "A single dated ledger event for one ticker, in its native currency.\n\nField usage by ``type``:\n\n* ``BUY`` / ``SELL``: ``quantity`` (> 0) and ``price`` per share; ``fees`` optional.\n* ``DIVIDEND``: ``amount`` = total cash received (native currency).\n* ``FEE``: ``amount`` = total fee paid (native currency).\n* ``SPLIT``: ``split_ratio`` (e.g. ``2`` for a 2-for-1); other fields ignored."
       },
-      "Transaction-Output": {
+      "TransactionRecord": {
         "properties": {
           "ticker": {
             "type": "string",
@@ -2149,17 +2241,28 @@
               }
             ],
             "title": "Industry"
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "portfolio_id": {
+            "type": "integer",
+            "title": "Portfolio Id"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "ticker",
           "type",
           "trade_date",
-          "currency"
+          "currency",
+          "id",
+          "portfolio_id"
         ],
-        "title": "Transaction",
-        "description": "A single dated ledger event for one ticker, in its native currency.\n\nField usage by ``type``:\n\n* ``BUY`` / ``SELL``: ``quantity`` (> 0) and ``price`` per share; ``fees`` optional.\n* ``DIVIDEND``: ``amount`` = total cash received (native currency).\n* ``FEE``: ``amount`` = total fee paid (native currency).\n* ``SPLIT``: ``split_ratio`` (e.g. ``2`` for a 2-for-1); other fields ignored."
+        "title": "TransactionRecord",
+        "description": "Persisted ledger read; IDs are deliberately absent from write inputs."
       },
       "TransactionType": {
         "type": "string",
@@ -2327,7 +2430,7 @@
           "transaction": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Transaction-Input"
+                "$ref": "#/components/schemas/Transaction"
               },
               {
                 "type": "null"

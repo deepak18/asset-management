@@ -275,6 +275,10 @@ class SqlAlchemyStatementImportStore:
                 models.StatementImport.portfolio_id == portfolio_id,
                 models.StatementImport.status == ImportStatus.FAILED.value,
                 models.StatementImport.retry_safe.is_(True),
+                ~select(models.Transaction.id).where(
+                    models.Transaction.import_job_id == job_id,
+                    models.Transaction.deleted_at.is_not(None),
+                ).exists(),
             )
             .values(
                 status=ImportStatus.PENDING.value,
@@ -295,8 +299,8 @@ class SqlAlchemyStatementImportStore:
             if job is None or job.portfolio_id != portfolio_id:
                 return None
             raise ValueError(
-                "Only FAILED, ownership-tracked imports can be retried; "
-                "legacy partial imports require manual reconciliation"
+                "Only FAILED, ownership-tracked imports without deleted events can be retried; "
+                "legacy or user-edited imports require manual reconciliation"
             )
         await self._session.execute(
             delete(models.Transaction).where(models.Transaction.import_job_id == job_id)

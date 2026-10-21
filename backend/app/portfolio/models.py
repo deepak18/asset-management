@@ -113,6 +113,7 @@ class Transaction(Base):
     history_origin: Mapped[str] = mapped_column(
         String(20), default="OBSERVED", server_default="UNKNOWN"
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
 
 
 class Cash(Base):

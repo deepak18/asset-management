@@ -14,6 +14,7 @@ from fastapi import (
     File,
     HTTPException,
     Query,
+    Response,
     UploadFile,
     status,
 )
@@ -28,11 +29,13 @@ from app.api.deps import (
     get_portfolio_service,
     get_statement_import_service,
     get_statement_import_store,
+    get_transaction_ledger_provider,
 )
 from app.portfolio.classification import (
     DEFAULT_CLASSIFY_LIMIT,
     HoldingClassificationService,
 )
+from app.portfolio.history import TransactionDeletionConflict
 from app.portfolio.holding_analytics import HoldingAnalyticsService
 from app.portfolio.imports import (
     DuplicateStatementError,
@@ -53,12 +56,13 @@ from app.portfolio.schemas import (
     StatementFormat,
     StatementImportStatus,
     Transaction,
+    TransactionRecord,
     UnresolvedItem,
     UnresolvedResolution,
 )
 from app.portfolio.service import PortfolioService
 from app.portfolio.statements import StatementParseError
-from app.providers.base import PortfolioProvider, StatementImportStore
+from app.providers.base import PortfolioProvider, StatementImportStore, TransactionLedgerProvider
 from app.providers.statement_storage import StatementStorageError
 
 router = APIRouter(prefix="/portfolios", tags=["Portfolio"])
@@ -100,11 +104,35 @@ async def get_portfolio(
 @router.get("/{portfolio_id}/transactions")
 async def list_transactions(
     portfolio_id: int,
-    provider: PortfolioProvider = Depends(get_portfolio_provider),
-) -> list[Transaction]:
-    """Return the portfolio's full ledger as typed transactions."""
+    provider: TransactionLedgerProvider = Depends(get_transaction_ledger_provider),
+) -> list[TransactionRecord]:
+    """Return active ledger rows with stable IDs for deletion; no tombstones."""
 
-    return await provider.list_transactions(portfolio_id)
+    return await provider.list_transaction_records(portfolio_id)
+
+
+@router.delete(
+    "/{portfolio_id}/transactions/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT,
+    responses={404: {"description": "Transaction absent in this portfolio"},
+               409: {"description": "Import active or deletion would invalidate share history"}},
+)
+async def delete_transaction(
+    portfolio_id: int,
+    transaction_id: int,
+    provider: TransactionLedgerProvider = Depends(get_transaction_ledger_provider),
+) -> Response:
+    """Remove a row from active calculations after frontend confirmation.
+
+    Commits an audit tombstone, marks holding history incomplete, and disables
+    affected import retries. This operation does not confirm history completeness.
+    """
+    try:
+        deleted = await provider.delete_transaction(portfolio_id, transaction_id)
+    except TransactionDeletionConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Transaction not found in this portfolio")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{portfolio_id}/holdings")

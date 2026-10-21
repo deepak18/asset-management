@@ -57,6 +57,9 @@ async def test_snapshot_origin_survives_direct_and_repair_writes(async_session: 
     assert not history.has_unresolved_events
     service = HoldingAnalyticsService(provider, FxRateTable(base_currency="USD"))
     for ticker in ("AAA", "BBB"):
+        holding = await provider.get_holding(summary.id, ticker)
+        assert holding is not None and not holding.history_complete
+        assert "SNAPSHOT" in holding.history_gaps
         result = await service.get_analytics(summary.id, ticker, as_of=date(2024, 12, 31))
         assert result is not None and result.money_weighted_return is None
         assert result.money_weighted_return_status == HoldingReturnStatus.INCOMPLETE_HISTORY
@@ -85,6 +88,9 @@ async def test_only_relevant_import_history_blocks_closed_ticker(
     assert len(history.transactions) == 2
     assert len(history.imports) == 1
     assert history.imports[0].history_complete == complete
+    holding = await provider.get_holding(summary.id, "AAA")
+    assert holding is not None and holding.history_complete == complete
+    assert holding.history_gaps == (() if complete else ("IMPORT_NOT_COMPLETE",))
     market = AsyncMock(spec=MarketDataProvider)
     result = await HoldingAnalyticsService(provider, FxRateTable(base_currency="USD"), market
                                           ).get_analytics(summary.id, "AAA", as_of=date(2024, 12, 31))
@@ -113,6 +119,9 @@ async def test_unresolved_event_scoping(
     )])
     history = await provider.get_holding_ledger(summary.id, "AAA")
     assert history.has_unresolved_events == blocks
+    holding = await provider.get_holding(summary.id, "AAA")
+    assert holding is not None and holding.history_complete == (not blocks)
+    assert ("UNRESOLVED_EVENTS" in holding.history_gaps) == blocks
 
 
 async def test_unfinished_unassigned_import_is_conservatively_incomplete(

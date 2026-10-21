@@ -86,6 +86,8 @@ async def test_manual_classification_works_without_market_data(
         "industry": "Streaming",
         "classification_source": "MANUAL",
         "data_gaps": [],
+        "history_complete": False,
+        "history_gaps": ["NO_TRANSACTIONS"],
     }
 
 
@@ -151,6 +153,7 @@ async def test_clear_one_field_preserves_the_other(api_client: AsyncClient) -> N
     assert response.json() == {
         "ticker": "AAPL", "sector": None, "industry": "Hardware",
         "classification_source": "MANUAL", "data_gaps": ["SECTOR"],
+        "history_complete": True, "history_gaps": [],
     }
     invalid = await api_client.patch(
         f"{_BASE}/holdings/AAPL", json={"sector": "Tech", "industyr": "Typo"}
