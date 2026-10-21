@@ -168,3 +168,13 @@ Testing is a **build-time discipline, not a phase.** Each task below is only com
 - Local, dependency-ordered Conventional Commits are part of delivery by default; commit each validated slice with its tests and required documentation before starting the next slice.
 - The orchestrator owns staging/commits after delegate handoff. Report actual commit hashes and remaining working-tree status, not only proposed messages.
 - The current request to finish all pending chat commits supersedes the earlier commit deferral. Future completed work must not be left unstaged unless explicitly requested.
+
+### Commit audit (2026-10-21)
+
+- [x] `d0738ec` — agent profiles and default local slice-commit policy.
+- [x] `db7b32a` — backend history confirmation, migration, OpenAPI, tests and runbooks.
+- [x] `32dcf90` — frontend history review/repair/confirmation, origins, Title Case and tests.
+- [x] `82c7e1d` — portfolio-scoped classification suggestions and regressions.
+- [x] `232b91a` — interactive allocation donuts and real-SVG regressions.
+- Each slice was validated from an exported Git index snapshot before committing; later working-tree features could not mask missing staged dependencies.
+- [ ] Investigate intermittent table confirmation focus-restoration assertion in `history-confirm-dismissal.test.tsx`: two full-suite failures during commit validation, followed by passing isolated and full-suite runs. No test was skipped or disabled.

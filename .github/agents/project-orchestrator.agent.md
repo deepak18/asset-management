@@ -52,8 +52,7 @@ type / endpoint path + status codes), the required tests, and the applicable
 detail. If the launcher cannot discover a configured profile, report the exact
 error and ask the user to reload agent discovery/start a new chat; do not silently
 bypass layer isolation. Tell delegates not to stage or commit: the orchestrator
-owns staging and commits by default. Honor an explicit user deferral only while
-it remains in force; a later request to commit supersedes it.
+owns staging and commits by default.
 
 Make small cross-cutting edits yourself (types, docs, config) when delegation would cost
 more than it saves.
