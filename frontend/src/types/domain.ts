@@ -8,15 +8,14 @@ import type { components } from "@/types/api";
  * `api.ts` from `backend/openapi.json` and every consumer updates in lock-step),
  * while call sites read cleanly.
  *
- * Note the backend now emits `Transaction` as two schemas: `Transaction-Output`
- * (what reads return — every numeric field is a Decimal STRING) and
- * `Transaction-Input` (what POST bodies accept — numbers or strings). `Transaction`
- * below aliases the Output/read shape used across the ledger UI; `TransactionInput`
- * is the write shape used by the manual-entry form.
+ * Ledger reads use TransactionRecord (stable identity and Decimal strings).
+ * TransactionInput aliases the distinct Transaction request schema, whose
+ * decimal fields accept numbers or strings. Inputs never send read-only IDs.
  */
 export type PortfolioSummary = components["schemas"]["PortfolioSummary"];
 export type Transaction = components["schemas"]["TransactionRecord"];
 export type TransactionInput = components["schemas"]["Transaction"];
+export type LedgerOrigin = components["schemas"]["LedgerOrigin"];
 export type HoldingHistoryGap = components["schemas"]["HoldingHistoryGap"];
 export type TransactionType = components["schemas"]["TransactionType"];
 export type HoldingInfo = components["schemas"]["HoldingInfo"];
@@ -62,6 +61,11 @@ export type HoldingClassificationUpdate =
   components["schemas"]["HoldingClassificationUpdate"];
 export type DataGap = components["schemas"]["DataGap"];
 export type ClassificationFailure = components["schemas"]["ClassificationFailure"];
+
+// Review + confirmation request surface (new in this contract revision).
+export type HoldingHistoryReview = components["schemas"]["HoldingHistoryReview"];
+export type HoldingHistoryConfirmation =
+  components["schemas"]["HoldingHistoryConfirmation"];
 
 /**
  * Allocation bucket the backend groups holdings under when sector/industry is

@@ -367,6 +367,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portfolios/{portfolio_id}/holdings/{ticker}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Holding History
+         * @description Return active transactions and their review token from one locked snapshot.
+         */
+        get: operations["get_holding_history_api_v1_portfolios__portfolio_id__holdings__ticker__history_get"];
+        put?: never;
+        /**
+         * Confirm Holding History
+         * @description Explicitly confirm this exact history snapshot; repeated confirmation is stable.
+         */
+        post: operations["confirm_holding_history_api_v1_portfolios__portfolio_id__holdings__ticker__history_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -562,11 +586,38 @@ export interface components {
             /** Industry */
             industry?: string | null;
         };
+        /** HoldingHistoryConfirmation */
+        HoldingHistoryConfirmation: {
+            /** Review Token */
+            review_token: string;
+            /**
+             * Confirmed
+             * @constant
+             */
+            confirmed: true;
+        };
         /**
          * HoldingHistoryGap
          * @enum {string}
          */
-        HoldingHistoryGap: "NO_TRANSACTIONS" | "NO_ACQUISITION" | "UNKNOWN_ORIGIN" | "SNAPSHOT" | "IMPORT_NOT_COMPLETE" | "IMPORT_NOT_SUCCEEDED" | "UNRESOLVED_EVENTS" | "DELETED_TRANSACTION";
+        HoldingHistoryGap: "NO_TRANSACTIONS" | "NO_ACQUISITION" | "UNKNOWN_ORIGIN" | "SNAPSHOT" | "IMPORT_NOT_COMPLETE" | "IMPORT_NOT_SUCCEEDED" | "UNRESOLVED_EVENTS" | "DELETED_TRANSACTION" | "HISTORY_CHANGED" | "INVALID_LEDGER";
+        /** HoldingHistoryReview */
+        HoldingHistoryReview: {
+            /** Ticker */
+            ticker: string;
+            /** History Complete */
+            history_complete: boolean;
+            /** History Gaps */
+            history_gaps: components["schemas"]["HoldingHistoryGap"][];
+            /** Blocking Gaps */
+            blocking_gaps: components["schemas"]["HoldingHistoryGap"][];
+            /** Review Token */
+            review_token: string;
+            /** Confirmed At */
+            confirmed_at: string | null;
+            /** Transactions */
+            transactions: components["schemas"]["TransactionRecord"][];
+        };
         /**
          * HoldingInfo
          * @description A tracked security's classification metadata (provider output).
@@ -633,6 +684,11 @@ export interface components {
             warnings: string[];
             source_format?: components["schemas"]["StatementFormat"] | null;
         };
+        /**
+         * LedgerOrigin
+         * @enum {string}
+         */
+        LedgerOrigin: "OBSERVED" | "SNAPSHOT" | "UNKNOWN";
         /**
          * MarketDataProvenance
          * @description Where a datum came from + as-of when (structured citation unit).
@@ -952,7 +1008,7 @@ export interface components {
         };
         /**
          * TransactionRecord
-         * @description Persisted ledger read; IDs are deliberately absent from write inputs.
+         * @description Persisted ledger read; identity and origin are absent from write inputs.
          */
         TransactionRecord: {
             /** Ticker */
@@ -998,6 +1054,7 @@ export interface components {
             id: number;
             /** Portfolio Id */
             portfolio_id: number;
+            history_origin: components["schemas"]["LedgerOrigin"];
         };
         /**
          * TransactionType
@@ -1769,6 +1826,93 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    get_holding_history_api_v1_portfolios__portfolio_id__holdings__ticker__history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: number;
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldingHistoryReview"];
+                };
+            };
+            /** @description Portfolio or holding absent */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_holding_history_api_v1_portfolios__portfolio_id__holdings__ticker__history_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: number;
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HoldingHistoryConfirmation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldingHistoryReview"];
+                };
+            };
+            /** @description Portfolio or holding absent */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stale review token or blocking history gaps */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or non-boolean-true acknowledgement */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -17,7 +17,7 @@ import { ImportPanel } from "@/components/portfolio/import-panel";
  */
 async function uploadFile(user: ReturnType<typeof userEvent.setup>, filename: string) {
   const file = new File(["Activity Date,Instrument"], filename, { type: "text/csv" });
-  await user.upload(screen.getByLabelText("Upload broker statement"), file);
+  await user.upload(screen.getByLabelText("Upload Broker Statement"), file);
 }
 
 describe("ImportPanel", () => {
@@ -57,7 +57,7 @@ describe("ImportPanel", () => {
 
     // The duplicate guard is surfaced with an explicit override affordance.
     expect(await screen.findByText(/already imported/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Import anyway" }));
+    await user.click(screen.getByRole("button", { name: "Import Anyway" }));
 
     await waitFor(() => expect(screen.getByText("SUCCEEDED")).toBeInTheDocument());
   });
@@ -74,6 +74,6 @@ describe("ImportPanel", () => {
     await uploadFile(user, "large-export.csv");
 
     expect(await screen.findByRole("alert")).toHaveTextContent("over the 5 MB limit");
-    expect(screen.queryByRole("button", { name: "Import anyway" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Import Anyway" })).not.toBeInTheDocument();
   });
 });

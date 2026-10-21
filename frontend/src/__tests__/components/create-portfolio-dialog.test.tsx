@@ -23,7 +23,7 @@ describe("CreatePortfolioDialog", () => {
     renderShell();
 
     await screen.findByLabelText("Select portfolio");
-    await user.click(screen.getByRole("button", { name: "New portfolio" }));
+    await user.click(screen.getByRole("button", { name: "New Portfolio" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Create portfolio" });
     await user.type(screen.getByLabelText("Name"), "My Fund");
@@ -42,7 +42,7 @@ describe("CreatePortfolioDialog", () => {
     renderShell();
 
     await screen.findByLabelText("Select portfolio");
-    await user.click(screen.getByRole("button", { name: "New portfolio" }));
+    await user.click(screen.getByRole("button", { name: "New Portfolio" }));
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Name is required.");

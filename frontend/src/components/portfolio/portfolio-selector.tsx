@@ -23,7 +23,7 @@ export function PortfolioSelector() {
     return <span className="text-sm text-destructive">Portfolios unavailable</span>;
   }
   if (portfolios.length === 0) {
-    return <CreatePortfolioDialog triggerLabel="Create portfolio" triggerVariant="default" />;
+    return <CreatePortfolioDialog triggerLabel="Create Portfolio" triggerVariant="default" />;
   }
 
   return (

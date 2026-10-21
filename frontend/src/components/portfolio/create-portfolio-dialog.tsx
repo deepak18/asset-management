@@ -21,7 +21,7 @@ const CURRENCIES = ["USD", "INR"] as const;
  * this with a louder label.
  */
 export function CreatePortfolioDialog({
-  triggerLabel = "New portfolio",
+  triggerLabel = "New Portfolio",
   triggerVariant = "outline",
 }: {
   triggerLabel?: string;

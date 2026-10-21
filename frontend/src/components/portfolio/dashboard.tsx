@@ -52,7 +52,7 @@ export function Dashboard() {
             Create your first portfolio to start tracking holdings and analytics.
           </p>
           <CreatePortfolioDialog
-            triggerLabel="Create portfolio"
+            triggerLabel="Create Portfolio"
             triggerVariant="default"
           />
         </CardContent>

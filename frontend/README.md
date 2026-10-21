@@ -196,8 +196,8 @@ selection context that every per-portfolio hook folds into its deps).
   date for closed ones. It never invents metadata the backend did not supply.
 - The holding return stays `—` when the backend withholds it, with status-specific
   guidance (never a fake 0): `UNPRICED_POSITION` → **Connect market data**;
-  `INCOMPLETE_HISTORY` → import full dated transactions (snapshot/unconfirmed
-  import only); `INSUFFICIENT_FLOWS` → **Needs more history**; `MISSING_FX` → add
+  `INCOMPLETE_HISTORY` → review/repair full broker-record history, add or import
+  missing dated transactions, then explicitly confirm; `INSUFFICIENT_FLOWS` → **Needs more history**; `MISSING_FX` → add
   the exchange rate; `INVALID_HISTORY` → review source history. Loading, request
   failure, and 404 of the return never disable classification editing or the
   ledger. Portfolio-wide XIRR on the dashboard is unchanged.
@@ -249,7 +249,48 @@ of pricing, classification gaps and XIRR availability; `true` means no *known*
 blocker under backend policy, not independently verified broker history. Reasons
 include unknown origin, synthetic snapshots, incomplete or unfinished imports,
 unresolved source events, deliberately deleted transactions, no active transactions,
-and no acquisition. Several may apply at once. There is no confirmation toggle.
+and no acquisition. Several may apply at once.
+
+Both the holdings table and holding detail offer **Review history**, including
+for naturally complete history. The accessible dialog fetches a scoped snapshot
+using `GET /api/v1/portfolios/{portfolio_id}/holdings/{ticker}/history` and shows
+all active ledger rows (stable IDs, original decimal strings and explicit row
+currency), history gaps and backend `blocking_gaps`. No UI financial calculation
+or local completeness policy is used.
+
+Compare the snapshot against actual broker records, including acquisition dates,
+quantities, costs, fees, dividends, other cash events and splits. **Add missing
+transaction** reuses the manual form (BUY/SELL/DIVIDEND/FEE/SPLIT), with the ticker
+prefilled and locked and the portfolio base currency as the default. Never guess
+history. A synthetic opening snapshot is not an actual purchase: add the actual
+records, then follow the scoped detail-ledger link and use existing confirmed
+deletion to remove the synthetic row. Unresolved source events and failed imports
+must be repaired/retried through existing import surfaces or correction APIs;
+checking a box does not fix blockers. Reload the review after those repairs.
+
+Confirmation requires an initially unchecked, explicit broker-record attestation,
+a loaded snapshot, no backend blockers and no pending write. It POSTs only
+`{review_token, confirmed: true}` to the same history path. A 409 clears the
+acknowledgement and token and fetches fresh history with a visible change notice;
+it never automatically retries confirmation. Other failures remain retryable,
+and failed transaction entry preserves its draft. Repairs clear acknowledgement
+and reload the review and affected holdings, analytics/XIRR, ledger and dashboard
+siblings while the dialog remains open. Closing, Escape and portfolio changes
+never initiate confirmation; late responses cannot refresh another scope.
+Already-submitted writes may still commit server-side despite browser cancellation.
+
+**History complete** without `confirmed_at` means naturally complete under backend
+policy, not explicitly broker-verified. Explicit confirmation shows the response's
+timestamp and remains inspectable when reopened. Ledger/import changes invalidate
+saved confirmations. Confirmation never supplies missing prices/FX or fabricates
+an XIRR. Live deployments require the backend history-confirmation migration
+`0008` (see `backend/README.md`). API types are regenerated from the checked-in
+OpenAPI contract; minimal deterministic MSW state emulates confirmation/token
+invalidation for tests, not the full backend history/replay policy.
+
+New scoped UI: `src/components/portfolio/holding-history-review.tsx`.
+Regression coverage: `src/__tests__/components/holding-history-review.test.tsx`
+and `src/__tests__/lib/holding-history-api.test.ts`.
 
 Both dashboard and filtered holding ledgers use stable `TransactionRecord.id` values,
 not display order or matching financial fields. Delete opens a keyboard-accessible
@@ -263,3 +304,42 @@ filtered holding detail refetches its return. A tracked holding survives deletio
 its last event without a calculated position. There is no undo; the server retains
 an audit tombstone and may disable import retry. Live backend deployments must
 apply migration `0007` before enabling this UI (see `backend/README.md`).
+
+## Read-only row provenance, labels, deletion identification and unchanged write payloads
+
+The review table and normal transaction ledger have an **Origin** column,
+read directly from required `TransactionRecord.history_origin` (`LedgerOrigin`):
+**Observed event** (`OBSERVED`), **Synthetic snapshot** (`SNAPSHOT`), or
+**Legacy / unverified** (`UNKNOWN`). Deletion confirmation also names the selected
+stable transaction ID and origin, so the synthetic opening row can be identified
+without guessing from its date, type or price. Observed origin does **not** mean
+complete or independently verified history; API history diagnostics and blockers
+remain authoritative. Origin and identity are read-only: `Transaction` write
+payloads do not include them. Manual/observed mock events use `OBSERVED`; internal
+synthetic seed events explicitly use `SNAPSHOT`, and only legacy seeds use `UNKNOWN`.
+The mock token includes each row's origin, so origin changes invalidate it.
+
+Shared labels: `src/components/portfolio/ledger-origin.ts`. Mixed-origin row IDs,
+deletion provenance and strict writes are covered by
+`src/__tests__/components/ledger-origin.test.tsx`. Review regressions also cover
+late GET responses after close/account switch and detail-ledger/XIRR refresh after
+adding a missing dividend while the review remains open.
+
+## Button naming and confirmation dismissal
+
+Button text and icon-button accessible names use explicit Title Case, including
+short words such as **For**, **Of** and **To** (for example, **Review History**,
+**Confirm History**, **Reload History / Retry**, and **Close Dialog**). Pending
+labels retain their ellipses. Do not apply CSS or runtime case conversion to
+arbitrary children: tickers, acronyms, IDs, names and API values keep their casing;
+ordinary prose, headings and navigation links are not part of this convention.
+
+A successful, non-aborted history-confirmation POST refreshes the affected parent
+views and closes the review, restoring focus to its trigger. It does not reload
+a review that is being dismissed. Reopening fetches persisted history, including
+the server's confirmation timestamp. HTTP/network errors keep the dialog open;
+a 409 still reloads history, clears acknowledgement and never automatically
+resubmits. Adding a missing transaction remains a repair: refresh and reload while
+keeping the review open. Regression coverage includes
+`src/__tests__/components/history-confirm-dismissal.test.tsx` and
+`src/__tests__/components/button-labels.test.tsx`.

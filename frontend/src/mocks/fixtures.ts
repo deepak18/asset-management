@@ -29,6 +29,7 @@ export const portfolioSummary: PortfolioSummary = {
 
 export const transactions: Transaction[] = [
   {
+    history_origin: "OBSERVED",
     portfolio_id: 1,
     id: 101,
     ticker: "AAPL",
@@ -44,6 +45,7 @@ export const transactions: Transaction[] = [
     industry: "Consumer Electronics",
   },
   {
+    history_origin: "OBSERVED",
     portfolio_id: 1,
     id: 102,
     ticker: "MSFT",
@@ -59,6 +61,7 @@ export const transactions: Transaction[] = [
     industry: "Software—Infrastructure",
   },
   {
+    history_origin: "OBSERVED",
     portfolio_id: 1,
     id: 103,
     ticker: "AAPL",
@@ -74,6 +77,7 @@ export const transactions: Transaction[] = [
     industry: "Consumer Electronics",
   },
   {
+    history_origin: "OBSERVED",
     portfolio_id: 1,
     id: 104,
     ticker: "AAPL",
@@ -90,6 +94,29 @@ export const transactions: Transaction[] = [
   },
 ];
 
+/** Resolved demo rows: NVDA came from add-position, PLTR/SOFI from observed
+ * statement events, and ZZZZ from a legacy ledger with unverified origin. */
+export const importedPortfolioTransactions: Transaction[] = (
+  [
+    { ticker: "NVDA", id: 301, history_origin: "SNAPSHOT" },
+    { ticker: "PLTR", id: 302, history_origin: "OBSERVED" },
+    { ticker: "SOFI", id: 303, history_origin: "OBSERVED" },
+    { ticker: "ZZZZ", id: 304, history_origin: "UNKNOWN" },
+  ] satisfies Pick<Transaction, "ticker" | "id" | "history_origin">[]
+).map((row) => ({
+  portfolio_id: 3,
+  type: "BUY",
+  trade_date: "2026-09-30",
+  currency: "USD",
+  quantity: "10",
+  price: "225.00",
+  fees: "0",
+  amount: "0",
+  split_ratio: "1",
+  sector: null,
+  industry: null,
+  ...row,
+}));
 export const holdings: HoldingInfo[] = [
   {
     ticker: "AAPL",

@@ -212,7 +212,7 @@ export function AddPositionForm({
 
           <div className="sm:col-span-2">
             <Button type="submit" disabled={submitting}>
-              {submitting ? "Adding…" : "Add position"}
+              {submitting ? "Adding…" : "Add Position"}
             </Button>
           </div>
         </form>

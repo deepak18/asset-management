@@ -137,12 +137,17 @@ Testing is a **build-time discipline, not a phase.** Each task below is only com
 ### 3.3 Active On-Screen Prompt Action System
 * Implement contextual click actions across the research dashboard (e.g., selecting an erratic financial line item or a piece of text within an earnings transcript instantly passes that segment into the Side-Panel with specific predefined intents: *"Audit this metric against SEC data"* or *"Compare this statement with top peer guidance"*).
 
-### Holding-history backend delivery
+### Holding-history review and repair delivery
 
-- [x] Configure named backend/frontend profiles and local slice commits.
-- [x] Add migration `0008`, fingerprint-bound atomic review/confirmation and read-only row origins.
-- [x] Validate policy/provider/API/migration regressions (433 tests), Ruff and mypy; update backend/root runbooks and file inventory.
-- [ ] Deliver the typed frontend review/repair/confirmation workflow in the next slice.
+- [x] Configure named backend/frontend implementer profiles and verify delegation.
+- [x] Add additive migration `0008` for holding-scoped review tokens and confirmation timestamps; preserve ledger/import provenance.
+- [x] Publish atomic history review/confirmation endpoints with strict acknowledgement, hard blockers, stale-review rejection and automatic invalidation.
+- [x] Expose read-only transaction origins so synthetic snapshots can be safely identified for replacement.
+- [x] Deliver review entry points on holdings table/detail, locked-ticker missing-transaction entry, explicit confirmation and scoped refresh.
+- [x] Ship policy/provider/API/migration and UI/client/mock regression coverage; verify backend (433 tests), frontend (163 tests), lint and type checks.
+- [x] Update root/backend/frontend runbooks and `STRUCTURE.md`; include them with the validated local feature commit.
+- [x] Standardize frontend button labels in Title Case and dismiss history review only after successful confirmation, preserving parent/XIRR refresh, pending guards, stale/error recovery and repair-in-place; verify 170 frontend tests plus lint and typecheck.
+- [ ] Validate live PostgreSQL contention and live browser/API integration separately; current concurrency coverage is offline/mocked and frontend tests use MSW.
 
 ### Commit delivery policy
 

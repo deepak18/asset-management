@@ -142,7 +142,7 @@ function ClassificationRun({
           onClick={() => void run()}
           disabled={phase === "running"}
         >
-          {phase === "running" ? "Classifying…" : "Classify holdings"}
+          {phase === "running" ? "Classifying…" : "Classify Holdings"}
         </Button>
       )}
 

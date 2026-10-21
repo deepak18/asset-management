@@ -19,6 +19,7 @@ import { useTransactions } from "@/hooks/use-portfolio";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { DASH, formatMoney, formatQuantity } from "@/lib/format";
 import type { Transaction, TransactionType } from "@/types/domain";
+import { LEDGER_ORIGIN_LABELS } from "./ledger-origin";
 
 function badgeVariant(type: TransactionType): "positive" | "negative" | "muted" {
   switch (type) {
@@ -167,9 +168,11 @@ function LedgerForPortfolio({
             <TableHeader>
               <TableRow>
                 {[
+                  "ID",
                   "Date",
                   "Ticker",
                   "Type",
+                  "Origin",
                   "Quantity",
                   "Price",
                   "Fees",
@@ -185,6 +188,7 @@ function LedgerForPortfolio({
                 const cells = cellsFor(txn);
                 return (
                   <TableRow key={txn.id} data-transaction-id={txn.id}>
+                    <TableCell>{txn.id}</TableCell>
                     <TableCell>{txn.trade_date}</TableCell>
                     <TableCell>
                       <Link
@@ -197,6 +201,7 @@ function LedgerForPortfolio({
                     <TableCell>
                       <Badge variant={badgeVariant(txn.type)}>{txn.type}</Badge>
                     </TableCell>
+                    <TableCell>{LEDGER_ORIGIN_LABELS[txn.history_origin]}</TableCell>
                     <TableCell>{cells.quantity}</TableCell>
                     <TableCell>{cells.price}</TableCell>
                     <TableCell>{formatMoney(txn.fees, txn.currency)}</TableCell>
@@ -205,7 +210,7 @@ function LedgerForPortfolio({
                       <Button
                         variant="outline"
                         size="sm"
-                        aria-label={`Delete ${txn.ticker} ${txn.type} transaction ${txn.id}`}
+                        aria-label={`Delete ${txn.ticker} ${txn.type} Transaction ${txn.id}`}
                         onClick={() => {
                           setError(null);
                           setSelected({ portfolioId, transaction: txn });
@@ -239,6 +244,10 @@ function LedgerForPortfolio({
               ) from portfolio {selected.portfolioId}?
             </p>
             <p>
+              Transaction {selected.transaction.id}:{" "}
+              {LEDGER_ORIGIN_LABELS[selected.transaction.history_origin]}.
+            </p>
+            <p>
               Deletion changes calculated holdings and returns, may invalidate import
               retry safety, and marks this holding&apos;s history unconfirmed. The event
               leaves the active ledger but remains in the backend audit record. There is
@@ -253,7 +262,7 @@ function LedgerForPortfolio({
                 disabled={pending}
                 onClick={() => void confirm()}
               >
-                {pending ? "Deleting…" : "Delete transaction"}
+                {pending ? "Deleting…" : "Delete Transaction"}
               </Button>
             </div>
           </div>

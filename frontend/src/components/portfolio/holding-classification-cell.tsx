@@ -26,6 +26,7 @@ export function HoldingClassificationCell({
   const controller = React.useRef<AbortController | null>(null);
   React.useEffect(() => () => controller.current?.abort(), []);
   const label = `${holding.ticker} ${field}`;
+  const actionLabel = `${holding.ticker} ${field === "sector" ? "Sector" : "Industry"}`;
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
@@ -60,7 +61,7 @@ export function HoldingClassificationCell({
           type="button"
           variant="ghost"
           size="icon"
-          aria-label={`Edit ${label}`}
+          aria-label={`Edit ${actionLabel}`}
           onClick={() => {
             setDraft(holding[field] ?? "");
             setError(null);
@@ -87,7 +88,12 @@ export function HoldingClassificationCell({
         Leave blank to clear this {field}.
       </p>
       <div className="flex gap-1">
-        <Button type="submit" size="sm" disabled={saving} aria-label={`Save ${label}`}>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={saving}
+          aria-label={`${saving ? "Saving…" : "Save"} ${actionLabel}`}
+        >
           {saving ? "Saving…" : "Save"}
         </Button>
         <Button

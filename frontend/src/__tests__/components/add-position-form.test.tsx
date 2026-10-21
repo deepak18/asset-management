@@ -34,7 +34,7 @@ describe("AddPositionForm", () => {
     await user.type(screen.getByLabelText("Quantity"), "10");
     // Basis mode defaults to "per share".
     await user.type(screen.getByLabelText(/Cost per share/), "150");
-    await user.click(screen.getByRole("button", { name: "Add position" }));
+    await user.click(screen.getByRole("button", { name: "Add Position" }));
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
     expect(captured[0]).toMatchObject({ ticker: "AAPL", cost_basis_per_share: "150" });
@@ -54,7 +54,7 @@ describe("AddPositionForm", () => {
     await user.type(screen.getByLabelText("Quantity"), "5");
     await user.selectOptions(screen.getByLabelText("Cost basis type"), "total");
     await user.type(screen.getByLabelText(/Total cost basis/), "2000");
-    await user.click(screen.getByRole("button", { name: "Add position" }));
+    await user.click(screen.getByRole("button", { name: "Add Position" }));
 
     await waitFor(() => expect(captured.length).toBe(1));
     expect(captured[0]?.total_cost_basis).toBe("2000");
@@ -64,7 +64,7 @@ describe("AddPositionForm", () => {
   it("requires a ticker", async () => {
     const user = userEvent.setup();
     render(<AddPositionForm portfolioId={1} />);
-    await user.click(screen.getByRole("button", { name: "Add position" }));
+    await user.click(screen.getByRole("button", { name: "Add Position" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Ticker is required.");
   });
 });

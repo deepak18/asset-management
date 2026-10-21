@@ -25,7 +25,7 @@ describe("holding classification cells", () => {
         onChanged={changed}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "Edit AAPL sector" }));
+    await user.click(screen.getByRole("button", { name: "Edit AAPL Sector" }));
     await user.clear(screen.getByRole("textbox"));
     await user.type(screen.getByRole("textbox"), "Energy");
     server.use(
@@ -33,12 +33,12 @@ describe("holding classification cells", () => {
         HttpResponse.json({ detail: "Save failed" }, { status: 500 }),
       ),
     );
-    await user.click(screen.getByRole("button", { name: "Save AAPL sector" }));
+    await user.click(screen.getByRole("button", { name: "Save AAPL Sector" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Save failed");
     expect(screen.getByRole("textbox")).toHaveValue("Energy");
     expect(changed).not.toHaveBeenCalled();
     server.resetHandlers();
-    await user.click(screen.getByRole("button", { name: "Save AAPL sector" }));
+    await user.click(screen.getByRole("button", { name: "Save AAPL Sector" }));
     await waitFor(() =>
       expect(changed).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -61,14 +61,14 @@ describe("holding classification cells", () => {
         onChanged={changed}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "Edit AAPL sector" }));
+    await user.click(screen.getByRole("button", { name: "Edit AAPL Sector" }));
     await user.clear(screen.getByRole("textbox"));
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(changed).not.toHaveBeenCalled();
     expect(screen.getByText("Technology")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Edit AAPL sector" }));
+    await user.click(screen.getByRole("button", { name: "Edit AAPL Sector" }));
     await user.clear(screen.getByRole("textbox"));
-    await user.click(screen.getByRole("button", { name: "Save AAPL sector" }));
+    await user.click(screen.getByRole("button", { name: "Save AAPL Sector" }));
     await waitFor(() =>
       expect(changed).toHaveBeenCalledWith(
         expect.objectContaining({ sector: null, data_gaps: ["SECTOR"] }),
@@ -87,14 +87,14 @@ describe("holdings table", () => {
       "/portfolios/3/holdings/PLTR",
     );
     expect(screen.getAllByText("Sector missing").length).toBeGreaterThan(0);
-    await user.click(screen.getByRole("button", { name: "Edit SOFI industry" }));
+    await user.click(screen.getByRole("button", { name: "Edit SOFI Industry" }));
     await user.type(
       screen.getByRole("textbox", { name: "SOFI industry" }),
       "Keep this draft",
     );
-    await user.click(screen.getByRole("button", { name: "Edit PLTR sector" }));
+    await user.click(screen.getByRole("button", { name: "Edit PLTR Sector" }));
     await user.type(screen.getByRole("textbox", { name: "PLTR sector" }), "Technology");
-    await user.click(screen.getByRole("button", { name: "Save PLTR sector" }));
+    await user.click(screen.getByRole("button", { name: "Save PLTR Sector" }));
     await waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(
@@ -126,7 +126,7 @@ describe("holdings table", () => {
     );
     render(<HoldingsTable portfolioId={3} />);
     expect(
-      await screen.findByRole("button", { name: "Edit PLTR sector" }),
+      await screen.findByRole("button", { name: "Edit PLTR Sector" }),
     ).toBeEnabled();
     expect(await screen.findByText(/Position values unavailable/)).toBeInTheDocument();
   });
@@ -165,14 +165,14 @@ describe("holding detail", () => {
   it("saves classification, clears gaps, and preserves the other field's draft", async () => {
     const user = userEvent.setup();
     render(<HoldingDetail portfolioId={3} ticker="PLTR" />);
-    await user.click(await screen.findByRole("button", { name: "Edit PLTR industry" }));
+    await user.click(await screen.findByRole("button", { name: "Edit PLTR Industry" }));
     await user.type(
       screen.getByRole("textbox", { name: "PLTR industry" }),
       "Draft industry",
     );
-    await user.click(screen.getByRole("button", { name: "Edit PLTR sector" }));
+    await user.click(screen.getByRole("button", { name: "Edit PLTR Sector" }));
     await user.type(screen.getByRole("textbox", { name: "PLTR sector" }), "Technology");
-    await user.click(screen.getByRole("button", { name: "Save PLTR sector" }));
+    await user.click(screen.getByRole("button", { name: "Save PLTR Sector" }));
     await waitFor(() =>
       expect(screen.queryByText("Sector missing")).not.toBeInTheDocument(),
     );
@@ -211,7 +211,7 @@ describe("holding detail", () => {
     );
     rerender(<HoldingDetail portfolioId={1} ticker="AAPL" />);
     expect(
-      await screen.findByRole("button", { name: "Edit AAPL sector" }),
+      await screen.findByRole("button", { name: "Edit AAPL Sector" }),
     ).toBeEnabled();
     expect(
       await screen.findByText(/Could not load position values/),
@@ -229,7 +229,7 @@ describe("holding-level XIRR statuses", () => {
     );
     render(<HoldingDetail portfolioId={3} ticker="PLTR" />);
     expect(
-      await screen.findByRole("button", { name: "Edit PLTR sector" }),
+      await screen.findByRole("button", { name: "Edit PLTR Sector" }),
     ).toBeEnabled();
     expect(screen.queryByText(/Could not load this holding's return/)).toBeNull();
     expect(await screen.findByText(/Could not load this holding's return/)).toBeInTheDocument();
@@ -243,7 +243,7 @@ describe("holding-level XIRR statuses", () => {
     );
     render(<HoldingDetail portfolioId={3} ticker="PLTR" />);
     expect(await screen.findByText("No return reported for this holding.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Edit PLTR sector" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Edit PLTR Sector" })).toBeEnabled();
   });
 
   it("renders a negative return with the existing percentage conventions", async () => {
@@ -286,7 +286,7 @@ describe("holding-level XIRR statuses", () => {
     expect(
       await screen.findByText(/Could not load this holding's return/),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Edit PLTR sector" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Edit PLTR Sector" })).toBeEnabled();
   });
 });
 

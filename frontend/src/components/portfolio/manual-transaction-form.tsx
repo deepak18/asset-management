@@ -8,7 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { ErrorState } from "@/components/shared/states";
-import type { LedgerIngestResult, TransactionInput, TransactionType } from "@/types/domain";
+import type {
+  LedgerIngestResult,
+  TransactionInput,
+  TransactionType,
+} from "@/types/domain";
 
 const CURRENCIES = ["USD", "INR"] as const;
 const TYPES: TransactionType[] = ["BUY", "SELL", "DIVIDEND", "FEE", "SPLIT"];
@@ -27,12 +31,19 @@ export function ManualTransactionForm({
   portfolioId,
   currency: baseCurrency = "USD",
   onSuccess,
+  lockedTicker,
+  onPendingChange,
 }: {
   portfolioId: number;
   currency?: string;
   onSuccess?: () => void;
+  lockedTicker?: string;
+  onPendingChange?: (pending: boolean) => void;
 }) {
-  const [ticker, setTicker] = React.useState("");
+  const id = React.useId();
+  const request = React.useRef<AbortController | null>(null);
+  React.useEffect(() => () => request.current?.abort(), []);
+  const [ticker, setTicker] = React.useState(lockedTicker ?? "");
   const [type, setType] = React.useState<TransactionType>("BUY");
   const [tradeDate, setTradeDate] = React.useState("");
   const [currency, setCurrency] = React.useState(baseCurrency);
@@ -51,7 +62,7 @@ export function ManualTransactionForm({
   const isSplit = type === "SPLIT";
 
   function resetFields() {
-    setTicker("");
+    setTicker(lockedTicker ?? "");
     setTradeDate("");
     setQuantity("");
     setPrice("");
@@ -62,10 +73,11 @@ export function ManualTransactionForm({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (request.current) return;
     setError(null);
     setResult(null);
 
-    const trimmedTicker = ticker.trim().toUpperCase();
+    const trimmedTicker = (lockedTicker ?? ticker).trim().toUpperCase();
     if (trimmedTicker === "") {
       setError("Ticker is required.");
       return;
@@ -99,41 +111,59 @@ export function ManualTransactionForm({
       txn.split_ratio = splitRatio.trim() === "" ? "1" : splitRatio.trim();
     }
 
+    const controller = new AbortController();
+    request.current = controller;
     setSubmitting(true);
+    onPendingChange?.(true);
     try {
-      const ingest = await apiClient.addTransactions(portfolioId, [txn]);
+      const ingest = await apiClient.addTransactions(
+        portfolioId,
+        [txn],
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
       setResult(ingest);
       resetFields();
       onSuccess?.();
     } catch (err) {
+      if (controller.signal.aborted) return;
       setError(
-        err instanceof ApiError ? (err.detail ?? err.message) : "Could not add the transaction.",
+        err instanceof ApiError
+          ? (err.detail ?? err.message)
+          : "Could not add the transaction.",
       );
     } finally {
-      setSubmitting(false);
+      if (!controller.signal.aborted) {
+        request.current = null;
+        setSubmitting(false);
+        onPendingChange?.(false);
+      }
     }
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Add transaction</CardTitle>
+        <CardTitle>
+          {lockedTicker ? "Add missing transaction" : "Add transaction"}
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="txn-ticker">Ticker</Label>
+            <Label htmlFor={`${id}-txn-ticker`}>Ticker</Label>
             <Input
-              id="txn-ticker"
+              id={`${id}-txn-ticker`}
+              readOnly={lockedTicker != null}
               value={ticker}
               onChange={(e) => setTicker(e.target.value)}
               placeholder="AAPL"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="txn-type">Type</Label>
+            <Label htmlFor={`${id}-txn-type`}>Type</Label>
             <Select
-              id="txn-type"
+              id={`${id}-txn-type`}
               value={type}
               onChange={(e) => setType(e.target.value as TransactionType)}
             >
@@ -145,18 +175,19 @@ export function ManualTransactionForm({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="txn-date">Trade date</Label>
+            <Label htmlFor={`${id}-txn-date`}>Trade date</Label>
             <Input
-              id="txn-date"
+              id={`${id}-txn-date`}
+              required={lockedTicker != null}
               type="date"
               value={tradeDate}
               onChange={(e) => setTradeDate(e.target.value)}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="txn-currency">Currency</Label>
+            <Label htmlFor={`${id}-txn-currency`}>Currency</Label>
             <Select
-              id="txn-currency"
+              id={`${id}-txn-currency`}
               value={currency}
               onChange={(e) => setCurrency(e.target.value)}
             >
@@ -171,9 +202,10 @@ export function ManualTransactionForm({
           {isTrade ? (
             <>
               <div className="space-y-1.5">
-                <Label htmlFor="txn-quantity">Quantity</Label>
+                <Label htmlFor={`${id}-txn-quantity`}>Quantity</Label>
                 <Input
-                  id="txn-quantity"
+                  id={`${id}-txn-quantity`}
+                  required={lockedTicker != null}
                   inputMode="decimal"
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value)}
@@ -181,9 +213,10 @@ export function ManualTransactionForm({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="txn-price">Price / share</Label>
+                <Label htmlFor={`${id}-txn-price`}>Price / share</Label>
                 <Input
-                  id="txn-price"
+                  id={`${id}-txn-price`}
+                  required={lockedTicker != null}
                   inputMode="decimal"
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
@@ -191,9 +224,9 @@ export function ManualTransactionForm({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="txn-fees">Fees (optional)</Label>
+                <Label htmlFor={`${id}-txn-fees`}>Fees (optional)</Label>
                 <Input
-                  id="txn-fees"
+                  id={`${id}-txn-fees`}
                   inputMode="decimal"
                   value={fees}
                   onChange={(e) => setFees(e.target.value)}
@@ -205,9 +238,10 @@ export function ManualTransactionForm({
 
           {isCash ? (
             <div className="space-y-1.5">
-              <Label htmlFor="txn-amount">Amount</Label>
+              <Label htmlFor={`${id}-txn-amount`}>Amount</Label>
               <Input
-                id="txn-amount"
+                id={`${id}-txn-amount`}
+                required={lockedTicker != null}
                 inputMode="decimal"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -218,9 +252,10 @@ export function ManualTransactionForm({
 
           {isSplit ? (
             <div className="space-y-1.5">
-              <Label htmlFor="txn-split">Split ratio</Label>
+              <Label htmlFor={`${id}-txn-split`}>Split ratio</Label>
               <Input
-                id="txn-split"
+                id={`${id}-txn-split`}
+                required={lockedTicker != null}
                 inputMode="decimal"
                 value={splitRatio}
                 onChange={(e) => setSplitRatio(e.target.value)}
@@ -243,7 +278,7 @@ export function ManualTransactionForm({
 
           <div className="sm:col-span-2">
             <Button type="submit" disabled={submitting}>
-              {submitting ? "Adding…" : "Add transaction"}
+              {submitting ? "Recording…" : "Add Transaction"}
             </Button>
           </div>
         </form>

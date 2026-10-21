@@ -15,19 +15,18 @@ it("returns to the requested portfolio and refreshes allocations after an inline
         <Dashboard />
       </PortfolioSelectionProvider>,
     );
-    expect(await screen.findByRole("link", { name: "PLTR" })).toHaveAttribute(
-      "href",
-      "/portfolios/3/holdings/PLTR",
-    );
+    for (const link of await screen.findAllByRole("link", { name: "PLTR" })) {
+      expect(link).toHaveAttribute("href", "/portfolios/3/holdings/PLTR");
+    }
     const sectorTitle = screen.getByText("Allocation by sector");
     const sectorCard = sectorTitle.closest("div.rounded-lg") as HTMLElement;
     await waitFor(() =>
       expect(within(sectorCard).getByText("60.00%")).toBeInTheDocument(),
     );
     expect(within(sectorCard).queryByRole("button")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Edit PLTR sector" }));
+    await user.click(screen.getByRole("button", { name: "Edit PLTR Sector" }));
     await user.type(screen.getByRole("textbox", { name: "PLTR sector" }), "Energy");
-    await user.click(screen.getByRole("button", { name: "Save PLTR sector" }));
+    await user.click(screen.getByRole("button", { name: "Save PLTR Sector" }));
     await waitFor(() => {
       const refreshed = screen
         .getByText("Allocation by sector")

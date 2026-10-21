@@ -51,7 +51,7 @@ describe("ManualTransactionForm", () => {
     await user.selectOptions(screen.getByLabelText("Type"), "DIVIDEND");
     await user.type(screen.getByLabelText("Amount"), "2.40");
     await user.type(screen.getByLabelText("Trade date"), "2024-03-10");
-    await user.click(screen.getByRole("button", { name: "Add transaction" }));
+    await user.click(screen.getByRole("button", { name: "Add Transaction" }));
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalled());
     expect(captured[0]).toMatchObject({ ticker: "AAPL", type: "DIVIDEND", amount: "2.40" });
@@ -61,7 +61,7 @@ describe("ManualTransactionForm", () => {
     const user = userEvent.setup();
     render(<ManualTransactionForm portfolioId={1} />);
     await user.type(screen.getByLabelText("Ticker"), "AAPL");
-    await user.click(screen.getByRole("button", { name: "Add transaction" }));
+    await user.click(screen.getByRole("button", { name: "Add Transaction" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Trade date is required.");
   });
 });

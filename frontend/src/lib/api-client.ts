@@ -13,6 +13,8 @@ import type {
   StatementImportStatus,
   Transaction,
   TransactionInput,
+  HoldingHistoryReview,
+  HoldingHistoryConfirmation,
 } from "@/types/domain";
 
 /**
@@ -402,6 +404,29 @@ export const apiClient = {
   ): Promise<void> {
     return deleteNoContent(
       `${API_V1}/portfolios/${id}/transactions/${transactionId}`,
+      signal,
+    );
+  },
+
+  getHoldingHistory(
+    id: number,
+    ticker: string,
+    signal?: AbortSignal,
+  ): Promise<HoldingHistoryReview> {
+    return getJson(
+      `${API_V1}/portfolios/${id}/holdings/${encodeURIComponent(ticker)}/history`,
+      signal,
+    );
+  },
+  confirmHoldingHistory(
+    id: number,
+    ticker: string,
+    body: HoldingHistoryConfirmation,
+    signal?: AbortSignal,
+  ): Promise<HoldingHistoryReview> {
+    return postJson(
+      `${API_V1}/portfolios/${id}/holdings/${encodeURIComponent(ticker)}/history`,
+      body,
       signal,
     );
   },

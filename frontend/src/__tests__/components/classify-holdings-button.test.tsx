@@ -42,13 +42,13 @@ describe("ClassifyHoldingsButton", () => {
       }),
     );
     render(<ClassifyHoldingsButton portfolioId={3} onChanged={changed} />);
-    await user.click(screen.getByRole("button", { name: "Classify holdings" }));
+    await user.click(screen.getByRole("button", { name: "Classify Holdings" }));
     expect(await screen.findByText(/Sweep complete/)).toBeInTheDocument();
     expect(requests).toEqual([undefined, "PLTR", "SOFI"]);
     expect(screen.getByText(/Classified 2 holdings/)).toBeInTheDocument();
     expect(screen.getByText(/Unresolved: ZZZZ/)).toBeInTheDocument();
     expect(changed).toHaveBeenCalledTimes(1);
-    await user.click(screen.getByRole("button", { name: "Classify holdings" }));
+    await user.click(screen.getByRole("button", { name: "Classify Holdings" }));
     await waitFor(() => expect(requests).toHaveLength(4));
     expect(requests[3]).toBeUndefined();
     expect(await screen.findByText(/Classified 0 holdings/)).toBeInTheDocument();
@@ -77,21 +77,21 @@ describe("ClassifyHoldingsButton", () => {
       }),
     );
     render(<ClassifyHoldingsButton portfolioId={3} />);
-    await user.click(screen.getByRole("button", { name: "Classify holdings" }));
+    await user.click(screen.getByRole("button", { name: "Classify Holdings" }));
     expect(await screen.findByText(/Sweep complete/)).toBeInTheDocument();
     expect(cursors).toEqual([null, "PLTR"]);
     expect(
       screen.getByText(/Provider unavailable \(quota or outage\)/),
     ).toBeInTheDocument();
     expect(screen.getByText(/No usable profile returned/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Classify holdings" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Classify Holdings" })).toBeEnabled();
   });
 
   it("points to the API key on 503 without offering retry", async () => {
     const user = userEvent.setup();
     setMarketDataConfigured(false);
     render(<ClassifyHoldingsButton portfolioId={3} />);
-    await user.click(screen.getByRole("button", { name: "Classify holdings" }));
+    await user.click(screen.getByRole("button", { name: "Classify Holdings" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("ALPHAVANTAGE_API_KEY");
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
@@ -125,7 +125,7 @@ describe("ClassifyHoldingsButton", () => {
       }),
     );
     render(<ClassifyHoldingsButton portfolioId={3} onChanged={changed} />);
-    await user.click(screen.getByRole("button", { name: "Classify holdings" }));
+    await user.click(screen.getByRole("button", { name: "Classify Holdings" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("advancing cursor");
     expect(calls).toBe(2);
     expect(changed).toHaveBeenCalledTimes(1);
@@ -145,7 +145,7 @@ describe("ClassifyHoldingsButton", () => {
       });
     try {
       const { unmount } = render(<ClassifyHoldingsButton portfolioId={3} />);
-      await user.click(screen.getByRole("button", { name: "Classify holdings" }));
+      await user.click(screen.getByRole("button", { name: "Classify Holdings" }));
       unmount();
       expect(signal?.aborted).toBe(true);
       finish(result({ remaining: 1, next_cursor: "PLTR" }));

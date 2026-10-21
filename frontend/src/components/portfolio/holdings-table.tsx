@@ -18,8 +18,10 @@ import { HoldingClassificationCell } from "./holding-classification-cell";
 import { HoldingDataGaps } from "./holding-data-gaps";
 import { ClassifyHoldingsButton } from "./classify-holdings-button";
 import { HoldingHistory } from "./holding-history";
+import { HoldingHistoryReviewAction } from "./holding-history-review";
 import { formatMoney, formatQuantity } from "@/lib/format";
 import type { HoldingInfo } from "@/types/domain";
+
 
 export function HoldingsTable(props: {
   portfolioId: number;
@@ -153,6 +155,12 @@ function HoldingsForPortfolio({
                     </TableCell>
                     <TableCell>
                       <HoldingHistory holding={holding} />
+                      <HoldingHistoryReviewAction
+                        portfolioId={portfolioId}
+                        ticker={holding.ticker}
+                        refreshToken={refreshToken + version}
+                        onChanged={changed}
+                      />
                       <HoldingDataGaps
                         gaps={[...holding.data_gaps, ...(position?.data_gaps ?? [])]}
                       />

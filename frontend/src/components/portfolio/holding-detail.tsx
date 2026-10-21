@@ -14,6 +14,7 @@ import { HoldingClassificationCell } from "./holding-classification-cell";
 import { HoldingDataGaps } from "./holding-data-gaps";
 import { TransactionLedger } from "./transaction-ledger";
 import { HoldingHistory } from "./holding-history";
+import { HoldingHistoryReviewAction } from "./holding-history-review";
 import {
   DASH,
   formatMoney,
@@ -38,7 +39,7 @@ import type {
 const RETURN_GUIDANCE: Record<HoldingReturnStatus, string> = {
   OK: "Return not reported for this holding.",
   INCOMPLETE_HISTORY:
-    "Incomplete history — this holding only has a snapshot or an unconfirmed import. Import its full dated transactions to compute a return.",
+    "Incomplete history — review/repair this holding's history using actual broker records, import or add full dated transactions, then explicitly confirm the reviewed history to compute a return.",
   UNPRICED_POSITION:
     "Connect market data — this holding's return needs today's price as its terminal value.",
   MISSING_FX:
@@ -87,19 +88,27 @@ function HoldingDetailForTicker({
   const holding = useHolding(portfolioId, ticker, version);
   const analytics = usePortfolioAnalytics(portfolioId, version);
   const holdingReturn = useHoldingAnalytics(portfolioId, ticker, version);
+  React.useEffect(() => {
+    // Retain the last fetched identity while refreshing so an open review and
+    // classification drafts are not unmounted by the resource loading state.
+    if (holding.status === "success") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setEdited(holding.data);
+    }
+  }, [holding]);
   const back = (
     <Link className="underline" href={`/?portfolio=${portfolioId}`}>
       ← Back to portfolio
     </Link>
   );
-  if (holding.status === "loading")
+  if (holding.status === "loading" && !edited)
     return (
       <div>
         {back}
         <LoadingRows rows={4} />
       </div>
     );
-  if (holding.status === "error")
+  if (holding.status === "error" && !edited)
     return (
       <div>
         {back}
@@ -112,7 +121,7 @@ function HoldingDetailForTicker({
         />
       </div>
     );
-  const record = edited ?? holding.data;
+  const record = holding.status === "success" ? holding.data : edited!;
   const data = analytics.status === "success" ? analytics.data : null;
   const position = data?.positions.find((row) => row.ticker === ticker);
   const value = data?.positions_unrealized.find((row) => row.ticker === ticker);
@@ -154,6 +163,12 @@ function HoldingDetailForTicker({
           {currency || "portfolio base currency"}
         </p>
         <HoldingHistory holding={record} />
+        <HoldingHistoryReviewAction
+          portfolioId={portfolioId}
+          ticker={ticker}
+          refreshToken={version}
+          onChanged={() => setVersion((current) => current + 1)}
+        />
         <HoldingDataGaps gaps={gaps} />
       </header>
       <Card>
@@ -218,15 +233,16 @@ function HoldingDetailForTicker({
           <HoldingReturnBody state={holdingReturn} ticker={record.ticker} />
         </CardContent>
       </Card>
-      <TransactionLedger
-        portfolioId={portfolioId}
-        ticker={ticker}
-        refreshToken={version}
-        onDeleted={() => {
-          setEdited(null);
-          setVersion((current) => current + 1);
-        }}
-      />
+      <div id="holding-ledger">
+        <TransactionLedger
+          portfolioId={portfolioId}
+          ticker={ticker}
+          refreshToken={version}
+          onDeleted={() => {
+            setVersion((current) => current + 1);
+          }}
+        />
+      </div>
     </div>
   );
 }

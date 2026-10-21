@@ -267,7 +267,7 @@ export function ImportPanel({
             type="file"
             accept=".csv,text/csv"
             className="hidden"
-            aria-label="Upload broker statement"
+            aria-label="Upload Broker Statement"
             onChange={(e) => onFilePicked(e.target.files)}
           />
           <Button
@@ -277,7 +277,7 @@ export function ImportPanel({
             disabled={uploading}
             onClick={() => inputRef.current?.click()}
           >
-            {uploading ? "Uploading…" : "Choose file"}
+            {uploading ? "Uploading…" : "Choose File"}
           </Button>
           <p className="text-xs text-muted-foreground">CSV up to 5 MB.</p>
         </div>
@@ -293,7 +293,7 @@ export function ImportPanel({
                 disabled={uploading}
                 onClick={() => void submit(pendingFile, true)}
               >
-                Import anyway
+                Import Anyway
               </Button>
             ) : null}
           </div>

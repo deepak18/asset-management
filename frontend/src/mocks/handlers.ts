@@ -21,6 +21,9 @@ import {
   listImports,
   listPortfolios,
   updateHoldingClassification,
+  getHistoryReview,
+  confirmHistoryReview,
+  addMockTransactions,
 } from "@/mocks/state";
 
 /**
@@ -103,7 +106,7 @@ export const handlers = [
           { status: 422 },
         );
       }
-      return HttpResponse.json(ingest(id, uniqueTickers(body), body.length), {
+      return HttpResponse.json(addMockTransactions(id, body), {
         status: 201,
       });
     },
@@ -246,6 +249,44 @@ export const handlers = [
       return result.ok
         ? new HttpResponse(null, { status: 204 })
         : HttpResponse.json({ detail: result.detail }, { status: result.status });
+    },
+  ),
+
+  http.get(`${base}/api/v1/portfolios/:id/holdings/:ticker/history`, ({ params }) => {
+    const review = getHistoryReview(Number(params.id), String(params.ticker));
+    return review
+      ? HttpResponse.json(review)
+      : notFound("Portfolio or holding not found");
+  }),
+  http.post(
+    `${base}/api/v1/portfolios/:id/holdings/:ticker/history`,
+    async ({ params, request }) => {
+      const body: unknown = await request.json();
+      if (
+        !body ||
+        typeof body !== "object" ||
+        !("confirmed" in body) ||
+        body.confirmed !== true ||
+        !("review_token" in body) ||
+        typeof body.review_token !== "string" ||
+        Object.keys(body).some((key) => !["confirmed", "review_token"].includes(key))
+      ) {
+        return HttpResponse.json(
+          { detail: "Provide review_token and boolean true acknowledgement" },
+          { status: 422 },
+        );
+      }
+      const id = Number(params.id);
+      const ticker = String(params.ticker);
+      if (!getHistoryReview(id, ticker))
+        return notFound("Portfolio or holding not found");
+      const result = confirmHistoryReview(id, ticker, body.review_token);
+      return result
+        ? HttpResponse.json(result)
+        : HttpResponse.json(
+            { detail: "History changed or blocking gaps remain" },
+            { status: 409 },
+          );
     },
   ),
 ];

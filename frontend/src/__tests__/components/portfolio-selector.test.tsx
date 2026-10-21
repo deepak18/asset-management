@@ -49,7 +49,7 @@ describe("PortfolioSelector", () => {
     renderSelector();
 
     expect(
-      await screen.findByRole("button", { name: /Create portfolio/ }),
+      await screen.findByRole("button", { name: /Create Portfolio/ }),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText("Select portfolio")).not.toBeInTheDocument();
   });

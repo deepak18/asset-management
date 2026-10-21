@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import type { HoldingHistoryGap, HoldingInfo } from "@/types/domain";
 
 /** History is a backend policy diagnostic, not a claim about missing trades. */
-const REASONS: Record<HoldingHistoryGap, string> = {
+export const HISTORY_REASONS: Record<HoldingHistoryGap, string> = {
   UNKNOWN_ORIGIN: "Legacy transaction origin is unverified.",
   SNAPSHOT: "A synthetic opening position snapshot is present.",
   IMPORT_NOT_COMPLETE: "A relevant import was not confirmed complete.",
@@ -11,6 +11,10 @@ const REASONS: Record<HoldingHistoryGap, string> = {
   DELETED_TRANSACTION: "A transaction was removed from the active ledger.",
   NO_TRANSACTIONS: "This tracked holding has no active transactions.",
   NO_ACQUISITION: "No acquisition can be established from active BUY events.",
+  HISTORY_CHANGED:
+    "History changed since the last confirmation. Review the active records again.",
+  INVALID_LEDGER:
+    "The active ledger has inconsistent quantities or events. Correct it using broker records.",
 };
 
 export function HoldingHistory({ holding }: { holding: HoldingInfo }) {
@@ -23,7 +27,7 @@ export function HoldingHistory({ holding }: { holding: HoldingInfo }) {
       <Badge variant="muted">History not confirmed</Badge>
       <ul className="list-disc pl-5 text-muted-foreground">
         {holding.history_gaps.map((reason) => (
-          <li key={reason}>{REASONS[reason]}</li>
+          <li key={reason}>{HISTORY_REASONS[reason]}</li>
         ))}
       </ul>
     </div>

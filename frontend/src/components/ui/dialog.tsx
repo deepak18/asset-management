@@ -92,7 +92,7 @@ export function Dialog({
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Close dialog"
+            aria-label="Close Dialog"
             onClick={onClose}
           >
             <X className="h-4 w-4" />

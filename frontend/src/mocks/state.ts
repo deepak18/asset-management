@@ -6,10 +6,13 @@ import type {
   HoldingClassificationUpdate,
   HoldingInfo,
   LedgerIngestResult,
+  LedgerOrigin,
   PortfolioAnalytics,
   PortfolioCreate,
   PortfolioSummary,
   StatementImportStatus,
+  HoldingHistoryReview,
+  TransactionInput,
 } from "@/types/domain";
 import type { Transaction, HoldingHistoryGap } from "@/types/domain";
 import { UNCLASSIFIED_KEY } from "@/types/domain";
@@ -20,6 +23,7 @@ import {
   profileDirectory,
   summariesById,
   transactions,
+  importedPortfolioTransactions,
 } from "@/mocks/fixtures";
 
 /**
@@ -49,6 +53,7 @@ interface State {
   marketDataConfigured: boolean;
   transactions: Map<number, Transaction[]>;
   deletedTickers: Map<number, Set<string>>;
+  confirmations: Map<string, { token: string; at: string }>;
 }
 
 function seed(): State {
@@ -75,8 +80,12 @@ function seed(): State {
     jobsByPortfolio: new Map(),
     nextJobId: 1,
     marketDataConfigured: true,
-    transactions: new Map([[1, transactions.map((row) => ({ ...row }))]]),
+    transactions: new Map([
+      [1, transactions.map((row) => ({ ...row }))],
+      [3, importedPortfolioTransactions.map((row) => ({ ...row }))],
+    ]),
     deletedTickers: new Map(),
+    confirmations: new Map(),
   };
 }
 
@@ -165,7 +174,7 @@ function groupAllocation(
 export function getAnalytics(id: number): PortfolioAnalytics | undefined {
   const fixture = analyticsById[id];
   if (fixture) {
-    const rows = state.holdings.get(id);
+    const rows = getHoldings(id);
     if (!rows) {
       return fixture;
     }
@@ -225,10 +234,27 @@ export function getTransactions(id: number): Transaction[] | undefined {
 }
 
 export function getHoldings(id: number): HoldingInfo[] | undefined {
-  if (!findPortfolio(id)) {
-    return undefined;
+  if (!findPortfolio(id)) return undefined;
+  const holdings = state.holdings.get(id) ?? [];
+  for (const holding of holdings) {
+    const active = getTransactions(id)!.filter((row) => row.ticker === holding.ticker);
+    const confirmed =
+      state.confirmations.get(`${id}:${holding.ticker}`)?.token ===
+      historyToken(id, holding.ticker);
+    // Only derive origin diagnostics when actual mock rows are present; other
+    // fixture gaps and backend policy scenarios remain authoritative.
+    const gaps = new Set(
+      holding.history_gaps.filter(
+        (gap) => !active.length || (gap !== "SNAPSHOT" && gap !== "UNKNOWN_ORIGIN"),
+      ),
+    );
+    if (active.some((row) => row.history_origin === "SNAPSHOT")) gaps.add("SNAPSHOT");
+    if (!confirmed && active.some((row) => row.history_origin === "UNKNOWN"))
+      gaps.add("UNKNOWN_ORIGIN");
+    holding.history_gaps = [...gaps];
+    if (gaps.size) holding.history_complete = false;
   }
-  return state.holdings.get(id) ?? [];
+  return holdings;
 }
 
 /**
@@ -255,7 +281,9 @@ export function getHoldingAnalytics(
     return undefined;
   }
   const original = holdingAnalyticsByKey[`${id}:${symbol}`];
-  return state.deletedTickers.get(id)?.has(symbol) && original
+  return state.deletedTickers.get(id)?.has(symbol) &&
+    !holding.history_complete &&
+    original
     ? {
         ...original,
         money_weighted_return: null,
@@ -441,6 +469,8 @@ export function createImport(
   };
   const runtimes = state.jobsByPortfolio.get(portfolioId) ?? [];
   state.jobsByPortfolio.set(portfolioId, [{ job, polls: 0 }, ...runtimes]);
+  for (const holding of state.holdings.get(portfolioId) ?? [])
+    invalidateConfirmation(portfolioId, holding.ticker);
   return { ok: true, job };
 }
 
@@ -482,6 +512,11 @@ export function getImport(
         "Row 9: account transfer ignored — enter manually.",
       ],
     };
+  }
+  for (const holding of state.holdings.get(portfolioId) ?? []) {
+    if (!runtime.job.tickers.length || runtime.job.tickers.includes(holding.ticker)) {
+      invalidateConfirmation(portfolioId, holding.ticker);
+    }
   }
   return runtime.job;
 }
@@ -533,6 +568,7 @@ export function deleteTransaction(
     portfolioId,
     rows.filter((row) => row.id !== transactionId),
   );
+  invalidateConfirmation(portfolioId, event.ticker);
   const deleted = state.deletedTickers.get(portfolioId) ?? new Set<string>();
   deleted.add(event.ticker);
   state.deletedTickers.set(portfolioId, deleted);
@@ -553,4 +589,125 @@ export function deleteTransaction(
       runtime.job = { ...runtime.job, retry_safe: false };
   }
   return { ok: true };
+}
+
+export function addMockTransactions(
+  id: number,
+  inputs: TransactionInput[],
+  // Internal mock seeding only: HTTP manual/import events always use OBSERVED.
+  origin: LedgerOrigin = "OBSERVED",
+): LedgerIngestResult {
+  const rows = getTransactions(id) ?? [];
+  let nextId =
+    Math.max(1000, ...[...state.transactions.values()].flat().map((row) => row.id)) + 1;
+  const added: Transaction[] = inputs.map((input) => ({
+    id: nextId++,
+    portfolio_id: id,
+    ticker: input.ticker.toUpperCase(),
+    type: input.type,
+    trade_date: input.trade_date,
+    currency: input.currency,
+    quantity: String(input.quantity ?? "0"),
+    price: String(input.price ?? "0"),
+    fees: String(input.fees ?? "0"),
+    amount: String(input.amount ?? "0"),
+    split_ratio: String(input.split_ratio ?? "1"),
+    sector: input.sector ?? null,
+    industry: input.industry ?? null,
+    history_origin: origin,
+  }));
+  state.transactions.set(id, [...rows, ...added]);
+  for (const row of added) invalidateConfirmation(id, row.ticker);
+  return ingest(id, [...new Set(added.map((row) => row.ticker))], added.length);
+}
+
+function historyToken(id: number, ticker: string): string {
+  // A deterministic mock snapshot fingerprint, not a frontend policy engine.
+  return JSON.stringify([
+    id,
+    ticker,
+    getTransactions(id)?.filter((row) => row.ticker.toUpperCase() === ticker),
+    listImports(id).filter(
+      (job) => !job.tickers.length || job.tickers.includes(ticker),
+    ),
+  ]);
+}
+
+function invalidateConfirmation(id: number, ticker: string) {
+  const key = `${id}:${ticker}`;
+  if (!state.confirmations.has(key)) return;
+  const holding = getHoldings(id)?.find((row) => row.ticker === ticker);
+  if (holding) {
+    holding.history_complete = false;
+    holding.history_gaps = [
+      ...new Set([...holding.history_gaps, "HISTORY_CHANGED" as const]),
+    ];
+  }
+}
+
+export function getHistoryReview(
+  id: number,
+  ticker: string,
+): HoldingHistoryReview | undefined {
+  const symbol = ticker.toUpperCase();
+  const holding = getHoldings(id)?.find((row) => row.ticker.toUpperCase() === symbol);
+  if (!holding) return undefined;
+  const token = historyToken(id, symbol);
+  const saved = state.confirmations.get(`${id}:${symbol}`);
+  if (saved && saved.token !== token) invalidateConfirmation(id, symbol);
+  const active = getTransactions(id)!.filter(
+    (row) => row.ticker.toUpperCase() === symbol,
+  );
+  const gaps = new Set(holding.history_gaps);
+  if (active.some((row) => row.history_origin === "SNAPSHOT")) gaps.add("SNAPSHOT");
+  if (active.some((row) => row.history_origin === "UNKNOWN"))
+    gaps.add("UNKNOWN_ORIGIN");
+  if (!active.length) gaps.add("NO_TRANSACTIONS");
+  if (!active.some((row) => row.type === "BUY")) gaps.add("NO_ACQUISITION");
+  for (const job of listImports(id)) {
+    if (!job.tickers.length || job.tickers.includes(symbol)) {
+      if (job.status !== "SUCCEEDED") gaps.add("IMPORT_NOT_SUCCEEDED");
+      if (job.unresolved_items.length) gaps.add("UNRESOLVED_EVENTS");
+    }
+  }
+  const blockers: HoldingHistoryGap[] = [
+    "SNAPSHOT",
+    "IMPORT_NOT_SUCCEEDED",
+    "UNRESOLVED_EVENTS",
+    "NO_TRANSACTIONS",
+    "NO_ACQUISITION",
+    "INVALID_LEDGER",
+  ];
+  const confirmed = saved?.token === token;
+  const blocking = [...gaps].filter((gap) => blockers.includes(gap));
+  return {
+    ticker: symbol,
+    history_complete:
+      confirmed && !blocking.length ? true : holding.history_complete && !gaps.size,
+    history_gaps: confirmed && !blocking.length ? [] : [...gaps],
+    blocking_gaps: blocking,
+    review_token: token,
+    confirmed_at: confirmed && !blocking.length ? saved.at : null,
+    transactions: active,
+  };
+}
+
+export function confirmHistoryReview(
+  id: number,
+  ticker: string,
+  token: string,
+): HoldingHistoryReview | undefined {
+  const review = getHistoryReview(id, ticker);
+  if (!review || review.review_token !== token || review.blocking_gaps.length)
+    return undefined;
+  const key = `${id}:${review.ticker}`;
+  const old = state.confirmations.get(key);
+  state.confirmations.set(key, {
+    token,
+    at: old?.token === token ? old.at : new Date().toISOString(),
+  });
+  const holding = getHoldings(id)!.find((row) => row.ticker === review.ticker)!;
+  holding.history_complete = true;
+  holding.history_gaps = [];
+  return getHistoryReview(id, ticker);
 }

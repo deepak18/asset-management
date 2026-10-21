@@ -176,13 +176,41 @@ Missing prices/FX and undefined returns remain withheld, never replaced by zero.
 Portfolio-level behavior is unchanged. See the
 [response/status semantics](./backend/README.md#holding-level-money-weighted-return-xirr).
 
-### Holding history review API
+### Holding history: review, repair, and confirm
+
+1. Select **Review History** from the Holdings table or a holding detail page.
+   Compare the full active ledger with your broker records since first acquisition:
+   dates, quantities, costs, fees, dividends and splits. Each row includes its
+   currency, stable ID, and read-only origin: **Observed event**, **Synthetic
+   snapshot**, or **Legacy / unverified**. An observed event alone is not proof of
+   complete history.
+2. Use **Add missing transaction** inside the review. The ticker is locked to the
+   holding; choose BUY, SELL, DIVIDEND, FEE or SPLIT and enter actual source facts.
+   The default currency is the portfolio base currency; change it to the event's
+   currency where needed. Saving reloads the snapshot and clears acknowledgement.
+3. Repair any blocking gaps. Replace synthetic opening snapshots with actual dated
+   events, then follow the detail-ledger link and explicitly delete the labeled
+   synthetic row so it is not counted twice. Unresolved import events require the
+   existing correction API; failed/unfinished imports need repair/retry. Empty
+   ledgers, missing acquisitions and invalid events cannot be confirmed away.
+4. When the ledger matches your records and no blocking gaps remain, check the
+   explicit completeness acknowledgement and select **Confirm History**. After the
+   server confirms success, the dialog closes and the affected views refresh.
+   Reopen **Review History** to inspect the saved confirmation timestamp. Errors
+   and stale reviews keep the dialog open for correction; adding missing events
+   also keeps it open for further review. Confirmation does not rewrite transaction
+   origins or declare an entire import complete.
+5. Later relevant ledger/import changes invalidate confirmation. Reload, review
+   and acknowledge again. A stale review returns `409`; the UI refreshes it but
+   never automatically retries confirmation. Confirmation/repairs refresh the
+   affected holdings, analytics, returns and ledger views.
 
 `GET /api/v1/portfolios/{id}/holdings/{ticker}/history` returns the active ledger,
-backend blockers and an opaque review token from one snapshot. POST accepts that
-token plus literal `confirmed: true`; stale tokens or blockers return `409`.
-Confirmation binds to the reviewed ledger fingerprint without rewriting origins.
-Frontend review and repair controls are delivered in the next slice.
+backend blockers and an opaque review token from the same snapshot. `POST` to that
+path accepts the token plus literal `confirmed: true`. Missing identities return
+`404`; stale snapshots/blockers return `409`; invalid acknowledgement returns `422`.
+The UI distinguishes naturally complete history from explicit timestamped
+confirmation; neither supplies missing prices or guarantees a computable XIRR.
 
 ### Holding history and ledger deletion
 

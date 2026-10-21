@@ -67,20 +67,20 @@ describe("ledger confirmation", () => {
     );
     render(<TransactionLedger portfolioId={1} />);
     await user.click(
-      await screen.findByRole("button", { name: /Delete MSFT BUY transaction 102/ }),
+      await screen.findByRole("button", { name: /Delete MSFT BUY Transaction 102/ }),
     );
     const dialog = screen.getByRole("dialog", { name: "Delete transaction?" });
     expect(dialog).toHaveTextContent(/MSFT BUY on 2024-02-01/);
     expect(dialog).toHaveTextContent(/retry safety/);
-    expect(within(dialog).getByRole("button", { name: "Close dialog" })).toHaveFocus();
+    expect(within(dialog).getByRole("button", { name: "Close Dialog" })).toHaveFocus();
     await user.keyboard("{Shift>}{Tab}{/Shift}");
     expect(
-      within(dialog).getByRole("button", { name: "Delete transaction" }),
+      within(dialog).getByRole("button", { name: "Delete Transaction" }),
     ).toHaveFocus();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).toBeNull();
     await user.click(
-      screen.getByRole("button", { name: /Delete MSFT BUY transaction 102/ }),
+      screen.getByRole("button", { name: /Delete MSFT BUY Transaction 102/ }),
     );
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }),
@@ -105,16 +105,16 @@ describe("ledger confirmation", () => {
     const changed = vi.fn();
     render(<TransactionLedger portfolioId={1} onDeleted={changed} />);
     await user.click(
-      await screen.findByRole("button", { name: /Delete MSFT BUY transaction 102/ }),
+      await screen.findByRole("button", { name: /Delete MSFT BUY Transaction 102/ }),
     );
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
-        name: "Delete transaction",
+        name: "Delete Transaction",
       }),
     );
     expect(screen.getByRole("button", { name: "Deleting…" })).toBeDisabled();
     expect(
-      screen.getByRole("button", { name: /Delete MSFT BUY transaction 102/ }),
+      screen.getByRole("button", { name: /Delete MSFT BUY Transaction 102/ }),
     ).toBeInTheDocument();
     expect(sent).toHaveBeenCalledTimes(1);
     finish();
@@ -125,18 +125,18 @@ describe("ledger confirmation", () => {
     const user = userEvent.setup();
     render(<TransactionLedger portfolioId={1} />);
     await user.click(
-      await screen.findByRole("button", { name: /Delete AAPL BUY transaction 101/ }),
+      await screen.findByRole("button", { name: /Delete AAPL BUY Transaction 101/ }),
     );
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
-        name: "Delete transaction",
+        name: "Delete Transaction",
       }),
     );
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /sale without enough shares/,
     );
     expect(
-      screen.getByRole("button", { name: /Delete AAPL BUY transaction 101/ }),
+      screen.getByRole("button", { name: /Delete AAPL BUY Transaction 101/ }),
     ).toBeInTheDocument();
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }),
@@ -147,11 +147,11 @@ describe("ledger confirmation", () => {
       ),
     );
     await user.click(
-      screen.getByRole("button", { name: /Delete AAPL DIVIDEND transaction 103/ }),
+      screen.getByRole("button", { name: /Delete AAPL DIVIDEND Transaction 103/ }),
     );
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
-        name: "Delete transaction",
+        name: "Delete Transaction",
       }),
     );
     expect(await screen.findByRole("alert")).toHaveTextContent(/no longer exists/);
@@ -168,7 +168,7 @@ describe("ledger confirmation", () => {
     );
     const { rerender } = render(<TransactionLedger portfolioId={1} />);
     await user.click(
-      await screen.findByRole("button", { name: /Delete MSFT BUY transaction 102/ }),
+      await screen.findByRole("button", { name: /Delete MSFT BUY Transaction 102/ }),
     );
     rerender(<TransactionLedger portfolioId={2} />);
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -180,11 +180,11 @@ it("refreshes holding history and return after deleting its last event in filter
   const user = userEvent.setup();
   render(<HoldingDetail portfolioId={1} ticker="MSFT" />);
   await user.click(
-    await screen.findByRole("button", { name: /Delete MSFT BUY transaction 102/ }),
+    await screen.findByRole("button", { name: /Delete MSFT BUY Transaction 102/ }),
   );
   await user.click(
     within(screen.getByRole("dialog")).getByRole("button", {
-      name: "Delete transaction",
+      name: "Delete Transaction",
     }),
   );
   expect(await screen.findByText(/removed from the active ledger/)).toBeInTheDocument();
@@ -207,11 +207,11 @@ it("refreshes dashboard holdings and allocations after success", async () => {
     </PortfolioSelectionProvider>,
   );
   await user.click(
-    await screen.findByRole("button", { name: /Delete MSFT BUY transaction 102/ }),
+    await screen.findByRole("button", { name: /Delete MSFT BUY Transaction 102/ }),
   );
   await user.click(
     within(screen.getByRole("dialog")).getByRole("button", {
-      name: "Delete transaction",
+      name: "Delete Transaction",
     }),
   );
   await waitFor(() =>
@@ -230,20 +230,20 @@ it("distinguishes identical financial rows by stable IDs", async () => {
   const user = userEvent.setup();
   render(<TransactionLedger portfolioId={1} ticker="AAPL" />);
   await user.click(
-    await screen.findByRole("button", { name: /Delete AAPL DIVIDEND transaction 105/ }),
+    await screen.findByRole("button", { name: /Delete AAPL DIVIDEND Transaction 105/ }),
   );
   await user.click(
     within(screen.getByRole("dialog")).getByRole("button", {
-      name: "Delete transaction",
+      name: "Delete Transaction",
     }),
   );
   await waitFor(() =>
     expect(
-      screen.queryByRole("button", { name: /transaction 105/ }),
+      screen.queryByRole("button", { name: /Transaction 105/ }),
     ).not.toBeInTheDocument(),
   );
   expect(
-    screen.getByRole("button", { name: /Delete AAPL DIVIDEND transaction 103/ }),
+    screen.getByRole("button", { name: /Delete AAPL DIVIDEND Transaction 103/ }),
   ).toBeInTheDocument();
   expect(getTransactions(1)!.find((row) => row.id === 103)).toEqual(original);
 });
@@ -256,26 +256,26 @@ it("leaves the row intact on server failure and on network failure", async () =>
   );
   render(<TransactionLedger portfolioId={1} />);
   await user.click(
-    await screen.findByRole("button", { name: /Delete MSFT BUY transaction 102/ }),
+    await screen.findByRole("button", { name: /Delete MSFT BUY Transaction 102/ }),
   );
   await user.click(
     within(screen.getByRole("dialog")).getByRole("button", {
-      name: "Delete transaction",
+      name: "Delete Transaction",
     }),
   );
   expect(await screen.findByRole("alert")).toHaveTextContent("Server unavailable");
   expect(
-    screen.getByRole("button", { name: /Delete MSFT BUY transaction 102/ }),
+    screen.getByRole("button", { name: /Delete MSFT BUY Transaction 102/ }),
   ).toBeInTheDocument();
   server.use(http.delete(`${base}/1/transactions/102`, () => HttpResponse.error()));
   await user.click(
     within(screen.getByRole("dialog")).getByRole("button", {
-      name: "Delete transaction",
+      name: "Delete Transaction",
     }),
   );
   expect(await screen.findByRole("alert")).toBeInTheDocument();
   expect(
-    screen.getByRole("button", { name: /Delete MSFT BUY transaction 102/ }),
+    screen.getByRole("button", { name: /Delete MSFT BUY Transaction 102/ }),
   ).toBeInTheDocument();
 });
 it("does not set state or refresh a different account after an in-flight deletion unmounts", async () => {
@@ -294,11 +294,11 @@ it("does not set state or refresh a different account after an in-flight deletio
     <TransactionLedger portfolioId={1} onDeleted={changed} />,
   );
   await user.click(
-    await screen.findByRole("button", { name: /Delete MSFT BUY transaction 102/ }),
+    await screen.findByRole("button", { name: /Delete MSFT BUY Transaction 102/ }),
   );
   await user.click(
     within(screen.getByRole("dialog")).getByRole("button", {
-      name: "Delete transaction",
+      name: "Delete Transaction",
     }),
   );
   rerender(<TransactionLedger portfolioId={2} onDeleted={changed} />);

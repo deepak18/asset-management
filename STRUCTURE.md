@@ -229,18 +229,20 @@ frontend/
     │   │   ├── portfolio-summary.tsx       # ✅ Headline stats and status-driven XIRR guidance; unavailable values stay "—"
     │   │   ├── allocation-chart.tsx        # ✅ Recharts donut + accessible legend (sector/industry)
     │   │   ├── allocation-section.tsx      # ✅ Data wrapper feeding the donuts from analytics; refreshToken-aware
-    │   │   ├── transaction-ledger.tsx      # ✅ Stable-ID ledger with accessible confirmed deletion and scoped refresh
-    │   │   ├── holdings-table.tsx          # ✅ Holding links, history diagnostics, position values and classification
-    │   │   ├── holding-history.tsx         # ✅ Shared read-only history indicator with every typed reason
-    │   │   ├── holding-detail.tsx          # ✅ URL-scoped holding with history, XIRR and filtered deletable ledger
-    │   │   ├── holding-classification-cell.tsx # ✅ Shared per-ticker field PATCH with Save/Cancel, explicit null clearing, preserved error drafts
+    │   │   ├── transaction-ledger.tsx      # ✅ Stable-ID/origin-labeled ledger with provenance-aware confirmed deletion and scoped refresh
+    │   │   ├── holdings-table.tsx          # ✅ Holding links, history diagnostics/review, position values and classification
+    │   │   ├── holding-history.tsx         # ✅ Shared history diagnostics and exhaustive typed reason labels
+    │   │   ├── holding-history-review.tsx  # ✅ Accessible snapshot review, locked-ticker missing-event entry, explicit confirmation and stale-token recovery
+    │   │   ├── ledger-origin.ts           # ✅ Read-only origin labels distinguishing observed events, synthetic snapshots and unverified legacy rows
+    │   │   ├── holding-detail.tsx          # ✅ URL-scoped history review/repair, XIRR and filtered ledger retained during scoped refresh
+    │   │   ├── holding-classification-cell.tsx # ✅ Per-field PATCH editor with explicit Save/Cancel, null clearing and preserved drafts
     │   │   ├── holding-data-gaps.tsx       # ✅ Readable typed gap warnings, separate from unavailable provider data
     │   │   ├── classify-holdings-button.tsx # ✅ Abortable cursor sweep with classified/unresolved/failure summaries and 503 configuration guidance
     │   │   ├── watchlist.tsx               # ✅ Add/remove tickers (localStorage-backed)
     │   │   ├── portfolio-selector.tsx      # ✅ App-shell picker over GET /portfolios; "create one" when empty
     │   │   ├── create-portfolio-dialog.tsx # ✅ POST /portfolios then auto-select
     │   │   ├── add-position-form.tsx       # ✅ POST /positions; cost basis = exactly one of per-share/total (422-proof); explains XIRR trade-off
-    │   │   ├── manual-transaction-form.tsx # ✅ POST /transactions (Transaction input); type-aware fields
+    │   │   ├── manual-transaction-form.tsx # ✅ Type-aware transaction input with optional locked ticker, unique control IDs, abort guards and preserved error drafts
     │   │   ├── import-panel.tsx            # ✅ CSV upload/poll and refreshable import history with retry-safety label
     │   │   └── dashboard.tsx               # ✅ Panels refetch after writes, imports or deletion
     │   ├── app-shell/         # ✅ nav.tsx — top bar + portfolio picker + light/dark toggle
@@ -254,24 +256,24 @@ frontend/
     │   └── use-watchlist.ts            # ✅ localStorage watchlist (normalized, de-duplicated)
     ├── lib/                   # ✅ Client-side infra
     │   ├── env.ts             # ✅ Validated public env (API base URL, mock flag)
-    │   ├── api-client.ts      # ✅ Typed REST client including scoped bodyless DELETE and ApiError
+    │   ├── api-client.ts      # ✅ Typed REST client including atomic holding-history GET/POST, scoped bodyless DELETE and ApiError
     │   ├── decimal.ts         # ✅ Float-free Decimal-string parse/round/scale helpers
     │   ├── format.ts          # ✅ money/percent/quantity formatting; DASH for null/unpriced
     │   └── utils.ts           # ✅ cn() class-merge helper
     ├── mocks/                 # ✅ MSW mock layer (contract-shaped)
-    │   ├── fixtures.ts        # ✅ Typed seed with stable ledger IDs and holding history reasons
-    │   ├── state.ts           # ✅ Mutable write/import/classification and scoped deletion/history mock state
-    │   ├── handlers.ts        # ✅ Portfolio/write/import mocks and 204/404/409 scoped DELETE
+    │   ├── fixtures.ts        # ✅ Typed origin-bearing ledger IDs and holding history seed data
+    │   ├── state.ts           # ✅ Mutable write/import/classification/deletion state with scoped snapshot tokens, confirmation and invalidation
+    │   ├── handlers.ts        # ✅ Contract-shaped portfolio/import writes, guarded history review/confirmation and scoped DELETE mocks
     │   ├── server.ts          # ✅ Node server for Vitest (msw/node)
     │   ├── browser.ts         # ✅ Browser worker (msw/browser) — client-only
     │   └── mock-bootstrap.tsx # ✅ Client-only worker starter (loaded via ssr:false)
     ├── types/                 # ✅ Contract types
-    │   ├── api.ts             # ✅ GENERATED OpenAPI including holding history and TransactionRecord
-    │   └── domain.ts          # ✅ Distinct ledger read/write aliases and typed history reason union
+    │   ├── api.ts             # ✅ GENERATED OpenAPI including typed review/confirmation and required read-only transaction origins
+    │   └── domain.ts          # ✅ Distinct ledger input/output, origin, history reason and review/confirmation aliases
     └── __tests__/             # ✅ Vitest + RTL specs
-        ├── lib/               # ✅ decimal, format, api-client, holding-api, transaction-delete.test.ts (MSW-backed nullable PATCH, provenance, cursor, immediate analytics, per-holding XIRR statuses)
+        ├── lib/               # ✅ Existing decimal/format/client/holding/deletion specs plus holding-history-api.test.ts for review/confirmation scope, payloads and errors
         ├── hooks/             # ✅ use-import-job (poll-to-terminal, stop-on-unmount)
-        └── components/        # ✅ Existing panels plus holdings, holding-page, classify-holdings-button, dashboard, history-deletion.test.tsx (editing, gaps, deep links, cursor/cancellation, allocation refresh)
+        └── components/        # ✅ Existing panel/holding/deletion specs plus holding-history-review.test.tsx for review/repair/confirm, cancellation/stale reads and refresh; ledger-origin.test.tsx for origin labels and snapshot-safe deletion
 ```
 
 ---
@@ -315,3 +317,11 @@ mcp/
   - `tests/api/test_openapi.py` guards the published contract: regenerate `backend/openapi.json` from `create_app().openapi()` after API/schema changes (command in `backend/README.md`).
 - **Frontend:** Vitest + React Testing Library, specs co-located under `src/__tests__/`. Run: `npm run test`.
 - **What to assert for AI code:** structured output schemas, tool routing, LangGraph state transitions, and citation presence/shape — never exact LLM wording.
+
+---
+
+## Frontend UI Regression Inventory
+
+- `frontend/src/__tests__/components/history-confirm-dismissal.test.tsx` — Table/detail confirmation waits for server success, dismisses and restores focus, refreshes XIRR, reopens persisted confirmation, and stays open on failures.
+- `frontend/src/__tests__/components/button-labels.test.tsx` — Explicit Title Case button text and accessible names across the dashboard, review, creation, classification and deletion controls without changing ticker/data casing.
+- `frontend/src/components/portfolio/holding-history-review.tsx` closes only after successful confirmation; repairs and stale/error recovery retain the dialog. Other frontend action components use explicit Title Case button labels rather than CSS text transforms.

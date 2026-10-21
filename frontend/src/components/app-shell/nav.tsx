@@ -31,7 +31,7 @@ export function Nav() {
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Toggle theme"
+            aria-label="Toggle Theme"
             onClick={() => setDark((value) => !value)}
           >
             {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
