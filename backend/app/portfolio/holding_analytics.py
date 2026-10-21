@@ -13,7 +13,11 @@ from app.portfolio.calculators import (
     unrealized_pnl,
     xirr,
 )
-from app.portfolio.history import holding_history_gaps
+from app.portfolio.history import (
+    TransactionDeletionConflict,
+    holding_history_gaps,
+    validate_financial_history,
+)
 from app.portfolio.schemas import (
     CashFlow,
     HoldingAnalytics,
@@ -63,19 +67,18 @@ class HoldingAnalyticsService:
         ledger = await self._provider.get_holding_ledger(portfolio_id, holding.ticker)
         # Empty/cash-only ledgers retain the existing numerical/invalid-history
         # handling below; all provenance and deletion blockers are shared.
-        blockers = set(holding_history_gaps(ledger)) - {
+        blockers = set(holding_history_gaps(ledger, as_of=today)) - {
             HoldingHistoryGap.NO_TRANSACTIONS, HoldingHistoryGap.NO_ACQUISITION,
+            HoldingHistoryGap.INVALID_LEDGER,
         }
         if blockers:
             return result
         transactions = list(ledger.transactions)
-        if any(
-            txn.ticker.upper() != holding.ticker.upper() or txn.trade_date > today
-            or any(not value.is_finite() or value < 0 for value in (
-                txn.quantity, txn.price, txn.fees, txn.amount, txn.split_ratio,
-            ))
-            for txn in transactions
-        ):
+        try:
+            validate_financial_history(transactions, as_of=today)
+            if any(txn.ticker.upper() != holding.ticker.upper() for txn in transactions):
+                raise TransactionDeletionConflict("Ledger ticker differs from holding")
+        except TransactionDeletionConflict:
             return result.model_copy(update={
                 "money_weighted_return_status": HoldingReturnStatus.INVALID_HISTORY,
             })

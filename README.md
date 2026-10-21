@@ -76,10 +76,12 @@ uv sync --extra dev --extra postgres
 uv run alembic upgrade head
 ```
 
-Existing installations, including those already on `0006`, must upgrade to `0007`
-before starting this backend. Revision `0006` records snapshot/observed origins for
-holding XIRR; `0007` adds transaction-deletion audit tombstones. Ambiguous legacy
-unowned transactions remain unknown rather than being trusted as observed purchases.
+Existing installations, including those already on `0006` or `0007`, must upgrade
+to `0008` before starting this backend. Revision `0006` records snapshot/observed
+origins for holding XIRR; `0007` adds transaction-deletion audit tombstones; `0008`
+adds nullable holding-scoped history confirmation metadata. Existing ledger facts
+are not rewritten or automatically confirmed. Ambiguous legacy unowned transactions
+remain unknown rather than being relabeled as observed purchases.
 No application-database migration is run automatically by the API.
 
 **5. Run the API.**
@@ -167,21 +169,32 @@ for the full contract, edge cases, and repair workflow.
 annualized return independently of unrelated positions. It returns a nullable
 decimal-string rate, typed status, valuation date/source, and quote provenance.
 Closed holdings need no current quote; open holdings use their split-adjusted
-remaining quantity as the terminal valuation. Snapshot/unknown or incomplete import
-history, missing prices/FX, and undefined returns are withheld, never replaced by
-zero. Portfolio-level behavior is unchanged. See the
+remaining quantity as the terminal valuation. Synthetic snapshots and unresolved
+history block returns; unknown origins, incomplete successful imports and deliberate
+deletions require review and explicit confirmation before they can be acknowledged.
+Missing prices/FX and undefined returns remain withheld, never replaced by zero.
+Portfolio-level behavior is unchanged. See the
 [response/status semantics](./backend/README.md#holding-level-money-weighted-return-xirr).
 
-### Holding history and ledger deletion (backend)
+### Holding history review API
+
+`GET /api/v1/portfolios/{id}/holdings/{ticker}/history` returns the active ledger,
+backend blockers and an opaque review token from one snapshot. POST accepts that
+token plus literal `confirmed: true`; stale tokens or blockers return `409`.
+Confirmation binds to the reviewed ledger fingerprint without rewriting origins.
+Frontend review and repair controls are delivered in the next slice.
+
+### Holding history and ledger deletion
 
 Holdings and analytics positions include read-only `history_complete` and typed
-`history_gaps` for a **History not confirmed** table indicator, independent of prices
-and classification. Ledger GET responses now expose stable transaction `id` and
-`portfolio_id`; DELETE is scoped to both. A successful deletion returns `204` after
-commit, retains an audit tombstone, and marks affected holding history unconfirmed.
+`history_gaps` for the **History not confirmed** indicator, independent of prices
+and classification. Ledger reads expose stable transaction `id`, `portfolio_id`
+and `history_origin`; these identity/provenance fields are not writable through
+transaction inputs. DELETE is scoped to portfolio and transaction. Success returns
+`204` after commit, retains an audit tombstone and invalidates affected confirmation.
 Active imports or deletions that orphan later sales return `409`, not partial writes.
-Frontend work is separate: see the [implementation prompt](./backend/FRONTEND_HANDOFF.md)
-and [backend semantics](./backend/README.md#holding-history-indicators-and-transaction-deletion).
+See the [backend semantics](./backend/README.md#holding-history-indicators-and-transaction-deletion)
+and [frontend runbook](./frontend/README.md#holding-history-and-deleting-ledger-events).
 
 ---
 

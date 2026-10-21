@@ -55,10 +55,11 @@ backend/
 │       ├── 0004_statement_imports.py          # ✅ Creates statement_imports (async import job metadata/progress; checksum indexed)
 │       ├── 0005_import_recovery_and_provenance.py # ✅ Adds classification provenance (legacy labels → MANUAL), import ownership, retry safety, and unresolved records
 │       ├── 0006_holding_return_history.py # ✅ Adds transaction origin for holding XIRR; legacy unowned history → UNKNOWN, owned import history → OBSERVED
-│       └── 0007_transaction_deletion.py # ✅ Adds nullable deletion tombstones; downgrade removes deleted events rather than resurrecting them
+│       ├── 0007_transaction_deletion.py # ✅ Adds nullable deletion tombstones; downgrade removes deleted events rather than resurrecting them
+│       └── 0008_holding_history_confirmation.py # ✅ Adds nullable holding-scoped review-token and confirmation-time metadata without rewriting ledger facts
 ├── tests/                     # 🟡 pytest suites — mirrors app/ layout one-to-one (see AGENTS.md §11)
 │   ├── conftest.py            # ✅ Shared fixtures (FX rate tables + in-memory async SQLite session)
-│   ├── test_migrations.py     # ✅ Alembic upgrade/downgrade, column drift guard, provenance backfills and non-resurrecting transaction tombstone migration
+│   ├── test_migrations.py     # ✅ Alembic upgrade/downgrade, drift/provenance/tombstone guards and nullable confirmation migration coverage
 │   ├── factories/             # ⬜ Fixture builders (portfolios, transactions, filings, documents)
 │   ├── unit/                  # 🟡 Pure/isolated tests — all provider boundaries mocked
     │   │   ├── core/             # ✅ currency (FX normalization) + config edge cases + engine factory
@@ -73,6 +74,7 @@ backend/
     │   │   │   ├── test_service.py    # ✅ Read orchestration, XIRR, allocation, offline unpriced tickers, and typed position gaps/provenance — faked providers
     │   │   │   ├── test_holding_analytics.py # ✅ Scoped open/closed XIRR, partial sells/dividends/fees/splits, snapshots/import history, FX, valuation citations, undefined/zero returns
     │   │   │   ├── test_history.py # ✅ Pure typed history reasons and share-replay guards for deleting purchases, sales and splits
+    │   │   │   ├── test_history_confirmation.py # ✅ Canonical scoped fingerprints, acknowledgement vs hard blockers, invalid events and changed-history policy
     │   │   │   ├── test_classification.py # ✅ MANUAL protection, partial-profile replacement, failed-refresh preservation, retry safety, and finite cursor sweeps
     │   │   │   ├── test_reconciliation.py # ✅ Pure split inference from confirmed history, ambiguity/rounding guards, and source-matching correction validation
     │   │   │   ├── test_statements.py  # ✅ Robinhood 9-col export: trade/dividend/tax mapping, Activity-Date keying, derived price, money-cell cleaning, option/transfer/split warnings, non-activity CSV rejected
@@ -83,7 +85,8 @@ backend/
     │   │   │   ├── test_statement_import_store.py # ✅ local-disk blob store (round-trip, traversal guard, atomic write) + job lifecycle/checksum lookup
     │   │   │   ├── test_import_recovery.py # ✅ Partial-failure retry ownership, startup reconciliation, corrupt-byte refusal, persisted repair gaps, and exactly-once correction
     │   │   │   ├── test_holding_history.py # ✅ Persisted snapshot origin and matching public history flags, import/unresolved scoping and unknown-scope refusal
-    │   │   │   └── test_transaction_deletion.py # ✅ Scoped stable IDs, durable history invalidation, rollback, dependent-sale/active-import conflicts and retry replay protection
+    │   │   │   ├── test_transaction_deletion.py # ✅ Scoped stable IDs, durable history invalidation, rollback, dependent-sale/active-import conflicts and retry replay protection
+    │   │   │   └── test_history_confirmation.py # ✅ Durable confirmation, untouched origins, stale snapshots, import invalidation and offline lock/concurrent-write coverage
 │   │   ├── marketdata/        # ✅ read-through cache + AlphaVantage provider (mocked MCP) + throttle
 │   │   │   ├── test_schemas.py    # ✅ provenance required, frozen, statement container, optional fields
 │   │   │   ├── test_cache.py      # ✅ hit / miss-refresh / TTL-expiry / stale-fallback / per-symbol keys
@@ -102,7 +105,8 @@ backend/
     │   │   │   ├── conftest.py        # ✅ Seeded in-memory SQLite (incl. an unclassified holding) + get_session/market-data/profile/statement-storage overrides + AsyncClient fixtures
     │   │   │   ├── test_portfolio_routes.py # ✅ health, summary/txns/holdings/analytics (cost-basis + market values + XIRR status), 200 + 404
     │   │   │   ├── test_holding_analytics_routes.py # ✅ Holding XIRR decimal-string/status/provenance contract, case-insensitive 404s, offline closed positions, snapshots/imports and unrelated price/FX isolation
-    │   │   │   ├── test_transaction_deletion_routes.py # ✅ History table fields, stable ledger IDs, scoped 204/404/409 deletion, immediate analytics and read-only identity inputs
+    │   │   │   ├── test_transaction_deletion_routes.py # ✅ Stable-ID ledger with read-only row origins, scoped deletion conflicts and immediate analytics
+    │   │   │   ├── test_history_confirmation_routes.py # ✅ Review/confirm contract, strict acknowledgement, blockers, repair, origins, stale tokens and scoped statuses
     │   │   │   ├── test_ingest_routes.py    # ✅ GET list + POST create/transactions/positions; async import 202→poll→SUCCEEDED→analytics, duplicate 409, 404/422
     │   │   │   ├── test_classification_routes.py # ✅ Single holding GET, nullable MANUAL PATCH, immediate analytics, finite cursor sweeps, safe repeats, and configuration-vs-quota failures
     │   │   │   ├── test_unresolved_routes.py # ✅ Typed import issues, atomic source-matching repairs, cleared gaps, retry errors, and complete-history opt-in
@@ -126,14 +130,14 @@ backend/
     │   ├── currency.py        # ✅ FX normalization seam (Money/FxRate/FxRateTable) — USD now, INR-ready
     │   └── exceptions.py      # ⬜ App-wide error types + handlers
     ├── api/                   # 🟡 HTTP layer only (thin controllers, no business logic)
-    │   ├── deps.py            # ✅ Shared FastAPI dependencies for typed portfolio/holding analytics, stable transaction-ledger reads/deletion, ingest/import and optional market data
+    │   ├── deps.py            # ✅ Typed dependencies for portfolio analytics, atomic history review/confirmation, ledger reads/deletion, ingest/import and optional market data
     │   └── v1/
     │       ├── router.py      # ✅ Aggregates all v1 routes
     │       └── routes/        # 🟡 portfolio.py ✅; research.py, documents.py, marketdata.py, workspace.py ⬜
-    │           └── portfolio.py   # ✅ Portfolio/import routes, stable-ID ledger GET and guarded DELETE, holding history/detail/XIRR, classification and unresolved repair
+    │           └── portfolio.py   # ✅ Portfolio/import routes, stable-ID ledger GET/DELETE, holding history review/confirmation/detail/XIRR, classification and unresolved repair
     ├── providers/             # 🟡 Strongly-typed abstraction interfaces (§2) — the ONLY I/O boundary
-    │   ├── base.py            # ✅ PortfolioProvider, HoldingAnalyticsProvider, TransactionLedgerProvider, PortfolioWriter and StatementImportStore Protocols
-    │   ├── portfolio_provider.py  # ✅ Active ledger reads, bulk holding history diagnostics, committed classification edits and atomic scoped tombstone deletion with replay/ownership safeguards
+    │   ├── base.py            # ✅ Typed PortfolioProvider, HoldingAnalyticsProvider, HoldingHistoryProvider, TransactionLedgerProvider, PortfolioWriter and StatementImportStore protocols
+    │   ├── portfolio_provider.py  # ✅ Active ledger/row origins, atomic locked reviews and confirmations, canonical state mapping, classification and guarded scoped tombstones
     │   ├── statement_storage.py   # ✅ StatementStorage Protocol — raw blob put/get, kept OUT of the relational DB (local disk now, S3 later)
     │   ├── statement_import_store.py # ✅ Import state/progress, owned batches, startup recovery, tombstone-safe retry cleanup, unresolved items and atomic corrections
     │   ├── marketdata_provider.py  # ✅ MarketDataProvider Protocol — quotes/profiles/statements (cache-first)
@@ -142,11 +146,11 @@ backend/
     │   ├── news_streaming_engine.py
     │   └── document_provider.py
     ├── portfolio/             # 🟡 Ledger, allocation weights, investor returns (XIRR), valuations (pure Python)
-    │   ├── models.py          # ✅ SQLAlchemy portfolio/holding/ledger/cash/import/unresolved models, classification/import/origin provenance and transaction deletion audit timestamps
-    │   ├── schemas.py         # ✅ Separate Transaction inputs and stable-ID TransactionRecord reads, holding history flags/reasons, analytics/import/correction models and typed gaps
+    │   ├── models.py          # ✅ SQLAlchemy ledger/import provenance and tombstones plus holding-scoped confirmation tokens/timestamps
+    │   ├── schemas.py         # ✅ Separate transaction input/origin-bearing ledger read models, typed review/confirmation/snapshots, history reasons and analytics/import/correction carriers
     │   ├── service.py         # ✅ Active-ledger portfolio analytics with per-position history/classification diagnostics, unpriced tickers and freshly read allocation labels
-    │   ├── history.py         # ✅ Pure shared holding-history reason derivation and quantity/split replay validation for transaction deletion
-    │   ├── holding_analytics.py # ✅ Ticker-only XIRR via existing calculators; observed-history guards, split-adjusted terminal value, closed-position quote avoidance and typed price/FX/history failures
+    │   ├── history.py         # ✅ Pure canonical review fingerprints, acknowledgement/hard-blocker policy, confirmation invalidation and financial/share replay validation
+    │   ├── holding_analytics.py # ✅ Ticker-only XIRR with shared effective-history policy, price/FX/provenance guards and no quote dependency for closed holdings
     │   ├── ingest.py          # ✅ Write orchestration: manual trades + current-holding snapshots (→ internally marked synthetic opening BUY) behind the PortfolioWriter seam
     │   ├── imports.py         # ✅ Accept/checksum/store → claimed background batches → terminal state, retained-byte retry verification, and typed source correction orchestration
     │   ├── classification.py  # ✅ MANUAL-protected company-profile backfill; refresh replaces taxonomy/provenance, finite cursor sweeps, and typed per-ticker retryable failures

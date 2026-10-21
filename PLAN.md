@@ -137,9 +137,12 @@ Testing is a **build-time discipline, not a phase.** Each task below is only com
 ### 3.3 Active On-Screen Prompt Action System
 * Implement contextual click actions across the research dashboard (e.g., selecting an erratic financial line item or a piece of text within an earnings transcript instantly passes that segment into the Side-Panel with specific predefined intents: *"Audit this metric against SEC data"* or *"Compare this statement with top peer guidance"*).
 
-### Agent delegation delivery
+### Holding-history backend delivery
 
-- [x] Configure named backend/frontend profiles and orchestrator-owned local slice commits.
+- [x] Configure named backend/frontend profiles and local slice commits.
+- [x] Add migration `0008`, fingerprint-bound atomic review/confirmation and read-only row origins.
+- [x] Validate policy/provider/API/migration regressions (433 tests), Ruff and mypy; update backend/root runbooks and file inventory.
+- [ ] Deliver the typed frontend review/repair/confirmation workflow in the next slice.
 
 ### Commit delivery policy
 

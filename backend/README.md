@@ -39,7 +39,7 @@ From the **repo root** first: `docker compose up -d --wait` (starts Postgres + p
 ```bash
 cd backend
 uv sync --extra dev --extra postgres
-uv run alembic upgrade head             # includes transaction deletion tombstones (0007)
+uv run alembic upgrade head             # includes holding history confirmation (0008)
 uv run python -m uvicorn app.main:app --reload    # http://localhost:8000/docs
 ```
 
@@ -56,7 +56,7 @@ Existing ownership-tagged import rows retain observed origin and are checked
 against their job's completeness. Legacy unowned rows become `UNKNOWN`: old
 snapshots and manual trades were stored identically, so guessing would fabricate
 return history. This deliberately withholds holding XIRR for those rows until
-history is reconciled from source records (there is no automatic trust override).
+history is reconciled from source records and explicitly reviewed as described below.
 No existing transactions are deleted or financially changed by this migration.
 
 Revision `0007` is required even on installations already upgraded to `0006`.
@@ -72,6 +72,12 @@ back up the database before downgrading. No application migration is automatic.
 > this file. (os error 4551)`. Invoking through the trusted Python interpreter
 > (`python -m uvicorn …`) sidesteps the shim entirely. The same trick applies to any
 > blocked console script (`python -m pytest`, `python -m alembic …`).
+
+Revision `0008` adds nullable `holdings.history_review_token` and
+`holdings.history_confirmed_at`. Existing holdings remain explicitly unconfirmed;
+no ledger facts or import-wide completeness flags are rewritten. Run
+`uv run alembic upgrade head` before restarting. Downgrading to `0007` removes
+confirmations only, preserving holdings and transactions.
 
 ## Point at a remote or slow (GPU-less) Ollama
 
@@ -273,6 +279,8 @@ responses, and `/analytics` positions expose:
 | `IMPORT_NOT_SUCCEEDED` | A relevant import is pending/running/failed |
 | `UNRESOLVED_EVENTS` | Relevant unresolved financial source events remain |
 | `DELETED_TRANSACTION` | An event was deliberately removed from this ticker's active ledger |
+| `HISTORY_CHANGED` | Saved confirmation no longer matches current ledger/import facts |
+| `INVALID_LEDGER` | Invalid financial event, nonfinite/negative values, future date or oversell |
 
 Use a neutral warning such as **History not confirmed** when false, with the
 specific reasons available in a tooltip/detail. Do not assert that transactions
@@ -284,13 +292,83 @@ and unknown-ticker source issues use the same conservative scope as holding XIRR
 The holdings list loads ledger/history facts in bulk rather than calling an
 analytics/quote service once per ticker.
 
+### Review, repair, and explicitly confirm one holding
+
+`GET /api/v1/portfolios/{portfolio_id}/holdings/{ticker}/history` returns
+`HoldingHistoryReview` from one locked snapshot:
+
+- `ticker: string` (uppercase; lookup is case-insensitive)
+- `history_complete: boolean`, `history_gaps: HoldingHistoryGap[]`
+- `blocking_gaps: HoldingHistoryGap[]` (cannot be acknowledged)
+- `review_token: string` (opaque token; do not decode or construct it)
+- `confirmed_at: datetime | null` (null without effective explicit confirmation)
+- `transactions: TransactionRecord[]` (active scoped rows; Decimal values are strings)
+
+Repair missing real events using the **existing**
+`POST /api/v1/portfolios/{portfolio_id}/transactions` array contract (`201`).
+Resolve tracked import source issues through the existing unresolved-item endpoint;
+adding a manual event alone does not mark a tracked issue resolved. Fetch a fresh
+review after every repair, deletion, or import change.
+
+`POST` to the same holding `/history` path with
+`{"review_token":"<token from GET>","confirmed":true}` returns the same review
+schema (`200`). Only the actual JSON boolean `true` is accepted: false, omitted,
+null, strings, and numbers return `422`. Missing portfolio/holding is `404`;
+a stale or malformed string token, or any blocking gap, returns `409` without
+changing confirmation. Repeating the same effective token is idempotent and keeps
+the timestamp. Naturally complete history can have `confirmed_at: null`: absence
+of known gaps is not an explicit attestation.
+
+Only `UNKNOWN_ORIGIN`, `IMPORT_NOT_COMPLETE`, `DELETED_TRANSACTION`, and
+`HISTORY_CHANGED` may be acknowledged. Snapshot lots, unresolved source events,
+failed/pending/running relevant imports, empty/no-acquisition history, oversells,
+future dates and invalid financial events remain hard blockers. Every active import
+blocks even if its current ticker inventory appears unrelated; its scope is not
+final. Confirmation never changes origins or an import's `history_complete`.
+
+The persisted fingerprint covers portfolio/ticker scope, active and deleted ledger
+IDs and financial payloads, origins, ownership, relevant job status/completeness,
+and unresolved facts. Progress counters and job lifecycle timestamps are excluded.
+Changed facts immediately make the saved confirmation ineffective on reads,
+including naturally observed-complete history: `HISTORY_CHANGED` is surfaced and
+`confirmed_at` becomes null until a new successful confirmation. Holdings list,
+single holding, portfolio position diagnostics, and holding XIRR share this policy.
+Prices, dated FX and undefined XIRR remain independently nullable; portfolio-wide
+XIRR policy is unchanged.
+
+Review and confirmation serialize with writes: SQLite uses a short write barrier;
+Postgres locks portfolio (NO KEY UPDATE, permitting import foreign-key checks),
+import/ledger/source tables, then scoped rows. Coarse table
+locks also cover import insertion and corrections that do not take a portfolio
+lock. Nonblocking acquisition inside a savepoint releases partial locks before
+retrying, avoiding cycles with existing import writer orders. Trade-off:
+reviews briefly serialize writes across portfolios. SQLite concurrency and mocked
+Postgres contention tests are offline; live Postgres concurrency remains an
+integration validation task. The existing single-API-process restriction remains.
+
 ### Ledger identity and deletion
 
 `GET /api/v1/portfolios/{id}/transactions` now returns `TransactionRecord[]`:
-the existing financial fields plus stable integer `id` and `portfolio_id`.
-Write bodies still use `Transaction`, not `TransactionRecord`; read-only IDs and
-other unknown transaction input fields are rejected (`422`). Never identify a row
-by its displayed index, ticker/date, or amount: identical transactions can coexist.
+the existing financial fields plus stable integer `id` and `portfolio_id`, and
+required, non-null `history_origin: LedgerOrigin`. The same read-only origin is
+included on every transaction in holding history review/confirmation responses:
+
+- `OBSERVED`: a recorded manual/imported event (not independent verification).
+- `SNAPSHOT`: a synthetic opening BUY created from a position snapshot.
+- `UNKNOWN`: legacy provenance cannot safely distinguish a snapshot from a real trade.
+
+Origins come directly from stored ledger facts, with no guessed default. Identify
+synthetic lots by `history_origin == "SNAPSHOT"`, then use their stable IDs when
+replacing/deleting them through existing guarded endpoints. Never infer snapshot
+origin from dates, prices, or `UNKNOWN`; reconcile unknown rows against source
+records. Confirmation preserves all origins, including `UNKNOWN`, and does not
+change the canonical review-token payload or ordering. This read-contract follow-up
+requires no additional migration.
+
+Write bodies still use `Transaction`, not `TransactionRecord`; read-only IDs,
+`history_origin`, and other unknown transaction input fields are rejected (`422`).
+Never identify a row by its displayed index, ticker/date, or amount: identical
+transactions can coexist.
 
 `DELETE /api/v1/portfolios/{portfolio_id}/transactions/{transaction_id}`:
 
@@ -311,7 +389,8 @@ sale and does not book proceeds. The affected holding's classification is retain
 when its last event is deleted it stays tracked, while its analytics position
 disappears. Its history remains unconfirmed, including after later new entries;
 deletion does not provide a history-completeness attestation or an undo operation.
-Holding XIRR is withheld; existing portfolio-level return policy/formulas remain
+Holding XIRR is withheld until permitted gaps are explicitly confirmed;
+existing portfolio-level return policy/formulas remain
 unchanged and simply recompute over the surviving active ledger.
 
 Tombstone and retry-safety changes commit atomically. Deleting an owned imported
@@ -323,7 +402,8 @@ of surviving rows. Retained source bytes and duplicate-upload detection are unch
 a deliberate new duplicate-override upload is not a same-job retry and can insert
 events again. Deleting a correction does not reopen its resolved source issue;
 the tombstone flags the holding for reconciliation instead of silently duplicating
-that correction. There is no new history-certification or restoration endpoint.
+that correction. Restoration is not provided; holding-scoped history confirmation
+is available through the review endpoint above.
 
 This retains the existing single-API-process deployment restriction. Job row locks
 coordinate deletion with existing import claims/retries on Postgres; SQLite tests
@@ -460,8 +540,9 @@ Snapshot opening lots remain useful for basis/valuation but are **never observed
 cash flows**, even with a supplied acquisition date, later sales, or when created
 by transfer repair. New manual ledger entries are treated as user-asserted observed
 history; the API cannot independently prove omitted trades. Imports must have been
-submitted with `history_complete=true` and finished successfully. An earlier
-incomplete import is not made complete merely by resolving one issue. Any relevant
+submitted with `history_complete=true` and finished successfully, or their
+incompleteness must be explicitly acknowledged through holding history review.
+An earlier incomplete import is not made complete merely by resolving one issue. Any relevant
 unresolved source event (even one with no `data_gaps`) prevents a trusted return.
 Taxonomy gaps alone do not block XIRR.
 Cash-only dividend/fee history without any observed acquisition is also incomplete,

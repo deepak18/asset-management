@@ -24,6 +24,7 @@ from app.api.deps import (
     get_background_import_runner,
     get_holding_analytics_service,
     get_holding_classification_service,
+    get_holding_history_provider,
     get_portfolio_ingest_service,
     get_portfolio_provider,
     get_portfolio_service,
@@ -35,7 +36,7 @@ from app.portfolio.classification import (
     DEFAULT_CLASSIFY_LIMIT,
     HoldingClassificationService,
 )
-from app.portfolio.history import TransactionDeletionConflict
+from app.portfolio.history import HistoryConfirmationConflict, TransactionDeletionConflict
 from app.portfolio.holding_analytics import HoldingAnalyticsService
 from app.portfolio.imports import (
     DuplicateStatementError,
@@ -47,6 +48,8 @@ from app.portfolio.schemas import (
     HoldingAnalytics,
     HoldingClassificationResult,
     HoldingClassificationUpdate,
+    HoldingHistoryConfirmation,
+    HoldingHistoryReview,
     HoldingInfo,
     LedgerIngestResult,
     PortfolioAnalytics,
@@ -62,7 +65,12 @@ from app.portfolio.schemas import (
 )
 from app.portfolio.service import PortfolioService
 from app.portfolio.statements import StatementParseError
-from app.providers.base import PortfolioProvider, StatementImportStore, TransactionLedgerProvider
+from app.providers.base import (
+    HoldingHistoryProvider,
+    PortfolioProvider,
+    StatementImportStore,
+    TransactionLedgerProvider,
+)
 from app.providers.statement_storage import StatementStorageError
 
 router = APIRouter(prefix="/portfolios", tags=["Portfolio"])
@@ -496,3 +504,43 @@ async def get_import(
             detail=f"Import {job_id} not found for portfolio {portfolio_id}",
         )
     return job
+
+
+@router.get(
+    "/{portfolio_id}/holdings/{ticker}/history",
+    responses={404: {"description": "Portfolio or holding absent"}},
+)
+async def get_holding_history(
+    portfolio_id: int,
+    ticker: str,
+    provider: HoldingHistoryProvider = Depends(get_holding_history_provider),
+) -> HoldingHistoryReview:
+    """Return active transactions and their review token from one locked snapshot."""
+    review = await provider.get_history_review(portfolio_id, ticker)
+    if review is None:
+        raise HTTPException(status_code=404, detail="Portfolio or holding not found")
+    return review
+
+
+@router.post(
+    "/{portfolio_id}/holdings/{ticker}/history",
+    responses={
+        404: {"description": "Portfolio or holding absent"},
+        409: {"description": "Stale review token or blocking history gaps"},
+        422: {"description": "Missing or non-boolean-true acknowledgement"},
+    },
+)
+async def confirm_holding_history(
+    portfolio_id: int,
+    ticker: str,
+    body: HoldingHistoryConfirmation,
+    provider: HoldingHistoryProvider = Depends(get_holding_history_provider),
+) -> HoldingHistoryReview:
+    """Explicitly confirm this exact history snapshot; repeated confirmation is stable."""
+    try:
+        review = await provider.confirm_history(portfolio_id, ticker, body.review_token)
+    except HistoryConfirmationConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if review is None:
+        raise HTTPException(status_code=404, detail="Portfolio or holding not found")
+    return review

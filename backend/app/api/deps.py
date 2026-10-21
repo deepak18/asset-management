@@ -30,7 +30,12 @@ from app.portfolio.holding_analytics import HoldingAnalyticsService
 from app.portfolio.imports import StatementImportService
 from app.portfolio.ingest import PortfolioIngestService
 from app.portfolio.service import PortfolioService
-from app.providers.base import PortfolioProvider, StatementImportStore, TransactionLedgerProvider
+from app.providers.base import (
+    HoldingHistoryProvider,
+    PortfolioProvider,
+    StatementImportStore,
+    TransactionLedgerProvider,
+)
 from app.providers.marketdata_provider import MarketDataProvider
 from app.providers.portfolio_provider import SqlAlchemyPortfolioProvider
 from app.providers.statement_import_store import SqlAlchemyStatementImportStore
@@ -194,6 +199,12 @@ def get_statement_import_service(
         batch_size=settings.import_batch_size,
         max_stored_warnings=settings.import_max_stored_warnings,
     )
+
+
+def get_holding_history_provider(
+    session: AsyncSession = Depends(get_session),
+) -> HoldingHistoryProvider:
+    return SqlAlchemyPortfolioProvider(session)
 
 
 class BackgroundImportRunner:

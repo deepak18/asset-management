@@ -18,6 +18,7 @@ from typing import Protocol
 
 from app.portfolio.schemas import (
     ClassificationSource,
+    HoldingHistoryReview,
     HoldingInfo,
     HoldingLedger,
     ImportIssue,
@@ -200,3 +201,15 @@ class StatementImportStore(Protocol):
     ) -> UnresolvedItem | None:
         """Atomically insert one correction and mark its source item resolved."""
         ...
+
+
+class HoldingHistoryProvider(Protocol):
+    """Atomic review snapshots and explicit holding-scoped confirmation."""
+
+    async def get_history_review(
+        self, portfolio_id: int, ticker: str,
+    ) -> HoldingHistoryReview | None: ...
+
+    async def confirm_history(
+        self, portfolio_id: int, ticker: str, review_token: str,
+    ) -> HoldingHistoryReview | None: ...

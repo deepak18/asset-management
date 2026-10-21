@@ -24,8 +24,9 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.marketdata.schemas import MarketDataProvenance
 
@@ -87,10 +88,14 @@ class PositionValue(BaseModel):
 
 
 class TransactionRecord(Transaction):
-    """Persisted ledger read; IDs are deliberately absent from write inputs."""
+    """Persisted ledger read; identity and origin are absent from write inputs."""
+
+    # Legacy corrupt rows must remain reviewable, not become a server error.
+    model_config = ConfigDict(frozen=True, extra="forbid", allow_inf_nan=True)
 
     id: int
     portfolio_id: int
+    history_origin: LedgerOrigin
 
 
 class HoldingHistoryGap(StrEnum):
@@ -102,6 +107,55 @@ class HoldingHistoryGap(StrEnum):
     IMPORT_NOT_SUCCEEDED = "IMPORT_NOT_SUCCEEDED"
     UNRESOLVED_EVENTS = "UNRESOLVED_EVENTS"
     DELETED_TRANSACTION = "DELETED_TRANSACTION"
+    HISTORY_CHANGED = "HISTORY_CHANGED"
+    INVALID_LEDGER = "INVALID_LEDGER"
+
+
+class HoldingHistoryConfirmation(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    review_token: str
+    confirmed: Literal[True]
+
+    @field_validator("confirmed", mode="before")
+    @classmethod
+    def _strict_acknowledgement(cls, value: object) -> object:
+        if value is not True:
+            raise ValueError("confirmed must be the boolean true")
+        return value
+
+
+class HoldingHistoryReview(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    ticker: str
+    history_complete: bool
+    history_gaps: tuple[HoldingHistoryGap, ...]
+    blocking_gaps: tuple[HoldingHistoryGap, ...]
+    review_token: str
+    confirmed_at: datetime | None
+    transactions: tuple[TransactionRecord, ...]
+
+
+class HistoryTransactionState(TransactionRecord):
+    import_job_id: int | None
+    deleted_at: datetime | None
+
+
+class HistoryImportState(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    id: int
+    portfolio_id: int
+    status: ImportStatus
+    history_complete: bool
+    tickers: tuple[str, ...]
+    unresolved_items: tuple[UnresolvedItem, ...]
+
+
+class HoldingHistorySnapshot(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    portfolio_id: int
+    ticker: str
+    transactions: tuple[HistoryTransactionState, ...]
+    imports: tuple[HistoryImportState, ...]
 
 
 class SnapshotTransaction(Transaction):
@@ -151,6 +205,9 @@ class HoldingLedger(BaseModel):
     imports: tuple[HoldingImportHistory, ...] = ()
     has_unresolved_events: bool = False
     has_deleted_transactions: bool = False
+    review_token: str | None = None
+    saved_review_token: str | None = None
+    confirmed_at: datetime | None = None
 
 
 class PortfolioSummary(BaseModel):
@@ -602,3 +659,5 @@ class UnresolvedResolution(BaseModel):
 ParsedStatement.model_rebuild()
 StatementImportStatus.model_rebuild()
 HoldingLedger.model_rebuild()
+HistoryImportState.model_rebuild()
+HoldingHistorySnapshot.model_rebuild()

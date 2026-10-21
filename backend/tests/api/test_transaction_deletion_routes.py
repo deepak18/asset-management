@@ -78,7 +78,11 @@ async def test_wrong_portfolio_and_missing_ids_are_404(api_client: AsyncClient) 
     assert len((await api_client.get(f"{BASE}/transactions")).json()) == 2
 
 
-@pytest.mark.parametrize("extra", [{"id": 999}, {"portfolio_id": 2}, {"deleted_at": "2024-01-01"}])
+@pytest.mark.parametrize("extra", [
+    {"id": 999}, {"portfolio_id": 2}, {"deleted_at": "2024-01-01"},
+    {"history_origin": "OBSERVED"}, {"history_origin": "SNAPSHOT"},
+    {"history_origin": "UNKNOWN"},
+])
 async def test_write_inputs_cannot_supply_read_identity(api_client: AsyncClient, extra: dict[str, object]) -> None:
     response = await api_client.post(f"{BASE}/transactions", json=[{
         "ticker": "AAA", "type": "BUY", "trade_date": "2024-01-01", "currency": "USD",

@@ -193,3 +193,39 @@ def test_deletion_migration_preserves_active_rows_and_never_resurrects_deleted_r
         command.upgrade(cfg, "head")
     finally:
         engine.dispose()
+
+
+def test_confirmation_migration_is_additive_nullable_and_reversible(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _isolate_settings: None,
+) -> None:
+    db_path = tmp_path / "confirmation.db"
+    cfg = _alembic_config(db_path, monkeypatch)
+    command.upgrade(cfg, "0007")
+    engine = create_engine(f"sqlite:///{db_path.as_posix()}")
+    try:
+        metadata = MetaData()
+        portfolios = Table("portfolios", metadata, autoload_with=engine)
+        holdings = Table("holdings", metadata, autoload_with=engine)
+        with engine.begin() as conn:
+            conn.execute(portfolios.insert().values(id=1, name="Legacy", base_currency="USD"))
+            conn.execute(holdings.insert().values(portfolio_id=1, ticker="AAA"))
+        command.upgrade(cfg, "head")
+        holdings = Table("holdings", MetaData(), autoload_with=engine)
+        with engine.begin() as conn:
+            row = conn.execute(select(holdings)).one()
+            assert row.history_review_token is None and row.history_confirmed_at is None
+            conn.execute(holdings.update().values(
+                history_review_token="a" * 64, history_confirmed_at=datetime.now(UTC),
+            ))
+        columns = {column["name"]: column for column in inspect(engine).get_columns("holdings")}
+        assert columns["history_review_token"]["nullable"]
+        assert columns["history_confirmed_at"]["nullable"]
+        command.downgrade(cfg, "0007")
+        holdings = Table("holdings", MetaData(), autoload_with=engine)
+        assert "history_review_token" not in holdings.c
+        assert "history_confirmed_at" not in holdings.c
+        with engine.connect() as conn:
+            assert conn.execute(select(holdings.c.ticker)).scalars().all() == ["AAA"]
+        command.upgrade(cfg, "head")
+    finally:
+        engine.dispose()

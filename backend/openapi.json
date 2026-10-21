@@ -1021,6 +1021,120 @@
         }
       }
     },
+    "/api/v1/portfolios/{portfolio_id}/holdings/{ticker}/history": {
+      "get": {
+        "tags": [
+          "Portfolio"
+        ],
+        "summary": "Get Holding History",
+        "description": "Return active transactions and their review token from one locked snapshot.",
+        "operationId": "get_holding_history_api_v1_portfolios__portfolio_id__holdings__ticker__history_get",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          },
+          {
+            "name": "ticker",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ticker"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldingHistoryReview"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Portfolio or holding absent"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Portfolio"
+        ],
+        "summary": "Confirm Holding History",
+        "description": "Explicitly confirm this exact history snapshot; repeated confirmation is stable.",
+        "operationId": "confirm_holding_history_api_v1_portfolios__portfolio_id__holdings__ticker__history_post",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          },
+          {
+            "name": "ticker",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ticker"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HoldingHistoryConfirmation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HoldingHistoryReview"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Portfolio or holding absent"
+          },
+          "409": {
+            "description": "Stale review token or blocking history gaps"
+          },
+          "422": {
+            "description": "Missing or non-boolean-true acknowledgement"
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -1388,6 +1502,26 @@
         "title": "HoldingClassificationUpdate",
         "description": "Manual sector/industry override for one holding.\n\nOmitted fields are preserved; explicit null clears a field. Every edit marks\nthe holding MANUAL, including clearing both fields."
       },
+      "HoldingHistoryConfirmation": {
+        "properties": {
+          "review_token": {
+            "type": "string",
+            "title": "Review Token"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "const": true,
+            "title": "Confirmed"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "review_token",
+          "confirmed"
+        ],
+        "title": "HoldingHistoryConfirmation"
+      },
       "HoldingHistoryGap": {
         "type": "string",
         "enum": [
@@ -1398,9 +1532,71 @@
           "IMPORT_NOT_COMPLETE",
           "IMPORT_NOT_SUCCEEDED",
           "UNRESOLVED_EVENTS",
-          "DELETED_TRANSACTION"
+          "DELETED_TRANSACTION",
+          "HISTORY_CHANGED",
+          "INVALID_LEDGER"
         ],
         "title": "HoldingHistoryGap"
+      },
+      "HoldingHistoryReview": {
+        "properties": {
+          "ticker": {
+            "type": "string",
+            "title": "Ticker"
+          },
+          "history_complete": {
+            "type": "boolean",
+            "title": "History Complete"
+          },
+          "history_gaps": {
+            "items": {
+              "$ref": "#/components/schemas/HoldingHistoryGap"
+            },
+            "type": "array",
+            "title": "History Gaps"
+          },
+          "blocking_gaps": {
+            "items": {
+              "$ref": "#/components/schemas/HoldingHistoryGap"
+            },
+            "type": "array",
+            "title": "Blocking Gaps"
+          },
+          "review_token": {
+            "type": "string",
+            "title": "Review Token"
+          },
+          "confirmed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed At"
+          },
+          "transactions": {
+            "items": {
+              "$ref": "#/components/schemas/TransactionRecord"
+            },
+            "type": "array",
+            "title": "Transactions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ticker",
+          "history_complete",
+          "history_gaps",
+          "blocking_gaps",
+          "review_token",
+          "confirmed_at",
+          "transactions"
+        ],
+        "title": "HoldingHistoryReview"
       },
       "HoldingInfo": {
         "properties": {
@@ -1540,6 +1736,15 @@
         ],
         "title": "LedgerIngestResult",
         "description": "What a write/import operation actually recorded (the endpoint's response)."
+      },
+      "LedgerOrigin": {
+        "type": "string",
+        "enum": [
+          "OBSERVED",
+          "SNAPSHOT",
+          "UNKNOWN"
+        ],
+        "title": "LedgerOrigin"
       },
       "MarketDataProvenance": {
         "properties": {
@@ -2249,6 +2454,9 @@
           "portfolio_id": {
             "type": "integer",
             "title": "Portfolio Id"
+          },
+          "history_origin": {
+            "$ref": "#/components/schemas/LedgerOrigin"
           }
         },
         "additionalProperties": false,
@@ -2259,10 +2467,11 @@
           "trade_date",
           "currency",
           "id",
-          "portfolio_id"
+          "portfolio_id",
+          "history_origin"
         ],
         "title": "TransactionRecord",
-        "description": "Persisted ledger read; IDs are deliberately absent from write inputs."
+        "description": "Persisted ledger read; identity and origin are absent from write inputs."
       },
       "TransactionType": {
         "type": "string",

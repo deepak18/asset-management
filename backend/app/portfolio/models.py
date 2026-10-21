@@ -88,6 +88,10 @@ class Holding(Base):
     classification_source: Mapped[str] = mapped_column(
         String(20), default="NONE", server_default="NONE"
     )
+    history_review_token: Mapped[str | None] = mapped_column(String(64), default=None)
+    history_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None,
+    )
 
 
 class Transaction(Base):
