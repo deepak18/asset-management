@@ -4,7 +4,7 @@ import * as React from "react";
 import { Pencil } from "lucide-react";
 import { apiClient } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { ClassificationCombobox } from "./classification-combobox";
 import type { HoldingInfo } from "@/types/domain";
 
 /** One ticker, one field: omitted fields are preserved and blank explicitly clears. */
@@ -12,11 +12,13 @@ export function HoldingClassificationCell({
   portfolioId,
   holding,
   field,
+  suggestions = [],
   onChanged,
 }: {
   portfolioId: number;
   holding: HoldingInfo;
   field: "sector" | "industry";
+  suggestions?: readonly string[];
   onChanged: (holding: HoldingInfo) => void;
 }) {
   const [editing, setEditing] = React.useState(false);
@@ -75,14 +77,13 @@ export function HoldingClassificationCell({
 
   return (
     <form onSubmit={(event) => void save(event)} className="space-y-2">
-      <Input
-        autoFocus
-        aria-label={label}
-        maxLength={80}
+      <ClassificationCombobox
+        label={label}
         value={draft}
+        suggestions={suggestions}
         disabled={saving}
-        aria-invalid={error ? true : undefined}
-        onChange={(event) => setDraft(event.target.value)}
+        invalid={error !== null}
+        onChange={setDraft}
       />
       <p className="text-xs text-muted-foreground">
         Leave blank to clear this {field}.

@@ -183,6 +183,19 @@ selection context that every per-portfolio hook folds into its deps).
   to clear a label. Inputs follow the contract's 80-character limit. A failed
   save preserves its draft and displays a local error; refreshing another cell
   does not discard an open draft.
+- Sector/industry editors suggest existing values of the **same field** from all
+  holdings in that portfolio, including the current holding. Matching is a
+  case-insensitive substring search. Values are trimmed, nonempty, deduplicated
+  case-insensitively (first existing spelling retained), and sorted by lowercased
+  text. No hardcoded taxonomy or other portfolio's labels are used.
+  Arrow keys navigate; Enter selects without submitting. Clicking an option fills
+  the draft only. Escape closes suggestions without reaching an enclosing modal;
+  blur and outside clicks also dismiss them. Free text and blank clears remain
+  supported, with explicit Save/Cancel actions.
+  The table reuses its full holdings read; detail uses one `useHoldings` read for
+  the URL portfolio, refreshed on the existing save/history/ledger version token.
+  Loading or failed suggestions never block editing or discard drafts, and stale
+  responses after portfolio switches or unmount are ignored.
 - The detail page displays available position values, classification provenance,
   gap warnings, and ticker-filtered transactions. Company names, live-price
   inputs, average-cost calculations, and research are not fabricated. It now shows
@@ -221,13 +234,15 @@ selection context that every per-portfolio hook folds into its deps).
 | File under `src/`                                                  | Responsibility                                                                                |
 | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
 | `app/portfolios/[id]/holdings/[ticker]/page.tsx`                   | Validates URL identity and mounts the holding detail.                                         |
-| `components/portfolio/holdings-table.tsx`                          | Dashboard holdings rows, ticker links, editable cells, and bulk action.                       |
-| `components/portfolio/holding-detail.tsx`                          | URL-scoped position overview, classification, gaps, ledger, and this holding's own XIRR.      |
-| `components/portfolio/holding-classification-cell.tsx`             | Shared per-field PATCH editor with Save/Cancel and local errors.                              |
-| `components/portfolio/holding-data-gaps.tsx`                       | Typed, readable user-fixable warnings.                                                        |
-| `components/portfolio/classify-holdings-button.tsx`                | Abortable finite cursor sweep with typed failure summaries.                                   |
-| `hooks/use-portfolio.ts`                                           | Typed endpoint hooks, including single-holding lookup and per-holding XIRR.                    |
-| `mocks/handlers.ts`, `mocks/state.ts`, `mocks/fixtures.ts`         | Holding GET, per-holding analytics, nullable PATCH, provenance, cursor sweeps, and allocations. |
+| `components/portfolio/holdings-table.tsx`                          | Dashboard holdings rows and shared suggestions derived from its full holdings read. |
+| `components/portfolio/holding-detail.tsx`                          | URL-scoped overview, classification with nonblocking portfolio suggestions, gaps, ledger, and holding XIRR. |
+| `components/portfolio/holding-classification-cell.tsx`             | Shared per-field PATCH editor with suggestion combobox, Save/Cancel, and preserved error drafts. |
+| `components/portfolio/classification-combobox.tsx` | Typed field-specific normalization and accessible manual-selection combobox with unique list IDs. |
+| `components/portfolio/holding-data-gaps.tsx` | Typed, readable user-fixable warnings. |
+| `components/portfolio/classify-holdings-button.tsx` | Abortable finite cursor sweep with typed failure summaries. |
+| `hooks/use-portfolio.ts` | Typed endpoint hooks, including full-portfolio holdings, single-holding lookup and per-holding XIRR. |
+| `mocks/handlers.ts`, `mocks/state.ts`, `mocks/fixtures.ts` | Holding GET, per-holding analytics, nullable PATCH, provenance, cursor sweeps, and allocations. |
+| `__tests__/components/classification-suggestions.test.tsx` | Suggestion normalization, table/detail scope and refresh, keyboard/mouse/accessibility, drafts, failures, and cancellation. |
 | `__tests__/components/holdings.test.tsx`                           | Detail editing, independent drafts, gaps, and holding-level XIRR statuses.                    |
 | `__tests__/components/classify-holdings-button.test.tsx`           | Cursor progress, failures, configuration errors, and cancellation.                            |
 | `__tests__/components/holding-page.test.tsx`, `dashboard.test.tsx` | Deep-link validation, portfolio return, and allocation refresh integration.                   |

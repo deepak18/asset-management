@@ -230,12 +230,13 @@ frontend/
     │   │   ├── allocation-chart.tsx        # ✅ Recharts donut + accessible legend (sector/industry)
     │   │   ├── allocation-section.tsx      # ✅ Data wrapper feeding the donuts from analytics; refreshToken-aware
     │   │   ├── transaction-ledger.tsx      # ✅ Stable-ID/origin-labeled ledger with provenance-aware confirmed deletion and scoped refresh
-    │   │   ├── holdings-table.tsx          # ✅ Holding links, history diagnostics/review, position values and classification
+    │   │   ├── holdings-table.tsx          # ✅ Holding links/history diagnostics and classification with suggestions shared from full holdings
     │   │   ├── holding-history.tsx         # ✅ Shared history diagnostics and exhaustive typed reason labels
     │   │   ├── holding-history-review.tsx  # ✅ Accessible snapshot review, locked-ticker missing-event entry, explicit confirmation and stale-token recovery
     │   │   ├── ledger-origin.ts           # ✅ Read-only origin labels distinguishing observed events, synthetic snapshots and unverified legacy rows
-    │   │   ├── holding-detail.tsx          # ✅ URL-scoped history review/repair, XIRR and filtered ledger retained during scoped refresh
-    │   │   ├── holding-classification-cell.tsx # ✅ Per-field PATCH editor with explicit Save/Cancel, null clearing and preserved drafts
+    │   │   ├── holding-detail.tsx          # ✅ URL-scoped history/XIRR/ledger and nonblocking same-portfolio classification suggestions refreshed after writes
+    │   │   ├── holding-classification-cell.tsx # ✅ Per-field PATCH combobox with explicit Save/Cancel, null clearing and preserved drafts
+    │   │   ├── classification-combobox.tsx # ✅ Typed per-field suggestion normalization and accessible keyboard/mouse manual selection with unique list IDs
     │   │   ├── holding-data-gaps.tsx       # ✅ Readable typed gap warnings, separate from unavailable provider data
     │   │   ├── classify-holdings-button.tsx # ✅ Abortable cursor sweep with classified/unresolved/failure summaries and 503 configuration guidance
     │   │   ├── watchlist.tsx               # ✅ Add/remove tickers (localStorage-backed)
@@ -325,3 +326,6 @@ mcp/
 - `frontend/src/__tests__/components/history-confirm-dismissal.test.tsx` — Table/detail confirmation waits for server success, dismisses and restores focus, refreshes XIRR, reopens persisted confirmation, and stays open on failures.
 - `frontend/src/__tests__/components/button-labels.test.tsx` — Explicit Title Case button text and accessible names across the dashboard, review, creation, classification and deletion controls without changing ticker/data casing.
 - `frontend/src/components/portfolio/holding-history-review.tsx` closes only after successful confirmation; repairs and stale/error recovery retain the dialog. Other frontend action components use explicit Title Case button labels rather than CSS text transforms.
+- `frontend/src/__tests__/components/classification-suggestions.test.tsx` — Field-specific trimmed/deduplicated/sorted suggestions, table/detail other-holding values, shared reads, keyboard/mouse/ARIA behavior, scope/delayed reads, refreshed options, failure drafts, blank clears and cancellation.
+- `frontend/src/__tests__/components/holdings.test.tsx` and `dashboard.test.tsx` query classification editors by their combobox role while retaining existing draft/history/allocation regressions.
+- `frontend/README.md` documents suggestion matching, explicit selection vs save, nonblocking detail reads and the new frontend file map.

@@ -163,6 +163,15 @@ live mode works out of the box:
 See [`backend/README.md`](./backend/README.md#4-sector--industry-classification)
 for the full contract, edge cases, and repair workflow.
 
+### Classification suggestions
+
+On the Holdings table or holding detail page, edit **Sector** or **Industry** to
+see suggestions from that same field on any holding in the selected portfolio.
+Suggestions filter as you type, ignore case when matching and removing duplicates,
+and omit blank values. Use the arrow keys and Enter, or click an option, to fill
+the draft; select **Save** to persist it. New values remain allowed, and saving a
+blank field clears it. No fixed taxonomy or other portfolio's values are included.
+
 ### Holding-level XIRR (backend)
 
 `GET /api/v1/portfolios/{id}/holdings/{ticker}/analytics` computes this ticker's

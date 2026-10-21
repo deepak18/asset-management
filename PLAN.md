@@ -149,6 +149,13 @@ Testing is a **build-time discipline, not a phase.** Each task below is only com
 - [x] Standardize frontend button labels in Title Case and dismiss history review only after successful confirmation, preserving parent/XIRR refresh, pending guards, stale/error recovery and repair-in-place; verify 170 frontend tests plus lint and typecheck.
 - [ ] Validate live PostgreSQL contention and live browser/API integration separately; current concurrency coverage is offline/mocked and frontend tests use MSW.
 
+### Portfolio classification suggestions delivery
+
+- [x] Suggest existing same-field sector/industry values from all holdings in the selected portfolio in both table and detail editors, without changing the REST contract.
+- [x] Support case-insensitive filtering, trimmed/deduplicated options, accessible keyboard/mouse selection, free text and explicit Save/clear behavior.
+- [x] Preserve draft/error recovery and portfolio isolation; ship 12 focused regression tests alongside the implementation (182 frontend tests total), lint and typecheck validation.
+- [x] Update root/frontend runbooks and `STRUCTURE.md`; include them with the validated local feature commit.
+
 ### Commit delivery policy
 
 - Local, dependency-ordered Conventional Commits are part of delivery by default; commit each validated slice with its tests and required documentation before starting the next slice.

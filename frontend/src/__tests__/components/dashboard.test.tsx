@@ -25,7 +25,7 @@ it("returns to the requested portfolio and refreshes allocations after an inline
     );
     expect(within(sectorCard).queryByRole("button")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Edit PLTR Sector" }));
-    await user.type(screen.getByRole("textbox", { name: "PLTR sector" }), "Energy");
+    await user.type(screen.getByRole("combobox", { name: "PLTR sector" }), "Energy");
     await user.click(screen.getByRole("button", { name: "Save PLTR Sector" }));
     await waitFor(() => {
       const refreshed = screen

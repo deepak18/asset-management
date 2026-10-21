@@ -26,8 +26,8 @@ describe("holding classification cells", () => {
       />,
     );
     await user.click(screen.getByRole("button", { name: "Edit AAPL Sector" }));
-    await user.clear(screen.getByRole("textbox"));
-    await user.type(screen.getByRole("textbox"), "Energy");
+    await user.clear(screen.getByRole("combobox"));
+    await user.type(screen.getByRole("combobox"), "Energy");
     server.use(
       http.patch(`${base}/1/holdings/AAPL`, () =>
         HttpResponse.json({ detail: "Save failed" }, { status: 500 }),
@@ -35,7 +35,7 @@ describe("holding classification cells", () => {
     );
     await user.click(screen.getByRole("button", { name: "Save AAPL Sector" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Save failed");
-    expect(screen.getByRole("textbox")).toHaveValue("Energy");
+    expect(screen.getByRole("combobox")).toHaveValue("Energy");
     expect(changed).not.toHaveBeenCalled();
     server.resetHandlers();
     await user.click(screen.getByRole("button", { name: "Save AAPL Sector" }));
@@ -62,12 +62,12 @@ describe("holding classification cells", () => {
       />,
     );
     await user.click(screen.getByRole("button", { name: "Edit AAPL Sector" }));
-    await user.clear(screen.getByRole("textbox"));
+    await user.clear(screen.getByRole("combobox"));
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(changed).not.toHaveBeenCalled();
     expect(screen.getByText("Technology")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Edit AAPL Sector" }));
-    await user.clear(screen.getByRole("textbox"));
+    await user.clear(screen.getByRole("combobox"));
     await user.click(screen.getByRole("button", { name: "Save AAPL Sector" }));
     await waitFor(() =>
       expect(changed).toHaveBeenCalledWith(
@@ -89,19 +89,19 @@ describe("holdings table", () => {
     expect(screen.getAllByText("Sector missing").length).toBeGreaterThan(0);
     await user.click(screen.getByRole("button", { name: "Edit SOFI Industry" }));
     await user.type(
-      screen.getByRole("textbox", { name: "SOFI industry" }),
+      screen.getByRole("combobox", { name: "SOFI industry" }),
       "Keep this draft",
     );
     await user.click(screen.getByRole("button", { name: "Edit PLTR Sector" }));
-    await user.type(screen.getByRole("textbox", { name: "PLTR sector" }), "Technology");
+    await user.type(screen.getByRole("combobox", { name: "PLTR sector" }), "Technology");
     await user.click(screen.getByRole("button", { name: "Save PLTR Sector" }));
     await waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(
-        screen.queryByRole("textbox", { name: "PLTR sector" }),
+        screen.queryByRole("combobox", { name: "PLTR sector" }),
       ).not.toBeInTheDocument(),
     );
-    expect(screen.getByRole("textbox", { name: "SOFI industry" })).toHaveValue(
+    expect(screen.getByRole("combobox", { name: "SOFI industry" })).toHaveValue(
       "Keep this draft",
     );
     expect(await apiClient.getHolding(3, "PLTR")).toMatchObject({
@@ -167,16 +167,16 @@ describe("holding detail", () => {
     render(<HoldingDetail portfolioId={3} ticker="PLTR" />);
     await user.click(await screen.findByRole("button", { name: "Edit PLTR Industry" }));
     await user.type(
-      screen.getByRole("textbox", { name: "PLTR industry" }),
+      screen.getByRole("combobox", { name: "PLTR industry" }),
       "Draft industry",
     );
     await user.click(screen.getByRole("button", { name: "Edit PLTR Sector" }));
-    await user.type(screen.getByRole("textbox", { name: "PLTR sector" }), "Technology");
+    await user.type(screen.getByRole("combobox", { name: "PLTR sector" }), "Technology");
     await user.click(screen.getByRole("button", { name: "Save PLTR Sector" }));
     await waitFor(() =>
       expect(screen.queryByText("Sector missing")).not.toBeInTheDocument(),
     );
-    expect(screen.getByRole("textbox", { name: "PLTR industry" })).toHaveValue(
+    expect(screen.getByRole("combobox", { name: "PLTR industry" })).toHaveValue(
       "Draft industry",
     );
     expect(screen.getByText(/Source: MANUAL/)).toBeInTheDocument();

@@ -21,7 +21,7 @@ import { HoldingHistory } from "./holding-history";
 import { HoldingHistoryReviewAction } from "./holding-history-review";
 import { formatMoney, formatQuantity } from "@/lib/format";
 import type { HoldingInfo } from "@/types/domain";
-
+import { classificationSuggestions } from "./classification-combobox";
 
 export function HoldingsTable(props: {
   portfolioId: number;
@@ -44,6 +44,10 @@ function HoldingsForPortfolio({
   const [error, setError] = React.useState(false);
   const [version, setVersion] = React.useState(0);
   const analytics = usePortfolioAnalytics(portfolioId, refreshToken + version);
+  const suggestions = React.useMemo(
+    () => classificationSuggestions(holdings ?? []),
+    [holdings],
+  );
 
   // Keep mounted cells during refresh so saving one field never discards another draft.
   React.useEffect(() => {
@@ -142,6 +146,7 @@ function HoldingsForPortfolio({
                         portfolioId={portfolioId}
                         holding={holding}
                         field="sector"
+                        suggestions={suggestions.sector}
                         onChanged={changed}
                       />
                     </TableCell>
@@ -150,6 +155,7 @@ function HoldingsForPortfolio({
                         portfolioId={portfolioId}
                         holding={holding}
                         field="industry"
+                        suggestions={suggestions.industry}
                         onChanged={changed}
                       />
                     </TableCell>

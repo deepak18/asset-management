@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ApiError } from "@/lib/api-client";
 import {
   useHolding,
+  useHoldings,
   useHoldingAnalytics,
   usePortfolioAnalytics,
 } from "@/hooks/use-portfolio";
@@ -27,6 +28,7 @@ import type {
   HoldingInfo,
   HoldingReturnStatus,
 } from "@/types/domain";
+import { classificationSuggestions } from "./classification-combobox";
 
 /**
  * Why this holding's XIRR is withheld, phrased as the action that would fix it.
@@ -86,6 +88,7 @@ function HoldingDetailForTicker({
   const [version, setVersion] = React.useState(0);
   const [edited, setEdited] = React.useState<HoldingInfo | null>(null);
   const holding = useHolding(portfolioId, ticker, version);
+  const portfolioHoldings = useHoldings(portfolioId, version);
   const analytics = usePortfolioAnalytics(portfolioId, version);
   const holdingReturn = useHoldingAnalytics(portfolioId, ticker, version);
   React.useEffect(() => {
@@ -153,6 +156,13 @@ function HoldingDetailForTicker({
     ["Dividends", formatMoney(position?.dividends_base, currency)],
   ];
 
+  const suggestions = classificationSuggestions([
+    ...(portfolioHoldings.status === "success"
+      ? portfolioHoldings.data.filter((row) => row.ticker !== record.ticker)
+      : []),
+    record,
+  ]);
+
   return (
     <div className="space-y-6">
       {back}
@@ -212,6 +222,13 @@ function HoldingDetailForTicker({
             Source: {record.classification_source}. Manual edits are protected from
             automatic classification unless refresh is explicitly requested.
           </p>
+          {portfolioHoldings.status !== "success" ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              {portfolioHoldings.status === "loading"
+                ? "Loading classification suggestions. Free text is available."
+                : "Portfolio suggestions unavailable. Free text is still available."}
+            </p>
+          ) : null}
           {(["sector", "industry"] as const).map((field) => (
             <div key={field}>
               <h3 className="font-medium capitalize">{field}</h3>
@@ -219,6 +236,7 @@ function HoldingDetailForTicker({
                 portfolioId={portfolioId}
                 holding={record}
                 field={field}
+                suggestions={suggestions[field]}
                 onChanged={refresh}
               />
             </div>
