@@ -136,3 +136,13 @@ Testing is a **build-time discipline, not a phase.** Each task below is only com
 
 ### 3.3 Active On-Screen Prompt Action System
 * Implement contextual click actions across the research dashboard (e.g., selecting an erratic financial line item or a piece of text within an earnings transcript instantly passes that segment into the Side-Panel with specific predefined intents: *"Audit this metric against SEC data"* or *"Compare this statement with top peer guidance"*).
+
+### Agent delegation delivery
+
+- [x] Configure named backend/frontend profiles and orchestrator-owned local slice commits.
+
+### Commit delivery policy
+
+- Local, dependency-ordered Conventional Commits are part of delivery by default; commit each validated slice with its tests and required documentation before starting the next slice.
+- The orchestrator owns staging/commits after delegate handoff. Report actual commit hashes and remaining working-tree status, not only proposed messages.
+- The current request to finish all pending chat commits supersedes the earlier commit deferral. Future completed work must not be left unstaged unless explicitly requested.

@@ -205,9 +205,35 @@ Tests are written **side-by-side with code** — a change isn't done until its t
 - Never commit API keys, `.env`, or uploaded documents.
 
 ## Contributing / Agent Protocol
+
+### Copilot custom agents (JetBrains)
+
+Repository profiles live in `.github/agents/*.agent.md`; these are Markdown
+instructions with YAML frontmatter, not Python packages or services to install.
+
+- `project-orchestrator`: owns planning, API seam checks, and cross-layer delivery.
+- `backend-implementer`: implements backend-only slices and runs pytest/ruff/mypy.
+- `frontend-implementer`: implements frontend-only slices and runs Vitest/lint/typecheck.
+
+Open this repository as a project in a current GitHub Copilot plugin with custom
+agent support. Start a new Copilot Chat and check the agent picker for these
+profiles; select `project-orchestrator` to coordinate work. If newly added profiles
+are not visible, restart the IDE and check again. Delegate by the exact profile
+names above; `general-purpose` is not defined by this repository.
+
+Profile discovery and nested delegation are separate capabilities: seeing a profile
+in the picker does not prove the current plugin/session can launch it as a subagent.
+Validate delegation with a read-only request before assigning implementation. If the
+launcher reports `Custom agent '<name>' not found`, refresh the session and verify
+plugin support; do not bypass layer isolation. Where nested delegation is unavailable,
+use separate chats for the backend and frontend profiles and carry the published
+OpenAPI contract between them. No npm, uv, API-key, or database setup is needed just
+to define the profiles; their implementation/test commands still need the normal
+project prerequisites above.
+
 - Read `STRUCTURE.md` before writing; update it whenever files or folders change.
 - Keep this `README.md` runnable — update setup/run/test steps in the same change that alters them (`AGENTS.md` protocol #8).
 - Ship tests in the same change as the code (`pytest` backend, Vitest frontend) — untested logic is incomplete.
 - Keep business logic deterministic; AI never computes financial figures (see `AGENTS.md` §1, §7).
 - Cross-module access goes through `providers/` interfaces only.
-- Commit in small, logically-scoped, one-line Conventional Commits (`AGENTS.md` protocol #7).
+- Commit in small, logically-scoped, one-line Conventional Commits (`AGENTS.md` protocol #7). Local commits are part of delivery by default: the orchestrator stages each validated slice with its tests and required docs, commits it before the next slice, and reports actual hashes plus remaining working-tree status. Delegates hand off files and validation evidence rather than leaving commits to the user. Only an explicit user instruction defers commits; a later request to commit supersedes it. Never push or rewrite history without permission.

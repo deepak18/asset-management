@@ -11,8 +11,13 @@
 
 ```
 asset-management/
-├── AGENTS.md                  # ✅ Agent operational protocol + core design principles
-├── PLAN.md                    # ✅ Phased build roadmap + technology stack
+├── .github/
+│   └── agents/                # ✅ Repository-scoped Copilot custom agents; discovery/delegation depends on IDE support
+│       ├── project-orchestrator.agent.md # ✅ Plans delegated slices, validates and creates local commits by default, reporting hashes and remaining status
+│       ├── backend-implementer.agent.md  # ✅ Backend-only implementation, typed API contract, pytest/ruff/mypy and exact commit handoff to the orchestrator
+│       └── frontend-implementer.agent.md # ✅ Frontend-only OpenAPI/UI implementation, MSW/RTL/lint/typecheck and exact commit handoff to the orchestrator
+├── AGENTS.md                  # ✅ Agent operational protocol, default local slice commits and core design principles
+├── PLAN.md                    # ✅ Phased roadmap, delivered slices and default commit delivery policy
 ├── STRUCTURE.md               # ✅ This file — directory source of truth
 ├── README.md                  # ✅ Human runbook (setup, run, deploy)
 ├── .gitignore                 # ✅ Ignore rules (secrets, envs, build artifacts)
