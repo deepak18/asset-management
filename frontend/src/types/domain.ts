@@ -15,8 +15,9 @@ import type { components } from "@/types/api";
  * is the write shape used by the manual-entry form.
  */
 export type PortfolioSummary = components["schemas"]["PortfolioSummary"];
-export type Transaction = components["schemas"]["Transaction-Output"];
-export type TransactionInput = components["schemas"]["Transaction-Input"];
+export type Transaction = components["schemas"]["TransactionRecord"];
+export type TransactionInput = components["schemas"]["Transaction"];
+export type HoldingHistoryGap = components["schemas"]["HoldingHistoryGap"];
 export type TransactionType = components["schemas"]["TransactionType"];
 export type HoldingInfo = components["schemas"]["HoldingInfo"];
 export type PortfolioAnalytics = components["schemas"]["PortfolioAnalytics"];
@@ -32,8 +33,7 @@ export type PortfolioAnalytics = components["schemas"]["PortfolioAnalytics"];
 // closed ones), surfaced only when the backend actually supplies it.
 export type HoldingAnalytics = components["schemas"]["HoldingAnalytics"];
 export type HoldingReturnStatus = components["schemas"]["HoldingReturnStatus"];
-export type HoldingValuationSource =
-  components["schemas"]["HoldingValuationSource"];
+export type HoldingValuationSource = components["schemas"]["HoldingValuationSource"];
 export type MarketDataProvenance = components["schemas"]["MarketDataProvenance"];
 export type AllocationWeight = components["schemas"]["AllocationWeight"];
 export type CostBasisResult = components["schemas"]["CostBasisResult"];

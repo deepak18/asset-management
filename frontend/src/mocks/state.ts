@@ -11,6 +11,7 @@ import type {
   PortfolioSummary,
   StatementImportStatus,
 } from "@/types/domain";
+import type { Transaction, HoldingHistoryGap } from "@/types/domain";
 import { UNCLASSIFIED_KEY } from "@/types/domain";
 import {
   analyticsById,
@@ -46,6 +47,8 @@ interface State {
   nextJobId: number;
   /** When false the classify endpoint answers 503 (no provider configured). */
   marketDataConfigured: boolean;
+  transactions: Map<number, Transaction[]>;
+  deletedTickers: Map<number, Set<string>>;
 }
 
 function seed(): State {
@@ -62,12 +65,18 @@ function seed(): State {
     holdings: new Map(
       Object.entries(holdingsById).map(([id, rows]) => [
         Number(id),
-        rows.map((row) => ({ ...row, data_gaps: [...row.data_gaps] })),
+        rows.map((row) => ({
+          ...row,
+          data_gaps: [...row.data_gaps],
+          history_gaps: [...row.history_gaps],
+        })),
       ]),
     ),
     jobsByPortfolio: new Map(),
     nextJobId: 1,
     marketDataConfigured: true,
+    transactions: new Map([[1, transactions.map((row) => ({ ...row }))]]),
+    deletedTickers: new Map(),
   };
 }
 
@@ -161,21 +170,47 @@ export function getAnalytics(id: number): PortfolioAnalytics | undefined {
       return fixture;
     }
     const byTicker = new Map(rows.map((h) => [h.ticker, h]));
+    const deleted = state.deletedTickers.get(id);
+    const positions = fixture.positions.filter(
+      (p) =>
+        !deleted?.has(p.ticker) ||
+        getTransactions(id)?.some((event) => event.ticker === p.ticker),
+    );
+    const allocation = fixture.allocation_by_ticker.filter((p) =>
+      positions.some((row) => row.ticker === p.key),
+    );
+    const lastMsft =
+      id === 1 && deleted?.has("MSFT") && !positions.some((p) => p.ticker === "MSFT");
     return {
       ...fixture,
-      positions: fixture.positions.map((position) => ({
+      ...(lastMsft
+        ? {
+            open_cost_basis_base: "1113.60",
+            market_value_base: "1290.00",
+            unrealized_pnl_base: "176.40",
+            fees_base: "3.00",
+            money_weighted_return: null,
+            money_weighted_return_status: "INSUFFICIENT_FLOWS" as const,
+          }
+        : {}),
+      positions: positions.map((position) => ({
         ...position,
         classification_source:
           byTicker.get(position.ticker)?.classification_source ??
           position.classification_source,
         data_gaps: byTicker.get(position.ticker)?.data_gaps ?? position.data_gaps,
+        history_complete:
+          byTicker.get(position.ticker)?.history_complete ?? position.history_complete,
+        history_gaps:
+          byTicker.get(position.ticker)?.history_gaps ?? position.history_gaps,
       })),
-      allocation_by_sector: groupAllocation(
-        fixture.allocation_by_ticker,
-        (t) => byTicker.get(t)?.sector,
+      positions_unrealized: fixture.positions_unrealized.filter((p) =>
+        positions.some((row) => row.ticker === p.ticker),
       ),
+      allocation_by_ticker: allocation,
+      allocation_by_sector: groupAllocation(allocation, (t) => byTicker.get(t)?.sector),
       allocation_by_industry: groupAllocation(
-        fixture.allocation_by_ticker,
+        allocation,
         (t) => byTicker.get(t)?.industry,
       ),
     };
@@ -184,11 +219,9 @@ export function getAnalytics(id: number): PortfolioAnalytics | undefined {
   return summary ? emptyAnalytics(summary) : undefined;
 }
 
-export function getTransactions(id: number) {
-  if (!findPortfolio(id)) {
-    return undefined;
-  }
-  return id === 1 ? transactions : [];
+export function getTransactions(id: number): Transaction[] | undefined {
+  if (!findPortfolio(id)) return undefined;
+  return state.transactions.get(id) ?? [];
 }
 
 export function getHoldings(id: number): HoldingInfo[] | undefined {
@@ -221,7 +254,16 @@ export function getHoldingAnalytics(
   if (!holding) {
     return undefined;
   }
-  return holdingAnalyticsByKey[`${id}:${symbol}`];
+  const original = holdingAnalyticsByKey[`${id}:${symbol}`];
+  return state.deletedTickers.get(id)?.has(symbol) && original
+    ? {
+        ...original,
+        money_weighted_return: null,
+        money_weighted_return_status: "INCOMPLETE_HISTORY",
+        valuation_source: "UNAVAILABLE",
+        valuation_provenance: null,
+      }
+    : original;
 }
 
 /** Discriminated result of a classify attempt (503 = no provider configured). */
@@ -447,4 +489,68 @@ export function getImport(
 export function listImports(portfolioId: number): StatementImportStatus[] {
   const runtimes = state.jobsByPortfolio.get(portfolioId) ?? [];
   return runtimes.map((r) => r.job);
+}
+
+export type DeleteAttempt =
+  | { ok: true }
+  | { ok: false; status: 404 | 409; detail: string };
+export function deleteTransaction(
+  portfolioId: number,
+  transactionId: number,
+): DeleteAttempt {
+  const rows = getTransactions(portfolioId);
+  const event = rows?.find(
+    (row) => row.id === transactionId && row.portfolio_id === portfolioId,
+  );
+  if (!event || !rows)
+    return {
+      ok: false,
+      status: 404,
+      detail: "Transaction not found in this portfolio",
+    };
+  if (
+    listImports(portfolioId).some(
+      (job) => job.status === "PENDING" || job.status === "RUNNING",
+    )
+  )
+    return {
+      ok: false,
+      status: 409,
+      detail: "Wait for pending/running imports before deleting",
+    };
+  if (
+    (event.type === "BUY" || event.type === "SPLIT") &&
+    event.ticker === "AAPL" &&
+    rows.some((row) => row.type === "SELL" && row.ticker === "AAPL")
+  )
+    return {
+      ok: false,
+      status: 409,
+      detail:
+        "Deletion would leave a sale without enough shares; remove or correct dependent sales first",
+    };
+  state.transactions.set(
+    portfolioId,
+    rows.filter((row) => row.id !== transactionId),
+  );
+  const deleted = state.deletedTickers.get(portfolioId) ?? new Set<string>();
+  deleted.add(event.ticker);
+  state.deletedTickers.set(portfolioId, deleted);
+  const holding = state.holdings
+    .get(portfolioId)
+    ?.find((row) => row.ticker === event.ticker);
+  if (holding) {
+    const remaining = rows.filter(
+      (row) => row.id !== transactionId && row.ticker === event.ticker,
+    );
+    const gaps: HoldingHistoryGap[] = [...holding.history_gaps, "DELETED_TRANSACTION"];
+    if (remaining.length === 0) gaps.push("NO_TRANSACTIONS");
+    holding.history_complete = false;
+    holding.history_gaps = [...new Set(gaps)];
+  }
+  for (const runtime of state.jobsByPortfolio.get(portfolioId) ?? []) {
+    if (runtime.job.tickers.includes(event.ticker))
+      runtime.job = { ...runtime.job, retry_safe: false };
+  }
+  return { ok: true };
 }

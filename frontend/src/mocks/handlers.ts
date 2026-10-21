@@ -10,6 +10,7 @@ import {
   classifyHoldings,
   createImport,
   createPortfolio,
+  deleteTransaction,
   findPortfolio,
   getAnalytics,
   getHoldings,
@@ -77,6 +78,31 @@ export const handlers = [
         return notFound("Portfolio not found");
       }
       const body = (await request.json()) as TransactionInput[];
+      if (
+        body.some((row) =>
+          Object.keys(row).some(
+            (key) =>
+              ![
+                "ticker",
+                "type",
+                "trade_date",
+                "currency",
+                "quantity",
+                "price",
+                "fees",
+                "amount",
+                "split_ratio",
+                "sector",
+                "industry",
+              ].includes(key),
+          ),
+        )
+      ) {
+        return HttpResponse.json(
+          { detail: "Unknown transaction input field" },
+          { status: 422 },
+        );
+      }
       return HttpResponse.json(ingest(id, uniqueTickers(body), body.length), {
         status: 201,
       });
@@ -212,4 +238,14 @@ export const handlers = [
     const job = getImport(Number(params.id), Number(params.jobId));
     return job ? HttpResponse.json(job) : notFound("Import job not found");
   }),
+
+  http.delete(
+    `${base}/api/v1/portfolios/:id/transactions/:transactionId`,
+    ({ params }) => {
+      const result = deleteTransaction(Number(params.id), Number(params.transactionId));
+      return result.ok
+        ? new HttpResponse(null, { status: 204 })
+        : HttpResponse.json({ detail: result.detail }, { status: result.status });
+    },
+  ),
 ];

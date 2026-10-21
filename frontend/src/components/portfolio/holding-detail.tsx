@@ -13,7 +13,14 @@ import { ErrorState, LoadingRows } from "@/components/shared/states";
 import { HoldingClassificationCell } from "./holding-classification-cell";
 import { HoldingDataGaps } from "./holding-data-gaps";
 import { TransactionLedger } from "./transaction-ledger";
-import { DASH, formatMoney, formatPercent, formatQuantity, signTone } from "@/lib/format";
+import { HoldingHistory } from "./holding-history";
+import {
+  DASH,
+  formatMoney,
+  formatPercent,
+  formatQuantity,
+  signTone,
+} from "@/lib/format";
 import type {
   HoldingAnalytics,
   HoldingInfo,
@@ -77,9 +84,9 @@ function HoldingDetailForTicker({
 }) {
   const [version, setVersion] = React.useState(0);
   const [edited, setEdited] = React.useState<HoldingInfo | null>(null);
-  const holding = useHolding(portfolioId, ticker);
+  const holding = useHolding(portfolioId, ticker, version);
   const analytics = usePortfolioAnalytics(portfolioId, version);
-  const holdingReturn = useHoldingAnalytics(portfolioId, ticker);
+  const holdingReturn = useHoldingAnalytics(portfolioId, ticker, version);
   const back = (
     <Link className="underline" href={`/?portfolio=${portfolioId}`}>
       ← Back to portfolio
@@ -146,6 +153,7 @@ function HoldingDetailForTicker({
           {data?.portfolio.name ?? `Portfolio ${portfolioId}`} · Position values in{" "}
           {currency || "portfolio base currency"}
         </p>
+        <HoldingHistory holding={record} />
         <HoldingDataGaps gaps={gaps} />
       </header>
       <Card>
@@ -214,6 +222,10 @@ function HoldingDetailForTicker({
         portfolioId={portfolioId}
         ticker={ticker}
         refreshToken={version}
+        onDeleted={() => {
+          setEdited(null);
+          setVersion((current) => current + 1);
+        }}
       />
     </div>
   );
@@ -270,7 +282,9 @@ function HoldingReturnBody({
   }
   return (
     <>
-      <p className="text-2xl font-semibold tabular-nums text-muted-foreground">{DASH}</p>
+      <p className="text-2xl font-semibold tabular-nums text-muted-foreground">
+        {DASH}
+      </p>
       <p className="mt-1 text-sm text-muted-foreground">
         {RETURN_GUIDANCE[analytics.money_weighted_return_status]}
       </p>

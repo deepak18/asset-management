@@ -72,7 +72,11 @@ export function Dashboard() {
         onChanged={refreshData}
       />
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[2fr_1fr]">
-        <TransactionLedger portfolioId={selectedId} refreshToken={dataVersion} />
+        <TransactionLedger
+          portfolioId={selectedId}
+          refreshToken={dataVersion}
+          onDeleted={refreshData}
+        />
         <Watchlist />
       </div>
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -91,6 +95,7 @@ export function Dashboard() {
         portfolioId={selectedId}
         currency={currency}
         onSuccess={refreshData}
+        refreshToken={dataVersion}
       />
     </div>
   );

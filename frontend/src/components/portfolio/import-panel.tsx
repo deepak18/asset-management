@@ -4,7 +4,11 @@ import * as React from "react";
 import { UploadCloud } from "lucide-react";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { useApiResource } from "@/hooks/use-api-resource";
-import { useImportJob, isTerminal, IMPORT_POLL_INTERVAL_MS } from "@/hooks/use-import-job";
+import {
+  useImportJob,
+  isTerminal,
+  IMPORT_POLL_INTERVAL_MS,
+} from "@/hooks/use-import-job";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +37,9 @@ function explainUploadError(err: ApiError): UploadError {
   return { status: err.status, message, duplicate: err.status === 409 };
 }
 
-function statusVariant(status: ImportStatus): "positive" | "negative" | "muted" | "default" {
+function statusVariant(
+  status: ImportStatus,
+): "positive" | "negative" | "muted" | "default" {
   switch (status) {
     case "SUCCEEDED":
       return "positive";
@@ -46,7 +52,13 @@ function statusVariant(status: ImportStatus): "positive" | "negative" | "muted" 
 }
 
 /** The live progress + outcome view for the job currently being tracked. */
-function JobStatus({ job, currency }: { job: StatementImportStatus; currency?: string }) {
+function JobStatus({
+  job,
+  currency,
+}: {
+  job: StatementImportStatus;
+  currency?: string;
+}) {
   void currency;
   const done = isTerminal(job.status);
   const total = job.total_rows;
@@ -108,11 +120,16 @@ function JobStatus({ job, currency }: { job: StatementImportStatus; currency?: s
 function ImportHistory({
   portfolioId,
   version,
+  refreshToken = 0,
 }: {
   portfolioId: number;
   version: number;
+  refreshToken?: number;
 }) {
-  const state = useApiResource(() => apiClient.listImports(portfolioId), [portfolioId, version]);
+  const state = useApiResource(
+    () => apiClient.listImports(portfolioId),
+    [portfolioId, version, refreshToken],
+  );
   if (state.status !== "success" || state.data.length === 0) {
     return null;
   }
@@ -123,7 +140,12 @@ function ImportHistory({
         {state.data.map((job) => (
           <li key={job.id} className="flex items-center justify-between gap-2">
             <span className="truncate">{job.original_filename}</span>
-            <Badge variant={statusVariant(job.status)}>{job.status}</Badge>
+            <span className="flex gap-2">
+              <Badge variant={statusVariant(job.status)}>{job.status}</Badge>
+              {!job.retry_safe ? (
+                <Badge variant="muted">Retry unavailable after ledger edit</Badge>
+              ) : null}
+            </span>
           </li>
         ))}
       </ul>
@@ -147,11 +169,13 @@ export function ImportPanel({
   portfolioId,
   currency,
   onSuccess,
+  refreshToken = 0,
   pollIntervalMs = IMPORT_POLL_INTERVAL_MS,
 }: {
   portfolioId: number;
   currency?: string;
   onSuccess?: () => void;
+  refreshToken?: number;
   /** Poll cadence; overridable so tests don't wait real seconds. */
   pollIntervalMs?: number;
 }) {
@@ -185,11 +209,10 @@ export function ImportPanel({
       setUploading(true);
       setUploadError(null);
       try {
-        const initial = await apiClient.createImport(
-          portfolioId,
-          file,
-          { sourceFormat: "robinhood_csv", allowDuplicate },
-        );
+        const initial = await apiClient.createImport(portfolioId, file, {
+          sourceFormat: "robinhood_csv",
+          allowDuplicate,
+        });
         setJob(initial);
         setPendingFile(null);
       } catch (err) {
@@ -278,11 +301,13 @@ export function ImportPanel({
 
         {live ? <JobStatus job={live} currency={currency} /> : null}
 
-        {!live && !uploadError ? (
-          <EmptyState message="No import in progress." />
-        ) : null}
+        {!live && !uploadError ? <EmptyState message="No import in progress." /> : null}
 
-        <ImportHistory portfolioId={portfolioId} version={historyVersion} />
+        <ImportHistory
+          portfolioId={portfolioId}
+          version={historyVersion}
+          refreshToken={refreshToken}
+        />
       </CardContent>
     </Card>
   );

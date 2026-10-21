@@ -154,6 +154,13 @@ async function patchJson<T>(
   return (await response.json()) as T;
 }
 
+async function deleteNoContent(path: string, signal?: AbortSignal): Promise<void> {
+  const target = url(path);
+  const response = await fetch(target, { method: "DELETE", signal });
+  if (!response.ok) throw await toApiError(response, "DELETE", path, target);
+  // 204 contains no JSON.
+}
+
 /** Multipart POST for file uploads (accepts any 2xx, including 202). */
 async function postForm<T>(
   path: string,
@@ -384,6 +391,17 @@ export const apiClient = {
   ): Promise<StatementImportStatus> {
     return getJson<StatementImportStatus>(
       `${API_V1}/portfolios/${id}/imports/${jobId}`,
+      signal,
+    );
+  },
+
+  deleteTransaction(
+    id: number,
+    transactionId: number,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    return deleteNoContent(
+      `${API_V1}/portfolios/${id}/transactions/${transactionId}`,
       signal,
     );
   },

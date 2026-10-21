@@ -29,6 +29,8 @@ export const portfolioSummary: PortfolioSummary = {
 
 export const transactions: Transaction[] = [
   {
+    portfolio_id: 1,
+    id: 101,
     ticker: "AAPL",
     type: "BUY",
     trade_date: "2024-01-15",
@@ -42,6 +44,8 @@ export const transactions: Transaction[] = [
     industry: "Consumer Electronics",
   },
   {
+    portfolio_id: 1,
+    id: 102,
     ticker: "MSFT",
     type: "BUY",
     trade_date: "2024-02-01",
@@ -55,6 +59,8 @@ export const transactions: Transaction[] = [
     industry: "Software—Infrastructure",
   },
   {
+    portfolio_id: 1,
+    id: 103,
     ticker: "AAPL",
     type: "DIVIDEND",
     trade_date: "2024-03-10",
@@ -68,6 +74,8 @@ export const transactions: Transaction[] = [
     industry: "Consumer Electronics",
   },
   {
+    portfolio_id: 1,
+    id: 104,
     ticker: "AAPL",
     type: "SELL",
     trade_date: "2024-06-20",
@@ -89,6 +97,8 @@ export const holdings: HoldingInfo[] = [
     industry: "Consumer Electronics",
     classification_source: "MANUAL",
     data_gaps: [],
+    history_complete: true,
+    history_gaps: [],
   },
   {
     ticker: "MSFT",
@@ -96,6 +106,8 @@ export const holdings: HoldingInfo[] = [
     industry: "Software—Infrastructure",
     classification_source: "PROVIDER",
     data_gaps: [],
+    history_complete: true,
+    history_gaps: [],
   },
   {
     ticker: "XYZ",
@@ -103,6 +115,8 @@ export const holdings: HoldingInfo[] = [
     industry: null,
     classification_source: "NONE",
     data_gaps: ["SECTOR", "INDUSTRY"],
+    history_complete: false,
+    history_gaps: ["NO_TRANSACTIONS"],
   },
 ];
 
@@ -123,6 +137,8 @@ export const analyticsPriced: PortfolioAnalytics = {
       open_lots: [
         { trade_date: "2024-01-15", quantity: "6", cost_per_share_base: "185.60" },
       ],
+      history_complete: true,
+      history_gaps: [],
     },
     {
       ticker: "MSFT",
@@ -136,6 +152,8 @@ export const analyticsPriced: PortfolioAnalytics = {
       open_lots: [
         { trade_date: "2024-02-01", quantity: "5", cost_per_share_base: "410.00" },
       ],
+      history_complete: true,
+      history_gaps: [],
     },
   ],
   realized_pnl_base: "97.60",
@@ -222,6 +240,15 @@ export const analyticsUnclassified: PortfolioAnalytics = {
     ],
     classification_source: ticker === "NVDA" ? "PROVIDER" : "NONE",
     data_gaps: ticker === "NVDA" ? [] : ["SECTOR", "INDUSTRY"],
+    history_complete: ticker === "PLTR",
+    history_gaps:
+      ticker === "PLTR"
+        ? []
+        : ticker === "NVDA"
+          ? ["SNAPSHOT", "IMPORT_NOT_COMPLETE"]
+          : ticker === "SOFI"
+            ? ["IMPORT_NOT_SUCCEEDED", "UNRESOLVED_EVENTS"]
+            : ["UNKNOWN_ORIGIN"],
   })),
   realized_pnl_base: "0",
   dividends_base: "0",
@@ -292,6 +319,8 @@ export const holdingsById: Record<number, HoldingInfo[]> = {
       industry: "Semiconductors",
       classification_source: "PROVIDER",
       data_gaps: [],
+      history_complete: false,
+      history_gaps: ["SNAPSHOT", "IMPORT_NOT_COMPLETE"],
     },
     {
       ticker: "PLTR",
@@ -299,6 +328,8 @@ export const holdingsById: Record<number, HoldingInfo[]> = {
       industry: null,
       classification_source: "NONE",
       data_gaps: ["SECTOR", "INDUSTRY"],
+      history_complete: true,
+      history_gaps: [],
     },
     {
       ticker: "SOFI",
@@ -306,6 +337,8 @@ export const holdingsById: Record<number, HoldingInfo[]> = {
       industry: null,
       classification_source: "NONE",
       data_gaps: ["SECTOR", "INDUSTRY"],
+      history_complete: false,
+      history_gaps: ["IMPORT_NOT_SUCCEEDED", "UNRESOLVED_EVENTS"],
     },
     {
       ticker: "ZZZZ",
@@ -313,6 +346,8 @@ export const holdingsById: Record<number, HoldingInfo[]> = {
       industry: null,
       classification_source: "NONE",
       data_gaps: ["SECTOR", "INDUSTRY"],
+      history_complete: false,
+      history_gaps: ["UNKNOWN_ORIGIN"],
     },
   ],
 };

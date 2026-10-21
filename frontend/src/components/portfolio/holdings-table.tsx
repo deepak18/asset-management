@@ -17,6 +17,7 @@ import { EmptyState, ErrorState, LoadingRows } from "@/components/shared/states"
 import { HoldingClassificationCell } from "./holding-classification-cell";
 import { HoldingDataGaps } from "./holding-data-gaps";
 import { ClassifyHoldingsButton } from "./classify-holdings-button";
+import { HoldingHistory } from "./holding-history";
 import { formatMoney, formatQuantity } from "@/lib/format";
 import type { HoldingInfo } from "@/types/domain";
 
@@ -151,6 +152,7 @@ function HoldingsForPortfolio({
                       />
                     </TableCell>
                     <TableCell>
+                      <HoldingHistory holding={holding} />
                       <HoldingDataGaps
                         gaps={[...holding.data_gaps, ...(position?.data_gaps ?? [])]}
                       />

@@ -151,7 +151,7 @@ The dashboard is no longer pinned to a single portfolio id:
   snapshot leaves XIRR undefined until full history is imported.
 - **Manual transaction.** `POST /api/v1/portfolios/{id}/transactions` with only the
   fields relevant to the chosen type (BUY/SELL → qty/price/fees, DIVIDEND/FEE →
-  amount, SPLIT → ratio). Bodies use the **`Transaction-Input`** variant.
+  amount, SPLIT → ratio). Bodies use the **`Transaction`** input schema; ledger GET uses `TransactionRecord`.
 - **CSV import (async).** `POST .../imports` (multipart, expects **202**) →
   poll `GET .../imports/{job_id}` ~1s until `SUCCEEDED`/`FAILED` (polling stops on
   terminal state **and** on unmount — no leaked intervals). Progress is
@@ -166,8 +166,7 @@ selection context that every per-portfolio hook folds into its deps).
 
 > **Contract note:** these routes came from a backend contract bump. Regenerate
 > types with `npm run typegen`, then reconcile the MSW handlers/fixtures in
-> `src/mocks/`. `Transaction` now generates as `Transaction-Input` (POST bodies)
-> and `Transaction-Output` (reads).
+> `src/mocks/`. POST uses `Transaction`; ledger reads use `TransactionRecord`.
 
 ## Holdings: inspect, classify, and correct
 
@@ -241,3 +240,26 @@ failures with MSW overrides. `vitest.setup.ts` uses native Node abort constructo
 alongside Node fetch so jsdom tests exercise request cancellation rather than
 dropping abort signals. Run `npm run test`, `npm run typecheck`, and `npm run lint`
 together: Vitest runs behavior tests but does not perform TypeScript checking.
+
+## Holding history and deleting ledger events
+
+The dashboard's main Holdings table shows **History not confirmed** with inline,
+readable reasons when the API reports `history_complete=false`. It is independent
+of pricing, classification gaps and XIRR availability; `true` means no *known*
+blocker under backend policy, not independently verified broker history. Reasons
+include unknown origin, synthetic snapshots, incomplete or unfinished imports,
+unresolved source events, deliberately deleted transactions, no active transactions,
+and no acquisition. Several may apply at once. There is no confirmation toggle.
+
+Both dashboard and filtered holding ledgers use stable `TransactionRecord.id` values,
+not display order or matching financial fields. Delete opens a keyboard-accessible
+confirmation naming the event and account. Cancel, Escape or dismiss does nothing;
+confirm calls `DELETE /api/v1/portfolios/{portfolio_id}/transactions/{id}`. `204`
+has no response body. `404` means a stale/wrong-account row and triggers a refetch;
+`409` keeps the row with the backend's conflict explanation (e.g. dependent sales or
+active imports). Network/server failures also keep the row. Successful deletion
+refreshes ledger, holding history, dashboard analytics/allocations and import history;
+filtered holding detail refetches its return. A tracked holding survives deletion of
+its last event without a calculated position. There is no undo; the server retains
+an audit tombstone and may disable import retry. Live backend deployments must
+apply migration `0007` before enabling this UI (see `backend/README.md`).

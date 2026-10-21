@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import {
   Table,
@@ -10,16 +11,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState, ErrorState, LoadingRows } from "@/components/shared/states";
 import { useTransactions } from "@/hooks/use-portfolio";
+import { apiClient, ApiError } from "@/lib/api-client";
 import { DASH, formatMoney, formatQuantity } from "@/lib/format";
 import type { Transaction, TransactionType } from "@/types/domain";
 
-/** Buy/Sell get colored badges; cash and structural events are neutral. */
-function badgeVariant(
-  type: TransactionType,
-): "positive" | "negative" | "muted" | "default" {
+function badgeVariant(type: TransactionType): "positive" | "negative" | "muted" {
   switch (type) {
     case "BUY":
       return "positive";
@@ -32,30 +33,22 @@ function badgeVariant(
   }
 }
 
-/**
- * Which figures are meaningful for a given event type. Rendering "—" for the
- * irrelevant columns (e.g. price on a DIVIDEND) keeps the grid honest instead
- * of printing a default 0 that looks like real data.
- */
-function cellsFor(
-  txn: Transaction,
-  currency: string,
-): {
-  quantity: string;
-  price: string;
-  amount: string;
-} {
+function cellsFor(txn: Transaction) {
   switch (txn.type) {
     case "BUY":
     case "SELL":
       return {
         quantity: formatQuantity(txn.quantity),
-        price: formatMoney(txn.price, currency),
+        price: formatMoney(txn.price, txn.currency),
         amount: DASH,
       };
     case "DIVIDEND":
     case "FEE":
-      return { quantity: DASH, price: DASH, amount: formatMoney(txn.amount, currency) };
+      return {
+        quantity: DASH,
+        price: DASH,
+        amount: formatMoney(txn.amount, txn.currency),
+      };
     case "SPLIT":
       return {
         quantity: `${formatQuantity(txn.split_ratio)}:1`,
@@ -65,78 +58,92 @@ function cellsFor(
   }
 }
 
-function LedgerTable({
-  transactions,
-  portfolioId,
-}: {
-  transactions: Transaction[];
-  portfolioId: number;
-}) {
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Date</TableHead>
-          <TableHead>Ticker</TableHead>
-          <TableHead>Type</TableHead>
-          <TableHead className="text-right">Quantity</TableHead>
-          <TableHead className="text-right">Price</TableHead>
-          <TableHead className="text-right">Fees</TableHead>
-          <TableHead className="text-right">Amount</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {transactions.map((txn, index) => {
-          const cells = cellsFor(txn, txn.currency);
-          return (
-            <TableRow key={`${txn.ticker}-${txn.trade_date}-${txn.type}-${index}`}>
-              <TableCell className="tabular-nums">{txn.trade_date}</TableCell>
-              <TableCell className="font-medium">
-                <Link
-                  className="underline"
-                  href={`/portfolios/${portfolioId}/holdings/${encodeURIComponent(txn.ticker)}`}
-                >
-                  {txn.ticker}
-                </Link>
-              </TableCell>
-              <TableCell>
-                <Badge variant={badgeVariant(txn.type)}>{txn.type}</Badge>
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {cells.quantity}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">{cells.price}</TableCell>
-              <TableCell className="text-right tabular-nums">
-                {formatMoney(txn.fees, txn.currency)}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">{cells.amount}</TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
-  );
+interface Selection {
+  readonly portfolioId: number;
+  readonly transaction: Transaction;
 }
 
-/**
- * Transaction ledger grid. Reads the full ledger from the typed client and
- * renders each dated event. Loading, error, and empty-ledger states are all
- * handled explicitly. `refreshToken` forces a refetch after a write/import.
- */
-export function TransactionLedger({
+export function TransactionLedger(props: {
+  portfolioId: number;
+  refreshToken?: number;
+  ticker?: string;
+  onDeleted?: () => void;
+}) {
+  // Switching accounts unmounts the pending confirmation and discards late reads.
+  return <LedgerForPortfolio key={props.portfolioId} {...props} />;
+}
+
+function LedgerForPortfolio({
   portfolioId,
   refreshToken = 0,
   ticker,
+  onDeleted,
 }: {
   portfolioId: number;
   refreshToken?: number;
   ticker?: string;
+  onDeleted?: () => void;
 }) {
-  const state = useTransactions(portfolioId, refreshToken);
+  const [version, setVersion] = React.useState(0);
+  const [selected, setSelected] = React.useState<Selection | null>(null);
+  const [pending, setPending] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const submitting = React.useRef(false);
+  const mounted = React.useRef(true);
+  React.useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    [],
+  );
+  const state = useTransactions(portfolioId, refreshToken + version);
   const transactions =
     state.status === "success"
       ? state.data.filter((row) => !ticker || row.ticker === ticker)
       : [];
+
+  function dismiss() {
+    if (submitting.current) return;
+    setSelected(null);
+  }
+  async function confirm() {
+    if (!selected || submitting.current) return;
+    submitting.current = true;
+    setPending(true);
+    setError(null);
+    const { portfolioId: account, transaction } = selected;
+    try {
+      await apiClient.deleteTransaction(account, transaction.id);
+      if (!mounted.current) return;
+      setSelected(null);
+      setVersion((v) => v + 1);
+      onDeleted?.();
+    } catch (cause) {
+      if (!mounted.current) return;
+      if (cause instanceof ApiError && cause.status === 404) {
+        setError(
+          "Transaction no longer exists in this portfolio. Refreshing the ledger; review the row before trying again.",
+        );
+        setSelected(null);
+        setVersion((v) => v + 1);
+        onDeleted?.();
+      } else if (cause instanceof ApiError && cause.status === 409) {
+        setError(
+          cause.detail ??
+            "Deletion conflicts with an active import or dependent sale. Review the ledger first.",
+        );
+      } else {
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Could not delete this transaction. Please try again.",
+        );
+      }
+    } finally {
+      submitting.current = false;
+      if (mounted.current) setPending(false);
+    }
+  }
 
   return (
     <Card>
@@ -144,6 +151,11 @@ export function TransactionLedger({
         <CardTitle>Transaction ledger</CardTitle>
       </CardHeader>
       <CardContent>
+        {error ? (
+          <p role="alert" className="mb-3 text-destructive">
+            {error}
+          </p>
+        ) : null}
         {state.status === "loading" ? (
           <LoadingRows rows={4} />
         ) : state.status === "error" ? (
@@ -151,9 +163,102 @@ export function TransactionLedger({
         ) : transactions.length === 0 ? (
           <EmptyState message="No transactions yet." />
         ) : (
-          <LedgerTable transactions={transactions} portfolioId={portfolioId} />
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {[
+                  "Date",
+                  "Ticker",
+                  "Type",
+                  "Quantity",
+                  "Price",
+                  "Fees",
+                  "Amount",
+                  "Actions",
+                ].map((label) => (
+                  <TableHead key={label}>{label}</TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {transactions.map((txn) => {
+                const cells = cellsFor(txn);
+                return (
+                  <TableRow key={txn.id} data-transaction-id={txn.id}>
+                    <TableCell>{txn.trade_date}</TableCell>
+                    <TableCell>
+                      <Link
+                        className="underline"
+                        href={`/portfolios/${portfolioId}/holdings/${encodeURIComponent(txn.ticker)}`}
+                      >
+                        {txn.ticker}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={badgeVariant(txn.type)}>{txn.type}</Badge>
+                    </TableCell>
+                    <TableCell>{cells.quantity}</TableCell>
+                    <TableCell>{cells.price}</TableCell>
+                    <TableCell>{formatMoney(txn.fees, txn.currency)}</TableCell>
+                    <TableCell>{cells.amount}</TableCell>
+                    <TableCell>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        aria-label={`Delete ${txn.ticker} ${txn.type} transaction ${txn.id}`}
+                        onClick={() => {
+                          setError(null);
+                          setSelected({ portfolioId, transaction: txn });
+                        }}
+                      >
+                        Delete
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         )}
       </CardContent>
+      <Dialog open={selected !== null} onClose={dismiss} title="Delete transaction?">
+        {selected ? (
+          <div className="space-y-4 text-sm">
+            <p>
+              Delete {selected.transaction.ticker} {selected.transaction.type} on{" "}
+              {selected.transaction.trade_date} (
+              {selected.transaction.type === "BUY" ||
+              selected.transaction.type === "SELL"
+                ? `${formatQuantity(selected.transaction.quantity)} shares`
+                : selected.transaction.type === "SPLIT"
+                  ? `${formatQuantity(selected.transaction.split_ratio)}:1 split`
+                  : formatMoney(
+                      selected.transaction.amount,
+                      selected.transaction.currency,
+                    )}
+              ) from portfolio {selected.portfolioId}?
+            </p>
+            <p>
+              Deletion changes calculated holdings and returns, may invalidate import
+              retry safety, and marks this holding&apos;s history unconfirmed. The event
+              leaves the active ledger but remains in the backend audit record. There is
+              no undo.
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" disabled={pending} onClick={dismiss}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={pending}
+                onClick={() => void confirm()}
+              >
+                {pending ? "Deleting…" : "Delete transaction"}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </Dialog>
     </Card>
   );
 }

@@ -113,6 +113,8 @@ describe("ClassifyHoldingsButton", () => {
                       sector: "Technology",
                       classification_source: "PROVIDER",
                       data_gaps: [],
+                      history_complete: true,
+                      history_gaps: [],
                     },
                   ]
                 : [],

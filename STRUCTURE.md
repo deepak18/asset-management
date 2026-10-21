@@ -214,9 +214,10 @@ frontend/
     │   │   ├── portfolio-summary.tsx       # ✅ Headline stats and status-driven XIRR guidance; unavailable values stay "—"
     │   │   ├── allocation-chart.tsx        # ✅ Recharts donut + accessible legend (sector/industry)
     │   │   ├── allocation-section.tsx      # ✅ Data wrapper feeding the donuts from analytics; refreshToken-aware
-    │   │   ├── transaction-ledger.tsx      # ✅ Type-aware ledger with holding links, optional ticker filter, and refresh token
-    │   │   ├── holdings-table.tsx          # ✅ Holding links, position figures, gap warnings, per-cell edits, and bulk classify action
-    │   │   ├── holding-detail.tsx          # ✅ URL-scoped position overview, editable classification/provenance, gaps, filtered ledger, and this holding's own XIRR with status/provenance
+    │   │   ├── transaction-ledger.tsx      # ✅ Stable-ID ledger with accessible confirmed deletion and scoped refresh
+    │   │   ├── holdings-table.tsx          # ✅ Holding links, history diagnostics, position values and classification
+    │   │   ├── holding-history.tsx         # ✅ Shared read-only history indicator with every typed reason
+    │   │   ├── holding-detail.tsx          # ✅ URL-scoped holding with history, XIRR and filtered deletable ledger
     │   │   ├── holding-classification-cell.tsx # ✅ Shared per-ticker field PATCH with Save/Cancel, explicit null clearing, preserved error drafts
     │   │   ├── holding-data-gaps.tsx       # ✅ Readable typed gap warnings, separate from unavailable provider data
     │   │   ├── classify-holdings-button.tsx # ✅ Abortable cursor sweep with classified/unresolved/failure summaries and 503 configuration guidance
@@ -224,9 +225,9 @@ frontend/
     │   │   ├── portfolio-selector.tsx      # ✅ App-shell picker over GET /portfolios; "create one" when empty
     │   │   ├── create-portfolio-dialog.tsx # ✅ POST /portfolios then auto-select
     │   │   ├── add-position-form.tsx       # ✅ POST /positions; cost basis = exactly one of per-share/total (422-proof); explains XIRR trade-off
-    │   │   ├── manual-transaction-form.tsx # ✅ POST /transactions (Transaction-Input); type-aware fields
-    │   │   ├── import-panel.tsx            # ✅ CSV upload → 202 → poll to terminal; progress/warnings; 409 "import anyway"/413/422; history
-    │   │   └── dashboard.tsx               # ✅ Composes all panels for the selected portfolio; refetch on write/import
+    │   │   ├── manual-transaction-form.tsx # ✅ POST /transactions (Transaction input); type-aware fields
+    │   │   ├── import-panel.tsx            # ✅ CSV upload/poll and refreshable import history with retry-safety label
+    │   │   └── dashboard.tsx               # ✅ Panels refetch after writes, imports or deletion
     │   ├── app-shell/         # ✅ nav.tsx — top bar + portfolio picker + light/dark toggle
     │   ├── research/          # ⬜ Ticker workstation, competitor matrix, thesis canvas
     │   └── workspace-panel/   # ⬜ Context-aware side panel (streaming tokens)
@@ -238,24 +239,24 @@ frontend/
     │   └── use-watchlist.ts            # ✅ localStorage watchlist (normalized, de-duplicated)
     ├── lib/                   # ✅ Client-side infra
     │   ├── env.ts             # ✅ Validated public env (API base URL, mock flag)
-    │   ├── api-client.ts      # ✅ Typed REST client: portfolio/holding reads, per-holding XIRR, writes, nullable classification PATCH, cursor classify, multipart import
+    │   ├── api-client.ts      # ✅ Typed REST client including scoped bodyless DELETE and ApiError
     │   ├── decimal.ts         # ✅ Float-free Decimal-string parse/round/scale helpers
     │   ├── format.ts          # ✅ money/percent/quantity formatting; DASH for null/unpriced
     │   └── utils.ts           # ✅ cn() class-merge helper
     ├── mocks/                 # ✅ MSW mock layer (contract-shaped)
-    │   ├── fixtures.ts        # ✅ Priced/unpriced/unclassified/empty portfolios with typed classification provenance, gaps, and per-holding XIRR status/valuation fixtures
-    │   ├── state.ts           # ✅ Mutable write/import/classification state: manual protection, cursor sweeps, current-label analytics, per-holding XIRR lookups, reset between tests
-    │   ├── handlers.ts        # ✅ Portfolio/write/import mocks plus single holding GET, per-holding analytics, nullable PATCH, cursor classification and configuration errors
+    │   ├── fixtures.ts        # ✅ Typed seed with stable ledger IDs and holding history reasons
+    │   ├── state.ts           # ✅ Mutable write/import/classification and scoped deletion/history mock state
+    │   ├── handlers.ts        # ✅ Portfolio/write/import mocks and 204/404/409 scoped DELETE
     │   ├── server.ts          # ✅ Node server for Vitest (msw/node)
     │   ├── browser.ts         # ✅ Browser worker (msw/browser) — client-only
     │   └── mock-bootstrap.tsx # ✅ Client-only worker starter (loaded via ssr:false)
     ├── types/                 # ✅ Contract types
-    │   ├── api.ts             # ✅ GENERATED by openapi-typescript from backend/openapi.json (tool-owned)
-    │   └── domain.ts          # ✅ Friendly aliases (Transaction = Output; TransactionInput = Input; + write/import + per-holding XIRR schemas)
+    │   ├── api.ts             # ✅ GENERATED OpenAPI including holding history and TransactionRecord
+    │   └── domain.ts          # ✅ Distinct ledger read/write aliases and typed history reason union
     └── __tests__/             # ✅ Vitest + RTL specs
-        ├── lib/               # ✅ decimal, format, api-client, holding-api (MSW-backed nullable PATCH, provenance, cursor, immediate analytics, per-holding XIRR statuses)
+        ├── lib/               # ✅ decimal, format, api-client, holding-api, transaction-delete.test.ts (MSW-backed nullable PATCH, provenance, cursor, immediate analytics, per-holding XIRR statuses)
         ├── hooks/             # ✅ use-import-job (poll-to-terminal, stop-on-unmount)
-        └── components/        # ✅ Existing panels plus holdings, holding-page, classify-holdings-button, dashboard (editing, gaps, deep links, cursor/cancellation, allocation refresh)
+        └── components/        # ✅ Existing panels plus holdings, holding-page, classify-holdings-button, dashboard, history-deletion.test.tsx (editing, gaps, deep links, cursor/cancellation, allocation refresh)
 ```
 
 ---

@@ -59,7 +59,7 @@ export interface paths {
         };
         /**
          * List Transactions
-         * @description Return the portfolio's full ledger as typed transactions.
+         * @description Return active ledger rows with stable IDs for deletion; no tombstones.
          */
         get: operations["list_transactions_api_v1_portfolios__portfolio_id__transactions_get"];
         put?: never;
@@ -69,6 +69,29 @@ export interface paths {
          */
         post: operations["add_transactions_api_v1_portfolios__portfolio_id__transactions_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolios/{portfolio_id}/transactions/{transaction_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Transaction
+         * @description Remove a row from active calculations after frontend confirmation.
+         *
+         *     Commits an audit tombstone, marks holding history incomplete, and disables
+         *     affected import retries. This operation does not confirm history completeness.
+         */
+        delete: operations["delete_transaction_api_v1_portfolios__portfolio_id__transactions__transaction_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -427,6 +450,16 @@ export interface components {
              * @default []
              */
             data_gaps: components["schemas"]["DataGap"][];
+            /**
+             * History Complete
+             * @default false
+             */
+            history_complete: boolean;
+            /**
+             * History Gaps
+             * @default []
+             */
+            history_gaps: components["schemas"]["HoldingHistoryGap"][];
         };
         /**
          * DataGap
@@ -530,6 +563,11 @@ export interface components {
             industry?: string | null;
         };
         /**
+         * HoldingHistoryGap
+         * @enum {string}
+         */
+        HoldingHistoryGap: "NO_TRANSACTIONS" | "NO_ACQUISITION" | "UNKNOWN_ORIGIN" | "SNAPSHOT" | "IMPORT_NOT_COMPLETE" | "IMPORT_NOT_SUCCEEDED" | "UNRESOLVED_EVENTS" | "DELETED_TRANSACTION";
+        /**
          * HoldingInfo
          * @description A tracked security's classification metadata (provider output).
          *
@@ -550,6 +588,16 @@ export interface components {
              * @default []
              */
             data_gaps: components["schemas"]["DataGap"][];
+            /**
+             * History Complete
+             * @default false
+             */
+            history_complete: boolean;
+            /**
+             * History Gaps
+             * @default []
+             */
+            history_gaps: components["schemas"]["HoldingHistoryGap"][];
         };
         /**
          * HoldingReturnStatus
@@ -861,7 +909,7 @@ export interface components {
          *     * ``FEE``: ``amount`` = total fee paid (native currency).
          *     * ``SPLIT``: ``split_ratio`` (e.g. ``2`` for a 2-for-1); other fields ignored.
          */
-        "Transaction-Input": {
+        Transaction: {
             /** Ticker */
             ticker: string;
             type: components["schemas"]["TransactionType"];
@@ -903,17 +951,10 @@ export interface components {
             industry?: string | null;
         };
         /**
-         * Transaction
-         * @description A single dated ledger event for one ticker, in its native currency.
-         *
-         *     Field usage by ``type``:
-         *
-         *     * ``BUY`` / ``SELL``: ``quantity`` (> 0) and ``price`` per share; ``fees`` optional.
-         *     * ``DIVIDEND``: ``amount`` = total cash received (native currency).
-         *     * ``FEE``: ``amount`` = total fee paid (native currency).
-         *     * ``SPLIT``: ``split_ratio`` (e.g. ``2`` for a 2-for-1); other fields ignored.
+         * TransactionRecord
+         * @description Persisted ledger read; IDs are deliberately absent from write inputs.
          */
-        "Transaction-Output": {
+        TransactionRecord: {
             /** Ticker */
             ticker: string;
             type: components["schemas"]["TransactionType"];
@@ -953,6 +994,10 @@ export interface components {
             sector?: string | null;
             /** Industry */
             industry?: string | null;
+            /** Id */
+            id: number;
+            /** Portfolio Id */
+            portfolio_id: number;
         };
         /**
          * TransactionType
@@ -1026,7 +1071,7 @@ export interface components {
          * @description Supply a split, transfer opening lot, or corrected transaction explicitly.
          */
         UnresolvedResolution: {
-            transaction?: components["schemas"]["Transaction-Input"] | null;
+            transaction?: components["schemas"]["Transaction"] | null;
             snapshot?: components["schemas"]["PositionSnapshot"] | null;
         };
         /** ValidationError */
@@ -1152,7 +1197,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Transaction-Output"][];
+                    "application/json": components["schemas"]["TransactionRecord"][];
                 };
             };
             /** @description Validation Error */
@@ -1177,7 +1222,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Transaction-Input"][];
+                "application/json": components["schemas"]["Transaction"][];
             };
         };
         responses: {
@@ -1189,6 +1234,50 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["LedgerIngestResult"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_transaction_api_v1_portfolios__portfolio_id__transactions__transaction_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: number;
+                transaction_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Transaction absent in this portfolio */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Import active or deletion would invalidate share history */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

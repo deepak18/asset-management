@@ -29,13 +29,33 @@ export function Dialog({
   children: React.ReactNode;
   className?: string;
 }) {
+  const panelRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
-    if (!open) {
-      return;
-    }
+    if (!open) return;
+    const previous =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    panelRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    return () => previous?.focus();
+  }, [open]);
+  React.useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
+      if (e.key === "Escape") onClose();
+      if (e.key !== "Tab") return;
+      const buttons = [
+        ...(panelRef.current?.querySelectorAll<HTMLButtonElement>(
+          "button:not(:disabled)",
+        ) ?? []),
+      ];
+      const first = buttons[0];
+      const last = buttons.at(-1);
+      if (!first || !last) return;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
       }
     };
     document.addEventListener("keydown", onKey);
@@ -52,6 +72,7 @@ export function Dialog({
       onClick={onClose}
     >
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -68,7 +89,12 @@ export function Dialog({
               <p className="mt-1 text-sm text-muted-foreground">{description}</p>
             ) : null}
           </div>
-          <Button variant="ghost" size="icon" aria-label="Close dialog" onClick={onClose}>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Close dialog"
+            onClick={onClose}
+          >
             <X className="h-4 w-4" />
           </Button>
         </div>
