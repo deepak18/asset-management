@@ -142,8 +142,3 @@ Testing is a **build-time discipline, not a phase.** Each task below is only com
 - [x] Holding-history review, missing-transaction repair and fingerprint-bound confirmation, with read-only ledger provenance.
 - [x] Portfolio-scoped sector/industry suggestions with accessible editing and explicit saves.
 - [x] Interactive allocation donuts with linked slice/legend previews, pinning and current-holding breakdowns using backend weights.
-
-## Pending Validation
-
-- [ ] Validate live PostgreSQL contention and browser/API integration; existing coverage uses offline providers and frontend mocks.
-- [ ] Investigate intermittent history-dialog focus restoration in `history-confirm-dismissal.test.tsx`; subsequent passing runs have not established a fix.
