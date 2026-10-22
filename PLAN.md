@@ -137,81 +137,13 @@ Testing is a **build-time discipline, not a phase.** Each task below is only com
 ### 3.3 Active On-Screen Prompt Action System
 * Implement contextual click actions across the research dashboard (e.g., selecting an erratic financial line item or a piece of text within an earnings transcript instantly passes that segment into the Side-Panel with specific predefined intents: *"Audit this metric against SEC data"* or *"Compare this statement with top peer guidance"*).
 
-### Holding-history review and repair delivery
+## Delivered Dashboard Capabilities
 
-- [x] Configure named backend/frontend implementer profiles and verify delegation.
-- [x] Add additive migration `0008` for holding-scoped review tokens and confirmation timestamps; preserve ledger/import provenance.
-- [x] Publish atomic history review/confirmation endpoints with strict acknowledgement, hard blockers, stale-review rejection and automatic invalidation.
-- [x] Expose read-only transaction origins so synthetic snapshots can be safely identified for replacement.
-- [x] Deliver review entry points on holdings table/detail, locked-ticker missing-transaction entry, explicit confirmation and scoped refresh.
-- [x] Ship policy/provider/API/migration and UI/client/mock regression coverage; verify backend (433 tests), frontend (163 tests), lint and type checks.
-- [x] Update root/backend/frontend runbooks and `STRUCTURE.md`; include them with the validated local feature commit.
-- [x] Standardize frontend button labels in Title Case and dismiss history review only after successful confirmation, preserving parent/XIRR refresh, pending guards, stale/error recovery and repair-in-place; verify 170 frontend tests plus lint and typecheck.
-- [ ] Validate live PostgreSQL contention and live browser/API integration separately; current concurrency coverage is offline/mocked and frontend tests use MSW.
+- [x] Holding-history review, missing-transaction repair and fingerprint-bound confirmation, with read-only ledger provenance.
+- [x] Portfolio-scoped sector/industry suggestions with accessible editing and explicit saves.
+- [x] Interactive allocation donuts with linked slice/legend previews, pinning and current-holding breakdowns using backend weights.
 
-### Portfolio classification suggestions delivery
+## Pending Validation
 
-- [x] Suggest existing same-field sector/industry values from all holdings in the selected portfolio in both table and detail editors, without changing the REST contract.
-- [x] Support case-insensitive filtering, trimmed/deduplicated options, accessible keyboard/mouse selection, free text and explicit Save/clear behavior.
-- [x] Preserve draft/error recovery and portfolio isolation; ship 12 focused regression tests alongside the implementation (182 frontend tests total), lint and typecheck validation.
-- [x] Update root/frontend runbooks and `STRUCTURE.md`; include them with the validated local feature commit.
-
-### Interactive allocation donuts delivery
-
-- [x] Add linked slice/legend hover and focus previews, click/tap/keyboard pinning, expanded outlined active arcs, and a theme-aware anchored detail card.
-- [x] Support Escape and Clear Selection, independent sector/industry charts, reduced-motion styles and portfolio-scoped reset without altering decimal-string display or the analytics contract.
-- [x] Ship real-SVG interaction and portfolio-switch regressions; update dashboard/button-label assertions for accessible category controls; verify 194 frontend tests, lint and typecheck.
-- [x] Update root/frontend runbooks and `STRUCTURE.md`; preserve existing changes and include feature documentation with its local commit.
-
-### Commit delivery policy
-
-- Local, dependency-ordered Conventional Commits are part of delivery by default; commit each validated slice with its tests and required documentation before starting the next slice.
-- The orchestrator owns staging/commits after delegate handoff. Report actual commit hashes and remaining working-tree status, not only proposed messages.
-- The current request to finish all pending chat commits supersedes the earlier commit deferral. Future completed work must not be left unstaged unless explicitly requested.
-
-### Commit audit (2026-10-21)
-
-- [x] `d0738ec` — agent profiles and default local slice-commit policy.
-- [x] `db7b32a` — backend history confirmation, migration, OpenAPI, tests and runbooks.
-- [x] `32dcf90` — frontend history review/repair/confirmation, origins, Title Case and tests.
-- [x] `82c7e1d` — portfolio-scoped classification suggestions and regressions.
-- [x] `232b91a` — interactive allocation donuts and real-SVG regressions.
-- Each slice was validated from an exported Git index snapshot before committing; later working-tree features could not mask missing staged dependencies.
-- [ ] Investigate intermittent table confirmation focus-restoration assertion in `history-confirm-dismissal.test.tsx`: two full-suite failures during commit validation, followed by passing isolated and full-suite runs. No test was skipped or disabled.
-
-### Allocation donut holding breakdown delivery
-
-- [x] Extend active sector/industry details with all open category holdings and
-  existing backend ticker weights explicitly labeled **% of portfolio**, preserving
-  pointer/focus previews, pin/restore, independent charts and Escape/Clear behavior.
-- [x] Match backend exact classification/UNCLASSIFIED grouping and exclude closed
-  or metadata-only holdings; retain unpriced members with unavailable weights.
-  Explain that partial analytics normalize over priced holdings, not the full book;
-  never compute category-relative weights or invent zero percentages.
-- [x] Share one typed holdings read across both charts per portfolio/refresh,
-  preserve analytics on holdings failure and isolate refreshed membership from
-  previous generations with keyed resources and stale-response guards.
-- [x] Add real-SVG, keyboard, category/nullable/closed/unpriced, large-list,
-  loading/error, classification-refresh and delayed-response regressions; update
-  root/frontend runbooks and directory inventory in this delivery.
-- [x] Orchestrator independently validates the full backend/frontend and delivers
-  this slice with tests and documentation in a local Conventional Commit.
-- Contract note: existing OpenAPI GETs publish 200/422; analytics runtime also emits
-  404 for missing portfolios. No backend or generated contract change is needed.
-  Separate analytics/holdings GETs have no shared snapshot version, so out-of-band
-  concurrent edits cannot be detected atomically by the frontend.
-- Validation follow-up: parent `npm test -- --reporter=dot` failed 2/204 while
-  initial dashboard data was still loading (`button-labels` AAPL review button,
-  `dashboard` PLTR links). The affected-file run passed 3/3 and an unchanged
-  default-parallel full suite passed 204/204 (12.77s), consistent with intermittent
-  one-second async wait exhaustion, not a reproducible allocation regression.
-  MSW reads have no artificial delay; handler/state resets and hook stale-response
-  guards remain intact. Only those two initial role/name queries now allow 3s;
-  assertions, later waits, production logic and Vitest configuration are unchanged.
-- Final delegate validation: two consecutive `npm test -- --reporter=dot` runs
-  passed 204/204 tests in 27 files (13.88s and 12.45s); `npm run lint` and
-  `npm run typecheck` passed (exit 0).
-- Independent final validation: frontend 204 tests in 27 files passed (12.63s),
-  ESLint and TypeScript passed; backend `uv run pytest` passed 433 tests with
-  3 integration tests deselected, Ruff passed and mypy passed for 50 source files.
-  Live browser/API integration was not exercised.
+- [ ] Validate live PostgreSQL contention and browser/API integration; existing coverage uses offline providers and frontend mocks.
+- [ ] Investigate intermittent history-dialog focus restoration in `history-confirm-dismissal.test.tsx`; subsequent passing runs have not established a fix.
