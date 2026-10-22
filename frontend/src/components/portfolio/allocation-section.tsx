@@ -2,7 +2,7 @@
 
 import { AllocationCharts } from "@/components/portfolio/allocation-chart";
 import { ErrorState, LoadingRows } from "@/components/shared/states";
-import { usePortfolioAnalytics } from "@/hooks/use-portfolio";
+import { useHoldings, usePortfolioAnalytics } from "@/hooks/use-portfolio";
 
 /**
  * Data wrapper that feeds the allocation donuts from analytics. Splitting the
@@ -19,7 +19,7 @@ export function AllocationSection({
 }) {
   return (
     <ScopedAllocationSection
-      key={portfolioId}
+      key={`${portfolioId}:${refreshToken}`}
       portfolioId={portfolioId}
       refreshToken={refreshToken}
     />
@@ -33,9 +33,10 @@ function ScopedAllocationSection({
   portfolioId: number;
   refreshToken: number;
 }) {
-  // The resource hook retains its previous result until its effect runs.
-  // Keying this boundary prevents even a transient cross-portfolio render.
+  // Remount both resources for every scope/version. The shared hook keeps its
+  // previous result until its effect runs; a key prevents mixed-generation data.
   const state = usePortfolioAnalytics(portfolioId, refreshToken);
+  const holdings = useHoldings(portfolioId, refreshToken);
 
   if (state.status === "loading") {
     return <LoadingRows rows={3} />;
@@ -48,6 +49,7 @@ function ScopedAllocationSection({
       currency={state.data.base_currency}
       bySector={state.data.allocation_by_sector}
       byIndustry={state.data.allocation_by_industry}
+      breakdown={{ holdings, analytics: state.data }}
     />
   );
 }

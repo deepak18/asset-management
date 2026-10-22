@@ -227,8 +227,8 @@ frontend/
     │   ├── shared/            # ✅ states.tsx — loading / error / empty blocks (honest "—", no fake 0)
     │   ├── portfolio/         # ✅ views
     │   │   ├── portfolio-summary.tsx       # ✅ Headline stats and status-driven XIRR guidance; unavailable values stay "—"
-    │   │   ├── allocation-chart.tsx        # ✅ Recharts v2 linked wedge/legend previews, accessible pin/clear controls and Decimal-string detail card
-    │   │   ├── allocation-section.tsx      # ✅ Portfolio-keyed analytics resource boundary feeding independent donuts; loading/error and refreshToken-aware
+    │   │   ├── allocation-chart.tsx        # ✅ Linked wedge/legend previews and pinning with typed current-holding lists, backend portfolio weights and partial-pricing notice
+    │   │   ├── allocation-section.tsx      # ✅ Portfolio/refresh-keyed shared analytics+holdings reads, nonblocking list errors and stale-generation isolation
     │   │   ├── transaction-ledger.tsx      # ✅ Stable-ID/origin-labeled ledger with provenance-aware confirmed deletion and scoped refresh
     │   │   ├── holdings-table.tsx          # ✅ Holding links/history diagnostics and classification with suggestions shared from full holdings
     │   │   ├── holding-history.tsx         # ✅ Shared history diagnostics and exhaustive typed reason labels
@@ -339,3 +339,54 @@ mcp/
 - `frontend/README.md` documents suggestion matching, explicit selection vs save, nonblocking detail reads and the new frontend file map.
 - `frontend/src/__tests__/components/dashboard.test.tsx` — Accessible category buttons and meaningful detail summaries, click/Enter/Space pinning, exact Clear Selection action, requested-portfolio scope and inline-edit allocation refresh.
 - `frontend/src/__tests__/components/button-labels.test.tsx` — Fixed-action Title Case checks classify data-driven category controls separately; independent uppercase/lowercase/mixed-case category assertions preserve API spelling in both donuts and require exact Clear Selection labels.
+
+---
+
+## Allocation Holding Breakdown Delivery Inventory
+
+No files or directories added; backend, contract, hooks, client and generated types
+remain unchanged. Exact modified slice paths and responsibilities:
+
+- `frontend/src/components/portfolio/allocation-chart.tsx` — Joins open analytics
+  positions to exact classification metadata, groups both dimensions once, and
+  displays all category members with backend ticker weights, missing/unpriced
+  statuses, partial-denominator guidance and accessible bounded scrolling.
+- `frontend/src/components/portfolio/allocation-section.tsx` — Shares one holdings
+  read across both charts per portfolio/refresh generation; keys both resources to
+  prevent old membership appearing alongside refreshed analytics.
+- `frontend/src/__tests__/components/allocation-chart.test.tsx` — Adds actual SVG
+  membership/highlight, keyboard pin/preview restoration, independent dimensions,
+  exact null/blank/literal UNCLASSIFIED, closed/no-ledger exclusion, missing/unpriced
+  decimal weights, empty membership and complete 100-entry scroll-list coverage.
+- `frontend/src/__tests__/components/allocation-section.test.tsx` — Adds shared-read
+  count, loading/error/recovery, same-generation membership, delayed scope/version
+  response isolation and runtime analytics-404 coverage using typed MSW responses.
+- `frontend/src/__tests__/components/dashboard.test.tsx` — Verifies a successful
+  inline classification edit moves the ticker between refreshed category lists;
+  its initial exact PLTR link query allows 3s for parallel-worker startup.
+- `frontend/src/__tests__/components/button-labels.test.tsx` — Preserves every
+  Title Case/data-casing assertion; only the initial exact AAPL review-button
+  query allows 3s for portfolio selection followed by panel loading.
+- `README.md` — Describes holding-level donut inspection and priced-subset limits
+  without changing setup or environment requirements.
+- `frontend/README.md` — Documents API consumption, exact grouping, loading/error
+  and refresh semantics, keyboard scrolling, non-atomic GET limitations and the
+  narrow initial-loading wait policy with actual validation results.
+- `PLAN.md` — Records delivered scope, startup-wait diagnosis, successful reruns
+  and independent frontend/backend validation with default local commit ownership.
+- `STRUCTURE.md` — Maintains the updated allocation responsibilities and this exact
+  delivery inventory.
+
+Validation follow-up: affected-file tests passed 3/3; the unchanged full suite
+passed 204/204 (12.77s), consistent with intermittent default-1s startup waits
+under parallel jsdom/MSW load rather than a reproducible allocation regression.
+Only the two reported initial loading queries now have a 3s maximum retry budget;
+no assertion was removed, skipped or loosened, and production code, handlers,
+hooks and Vitest configuration were not changed in this follow-up.
+Two consecutive post-fix `npm test -- --reporter=dot` runs passed 204 tests in
+27 files (13.88s and 12.45s), plus ESLint and TypeScript (exit 0). Independent
+parent validation also passed 204 frontend tests (12.63s), lint and typecheck;
+backend passed 433 tests (3 integration tests deselected), Ruff and mypy for
+50 source files. This slice ships with tests/docs in a local Conventional Commit.
+Live browser/API integration was not exercised. No dependency or API contract
+change; OpenAPI's undocumented runtime analytics 404 remains noted in docs.

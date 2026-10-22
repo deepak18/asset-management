@@ -15,7 +15,13 @@ it("returns to the requested portfolio and refreshes allocations after an inline
         <Dashboard />
       </PortfolioSelectionProvider>,
     );
-    for (const link of await screen.findAllByRole("link", { name: "PLTR" })) {
+    // Portfolio selection (including the URL override) precedes panel reads;
+    // allow parallel jsdom/MSW workers more than the default 1s startup wait.
+    for (const link of await screen.findAllByRole(
+      "link",
+      { name: "PLTR" },
+      { timeout: 3_000 },
+    )) {
       expect(link).toHaveAttribute("href", "/portfolios/3/holdings/PLTR");
     }
     const sectorTitle = screen.getByText("Allocation by sector");
@@ -35,6 +41,11 @@ it("returns to the requested portfolio and refreshes allocations after an inline
     await user.click(unclassifiedButton);
     expect(unclassifiedButton).toHaveAttribute("aria-pressed", "true");
     expect(sector.getByText("USD 6,000.00 · 60.00%")).toBeInTheDocument();
+    const initialMembers = await sector.findByRole("list", {
+      name: "UNCLASSIFIED holdings",
+    });
+    expect(initialMembers).toHaveTextContent("PLTR30.00% of portfolio");
+    expect(initialMembers).toHaveTextContent("SOFI20.00% of portfolio");
     await user.click(clear);
     expect(unclassifiedButton).toHaveFocus();
     expect(unclassifiedButton).toHaveAttribute("aria-pressed", "false");
@@ -62,6 +73,22 @@ it("returns to the requested portfolio and refreshes allocations after an inline
       ).toHaveAttribute("aria-pressed", "false");
     });
     expect(window.localStorage.getItem("am.selected.portfolio")).toBe("3");
+    // Inspect the remounted chart, not the detached pre-refresh card.
+    const refreshedSector = within(
+      screen.getByText("Allocation by sector").closest("div.rounded-lg") as HTMLElement,
+    );
+    await user.click(refreshedSector.getByRole("button", { name: /^Energy / }));
+    const energyMembers = await refreshedSector.findByRole("list", {
+      name: "Energy holdings",
+    });
+    expect(energyMembers).toHaveTextContent("PLTR30.00% of portfolio");
+    expect(energyMembers).not.toHaveTextContent("SOFI");
+    await user.click(refreshedSector.getByRole("button", { name: /^UNCLASSIFIED / }));
+    const remainingMembers = refreshedSector.getByRole("list", {
+      name: "UNCLASSIFIED holdings",
+    });
+    expect(remainingMembers).toHaveTextContent("SOFI20.00% of portfolio");
+    expect(remainingMembers).not.toHaveTextContent("PLTR");
   } finally {
     window.history.replaceState(null, "", "/");
     window.localStorage.clear();

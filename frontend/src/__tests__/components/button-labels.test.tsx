@@ -20,7 +20,13 @@ it("uses explicit Title Case for dashboard actions, icon actions and dialog cont
         <Dashboard />
       </PortfolioSelectionProvider>,
     );
-    await screen.findByRole("button", { name: "Review History For AAPL" });
+    // Portfolio selection loads before panel reads; parallel jsdom/MSW workers
+    // can exceed the default 1s wait even though no handler delays the response.
+    await screen.findByRole(
+      "button",
+      { name: "Review History For AAPL" },
+      { timeout: 3_000 },
+    );
     await screen.findByRole("button", { name: "Delete AAPL BUY Transaction 101" });
     const categoryButtons = new Set<HTMLElement>();
     for (const [title, rows] of [

@@ -53,6 +53,19 @@ npm run typegen    # regenerate src/types/api.ts from ../backend/openapi.json
 
 A change is **done** only when `test`, `lint`, and `typecheck` are all green.
 
+The dashboard integration tests in `button-labels.test.tsx` and
+`dashboard.test.tsx` allow **3 seconds only for their initial loaded-data query**.
+Portfolio-list selection precedes panel reads (and the dashboard URL can override
+stored selection), so parallel jsdom/MSW workers can exceed Testing Library's
+one-second default. These are maximum retry budgets, not sleeps; exact role/name,
+portfolio-scope and subsequent interaction/refresh assertions remain intact.
+Vitest concurrency, global async waits, handlers and production hooks are unchanged.
+After this targeted adjustment, two consecutive default-parallel
+`npm test -- --reporter=dot` runs passed **204/204 tests in 27 files** (13.88s and
+12.45s); `npm run lint` and `npm run typecheck` also passed. The parent's earlier
+202/204 run remains a recorded failure; independent parent revalidation is still
+a handoff gate, not a claimed success.
+
 ## Mock-first, then live
 
 The UI is developed against the contract, not a running backend:
@@ -345,7 +358,9 @@ adding a missing dividend while the review remains open.
 Allocation remains read-only reporting: selecting a category does not edit labels,
 filter holdings, fetch market data, or write to the API. Hover a wedge or hover/focus
 its legend button to preview category, market value and percentage in the anchored
-detail card. The matching legend gains a border/background and the active wedge
+detail card, plus every current holding in that category and its backend ticker
+weight labeled **% of portfolio**. No within-category percentages are calculated.
+The matching legend gains a border/background and the active wedge
 expands with a foreground stroke; other wedges dim slightly. Click/tap a wedge or
 legend button to pin; selecting the same category unpins. Other hover/focus previews
 return to the pinned category on leave/blur. Native Enter/Space activates legend
@@ -366,18 +381,61 @@ by category key and drops removed categories. The data wrapper is keyed by portf
 so neither previous data nor selection carries across accounts. Its existing loading
 state remounts charts during a network refresh (pins reset on that refresh).
 
+### Allocation holding membership and pricing limits
+
+- The section reuses `useHoldings` / the typed REST client for **one holdings read
+  per portfolio + refresh generation**, shared by both charts; hovering does not
+  fetch. Analytics and holdings start together. A generation-keyed remount clears
+  both old resources immediately, and the existing hook ignores abandoned responses.
+  A slow holdings read shows a list-only loading message; failure shows a list-only
+  error while wedges, legend and selection remain usable. The next dashboard
+  refresh retries both reads. These separate GETs are not an atomic server snapshot;
+  an out-of-band concurrent edit cannot be detected without a backend version seam.
+- Membership joins `PortfolioAnalytics.positions` to `HoldingInfo` by exact ticker.
+  Only backend `open_quantity > 0` positions participate (decimal sign inspection,
+  not a quantity/valuation calculation); closed positions and holdings with no
+  calculated position are excluded. Missing metadata, null and empty labels use
+  `UNCLASSIFIED`, exactly like the backend's `label or UNCLASSIFIED`. Labels are
+  **not** trimmed or case-folded; a literal `UNCLASSIFIED` joins the same bucket.
+- Each ticker's displayed weight comes unchanged from `allocation_by_ticker.weight`
+  through `formatPercent`. Missing weights stay a dash with **Weight unavailable**;
+  `unpriced_tickers` adds an explicit unpriced status. Unpriced category members are
+  not silently filtered out because they lack allocation rows.
+- The backend service computes allocations from successfully priced open positions
+  only, excluding missing quotes/FX from its denominator. If `unpriced_tickers` is
+  nonempty, a visible notice explains that **% of portfolio** means the backend's
+  priced subset, not the full book. This UI does not renormalize or fill gaps.
+  Entirely unpriced categories have no slice; empty allocations retain the existing
+  unavailable state rather than synthesizing categories or zero weights.
+- Lists retain all entries, sorted by ticker, in a responsive bounded-height,
+  keyboard-focusable scroll region with named semantic lists. Pin before scrolling
+  so leaving a preview does not dismiss it. Escape/Clear remove the list; temporary
+  pointer/focus previews restore the pinned category's list. There is no hover live
+  region repeatedly announcing the whole list.
+- Consumed contract: `GET /api/v1/portfolios/{portfolio_id}/analytics` and
+  `GET /api/v1/portfolios/{portfolio_id}/holdings`. Checked-in OpenAPI publishes
+  200/422 for these GETs; runtime analytics additionally returns 404 when absent
+  (handled as a read error). Holdings collection directly returns its provider list,
+  not the single-holding endpoint's documented 404. No contract/typegen change.
+
+Regression coverage in `allocation-chart.test.tsx`, `allocation-section.test.tsx`
+and `dashboard.test.tsx` includes actual SVG membership/highlights, native keyboard
+pin/preview restoration, independent dimensions, exact UNCLASSIFIED grouping,
+closed/unpriced/missing weights, empty and 100-entry lists, shared loading/error
+reads, classification refresh and delayed-response isolation across scopes/versions.
+
 - `src/components/portfolio/allocation-chart.tsx`: linked Recharts 2.15
-  `activeIndex`/`activeShape` and indexed `Pie` events, accessible legend and anchored
-  details. The built-in Tooltip's chart-local hover/click trigger is not used because
-  keyboard legend previews and persistent pins need one shared interaction state.
-- `src/components/portfolio/allocation-section.tsx`: portfolio-keyed resource boundary,
-  existing typed analytics read, loading/error and refresh-token behavior.
-- `src/__tests__/components/allocation-chart.test.tsx`: real SVG paths (not chart mocks),
-  hover/pin/clear/keyboard, separate donuts, reordered/removed data, exact decimals,
-  unavailable/no-arc states and reduced-motion class assertions.
+  `activeIndex`/`activeShape` and indexed `Pie` events, accessible legend, anchored
+  details and typed holding membership. The built-in Tooltip's chart-local trigger
+  is not used because keyboard previews and persistent pins share interaction state.
+- `src/components/portfolio/allocation-section.tsx`: portfolio/refresh-keyed resource
+  boundary, one shared holdings read, typed analytics and nonblocking list errors.
+- `src/__tests__/components/allocation-chart.test.tsx`: actual SVG interactions,
+  keyboard/pin/clear, independent charts, reconciliation, decimal display, membership,
+  unavailable/no-arc states, large lists and reduced-motion classes.
 - `src/__tests__/components/allocation-section.test.tsx`: contract-shaped MSW reads,
-  portfolio selection isolation, ignored stale responses, refresh, API errors and
-  unavailable allocations. No contract or dependency change is needed.
+  shared holdings loading/errors, scope/version isolation and refresh recovery.
+  No contract or dependency change is needed.
 
 ## Button naming and confirmation dismissal
 

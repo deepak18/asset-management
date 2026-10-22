@@ -174,6 +174,18 @@ Legend buttons also support keyboard focus and Enter/Space. Press Escape or choo
 tokens and respect reduced-motion preferences. Switching portfolios resets selection.
 Displayed financial values remain formatted from the API's original decimal strings.
 
+The detail card also lists **all current holdings** in the active category, with
+backend ticker weights labeled **% of portfolio** (not % of the category). Closed
+positions and metadata-only tracked securities are excluded. Unpriced holdings
+remain in the list with a dash/status instead of an invented zero. When pricing
+is incomplete, backend weights cover only the priced subset; a visible notice
+explains that they are not weights against the full portfolio. Categories with
+no priced holdings have no slice. Pin a category to scroll its complete list;
+temporary previews restore the pinned list on leave. Holdings loading/failure
+does not disable the chart. Portfolio changes and write-triggered refreshes reset
+pins and refetch both analytics and membership without carrying old lists forward.
+No new dependencies, environment variables or backend changes are required.
+
 ### Classification suggestions
 
 On the Holdings table or holding detail page, edit **Sector** or **Industry** to

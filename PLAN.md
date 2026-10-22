@@ -178,3 +178,40 @@ Testing is a **build-time discipline, not a phase.** Each task below is only com
 - [x] `232b91a` — interactive allocation donuts and real-SVG regressions.
 - Each slice was validated from an exported Git index snapshot before committing; later working-tree features could not mask missing staged dependencies.
 - [ ] Investigate intermittent table confirmation focus-restoration assertion in `history-confirm-dismissal.test.tsx`: two full-suite failures during commit validation, followed by passing isolated and full-suite runs. No test was skipped or disabled.
+
+### Allocation donut holding breakdown delivery
+
+- [x] Extend active sector/industry details with all open category holdings and
+  existing backend ticker weights explicitly labeled **% of portfolio**, preserving
+  pointer/focus previews, pin/restore, independent charts and Escape/Clear behavior.
+- [x] Match backend exact classification/UNCLASSIFIED grouping and exclude closed
+  or metadata-only holdings; retain unpriced members with unavailable weights.
+  Explain that partial analytics normalize over priced holdings, not the full book;
+  never compute category-relative weights or invent zero percentages.
+- [x] Share one typed holdings read across both charts per portfolio/refresh,
+  preserve analytics on holdings failure and isolate refreshed membership from
+  previous generations with keyed resources and stale-response guards.
+- [x] Add real-SVG, keyboard, category/nullable/closed/unpriced, large-list,
+  loading/error, classification-refresh and delayed-response regressions; update
+  root/frontend runbooks and directory inventory in this delivery.
+- [x] Orchestrator independently validates the full backend/frontend and delivers
+  this slice with tests and documentation in a local Conventional Commit.
+- Contract note: existing OpenAPI GETs publish 200/422; analytics runtime also emits
+  404 for missing portfolios. No backend or generated contract change is needed.
+  Separate analytics/holdings GETs have no shared snapshot version, so out-of-band
+  concurrent edits cannot be detected atomically by the frontend.
+- Validation follow-up: parent `npm test -- --reporter=dot` failed 2/204 while
+  initial dashboard data was still loading (`button-labels` AAPL review button,
+  `dashboard` PLTR links). The affected-file run passed 3/3 and an unchanged
+  default-parallel full suite passed 204/204 (12.77s), consistent with intermittent
+  one-second async wait exhaustion, not a reproducible allocation regression.
+  MSW reads have no artificial delay; handler/state resets and hook stale-response
+  guards remain intact. Only those two initial role/name queries now allow 3s;
+  assertions, later waits, production logic and Vitest configuration are unchanged.
+- Final delegate validation: two consecutive `npm test -- --reporter=dot` runs
+  passed 204/204 tests in 27 files (13.88s and 12.45s); `npm run lint` and
+  `npm run typecheck` passed (exit 0).
+- Independent final validation: frontend 204 tests in 27 files passed (12.63s),
+  ESLint and TypeScript passed; backend `uv run pytest` passed 433 tests with
+  3 integration tests deselected, Ruff passed and mypy passed for 50 source files.
+  Live browser/API integration was not exercised.

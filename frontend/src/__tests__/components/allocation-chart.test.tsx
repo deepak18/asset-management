@@ -5,7 +5,8 @@ import {
   AllocationChart,
   AllocationCharts,
 } from "@/components/portfolio/allocation-chart";
-import type { AllocationWeight } from "@/types/domain";
+import { analyticsPriced, holdings as fixtureHoldings } from "@/mocks/fixtures";
+import type { AllocationWeight, HoldingInfo, PortfolioAnalytics } from "@/types/domain";
 
 const rows: AllocationWeight[] = [
   { key: "Technology", market_value: "9007199254740993.125", weight: "0.70505" },
@@ -23,6 +24,55 @@ function details(button: HTMLElement) {
   const element = id ? document.getElementById(id) : null;
   if (!element) throw new Error("Missing accessible details");
   return element;
+}
+
+const memberMetadata: HoldingInfo[] = [
+  { ticker: "AAA", sector: "Technology", industry: "Software" },
+  { ticker: "BBB", sector: "Technology", industry: "Hardware" },
+  { ticker: "UNPRICED", sector: "Technology", industry: "Software" },
+  { ticker: "MISSING", sector: "Technology", industry: "Software" },
+  { ticker: "CLOSED", sector: "Technology", industry: "Software" },
+  { ticker: "TRACKED", sector: "Technology", industry: "Software" },
+  { ticker: "ENERGY", sector: "Energy", industry: "Hardware" },
+].map((holding) => ({ ...fixtureHoldings[0]!, ...holding }));
+function membershipAnalytics(): PortfolioAnalytics {
+  return {
+    ...analyticsPriced,
+    positions: memberMetadata
+      .filter((h) => h.ticker !== "TRACKED")
+      .map((h) => ({
+        ...analyticsPriced.positions[0]!,
+        ticker: h.ticker,
+        open_quantity: h.ticker === "CLOSED" ? "-0.0000" : "0.0000000000000000001",
+      })),
+    allocation_by_ticker: [
+      { key: "AAA", market_value: "20", weight: "0.200050000000000000000001" },
+      { key: "BBB", market_value: "30", weight: "0.29995" },
+      { key: "ENERGY", market_value: "50", weight: "0.5" },
+    ],
+    allocation_by_sector: [
+      { key: "Technology", market_value: "50", weight: "0.5" },
+      { key: "Energy", market_value: "50", weight: "0.5" },
+    ],
+    allocation_by_industry: [
+      { key: "Software", market_value: "20", weight: "0.20005" },
+      { key: "Hardware", market_value: "80", weight: "0.79995" },
+    ],
+    unpriced_tickers: ["UNPRICED"],
+  };
+}
+function membershipCharts(
+  analytics = membershipAnalytics(),
+  metadata = memberMetadata,
+) {
+  return (
+    <AllocationCharts
+      currency="USD"
+      bySector={analytics.allocation_by_sector}
+      byIndustry={analytics.allocation_by_industry}
+      breakdown={{ analytics, holdings: { status: "success", data: metadata } }}
+    />
+  );
 }
 
 describe("AllocationChart", () => {
@@ -195,5 +245,152 @@ describe("AllocationChart", () => {
       "No visible slice for this weight.",
     );
     expect(category("zero category")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("reveals all current category holdings on actual SVG hover with original portfolio weights and linked highlights", () => {
+    const { container } = render(membershipCharts());
+    expect(screen.getByText(/Partial pricing:/)).toHaveTextContent(
+      "cover priced holdings only",
+    );
+    fireEvent.mouseEnter(paths(container)[0]!);
+    const list = screen.getByRole("list", { name: "Technology holdings" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(4);
+    expect(within(list).getByText("AAA").closest("li")).toHaveTextContent(
+      "20.01% of portfolio",
+    );
+    expect(within(list).getByText("BBB").closest("li")).toHaveTextContent(
+      "30.00% of portfolio",
+    );
+    const unpriced = within(list).getByText("UNPRICED").closest("li");
+    expect(unpriced).toHaveTextContent("— of portfolioUnpriced — weight unavailable");
+    expect(unpriced).not.toHaveTextContent("0.00%");
+    expect(within(list).getByText("MISSING").closest("li")).toHaveTextContent(
+      "— of portfolioWeight unavailable",
+    );
+    expect(list).not.toHaveTextContent("CLOSED");
+    expect(list).not.toHaveTextContent("TRACKED");
+    expect(list).not.toHaveTextContent("ENERGY");
+    expect(category("Technology")).toHaveClass("bg-accent");
+    expect(paths(container)[0]).toHaveAttribute("stroke-width", "2");
+    fireEvent.mouseLeave(paths(container)[0]!);
+    expect(
+      screen.queryByRole("list", { name: "Technology holdings" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("pins the same list by wedge or keyboard and restores it after pointer and focus previews", async () => {
+    const user = userEvent.setup();
+    const { container } = render(membershipCharts());
+    fireEvent.click(paths(container)[0]!);
+    expect(
+      screen.getByRole("list", { name: "Technology holdings" }),
+    ).toBeInTheDocument();
+    fireEvent.mouseEnter(paths(container)[1]!);
+    expect(screen.getByRole("list", { name: "Energy holdings" })).toHaveTextContent(
+      "ENERGY",
+    );
+    fireEvent.mouseLeave(paths(container)[1]!);
+    expect(
+      screen.getByRole("list", { name: "Technology holdings" }),
+    ).toBeInTheDocument();
+    await user.tab();
+    await user.tab();
+    expect(category("Energy")).toHaveFocus();
+    expect(screen.getByRole("list", { name: "Energy holdings" })).toBeInTheDocument();
+    await user.tab();
+    expect(
+      screen.getByRole("list", { name: "Technology holdings" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Current holdings in Technology" }),
+    ).toHaveFocus();
+    await user.tab({ shift: true });
+    await user.keyboard(" ");
+    expect(category("Energy")).toHaveAttribute("aria-pressed", "true");
+    await user.keyboard("{Escape}");
+    expect(
+      screen.queryByRole("list", { name: "Energy holdings" }),
+    ).not.toBeInTheDocument();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("list", { name: "Energy holdings" })).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: "Clear Selection" })[0]!);
+    expect(category("Energy")).toHaveFocus();
+    expect(
+      screen.queryByRole("list", { name: "Energy holdings" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps industry membership distinct and both charts' pinned lists independent", async () => {
+    const user = userEvent.setup();
+    render(membershipCharts());
+    await user.click(category("Technology"));
+    await user.click(category("Hardware"));
+    const hardware = screen.getByRole("list", { name: "Hardware holdings" });
+    expect(within(hardware).getAllByRole("listitem")).toHaveLength(2);
+    expect(hardware).toHaveTextContent("BBB30.00% of portfolio");
+    expect(hardware).toHaveTextContent("ENERGY50.00% of portfolio");
+    expect(hardware).not.toHaveTextContent("AAA");
+    expect(
+      screen.getByRole("list", { name: "Technology holdings" }),
+    ).toBeInTheDocument();
+  });
+
+  it("matches backend null/empty/literal UNCLASSIFIED behavior without trimming or case folding", async () => {
+    const user = userEvent.setup();
+    const metadata: HoldingInfo[] = [
+      { ticker: "NULL", sector: null },
+      { ticker: "BLANK", sector: "" },
+      { ticker: "LITERAL", sector: "UNCLASSIFIED" },
+      { ticker: "SPACE", sector: " " },
+      { ticker: "LOWER", sector: "unclassified" },
+    ].map((holding) => ({ ...fixtureHoldings[0]!, ...holding }));
+    const analytics = membershipAnalytics();
+    analytics.positions = [...metadata, { ticker: "NO_METADATA" }].map((h) => ({
+      ...analyticsPriced.positions[0]!,
+      ticker: h.ticker,
+    }));
+    analytics.allocation_by_sector = [
+      { key: "UNCLASSIFIED", market_value: "1", weight: "1" },
+    ];
+    render(membershipCharts(analytics, metadata));
+    await user.click(category("UNCLASSIFIED"));
+    const list = screen.getByRole("list", { name: "UNCLASSIFIED holdings" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(4);
+    for (const ticker of ["NULL", "BLANK", "LITERAL", "NO_METADATA"])
+      expect(within(list).getByText(ticker)).toBeInTheDocument();
+    expect(list).not.toHaveTextContent("SPACE");
+    expect(list).not.toHaveTextContent("LOWER");
+  });
+
+  it("shows an honest empty membership and retains every entry of a large keyboard-scrollable list", async () => {
+    const user = userEvent.setup();
+    const analytics = membershipAnalytics();
+    analytics.positions = [];
+    const { rerender } = render(membershipCharts(analytics));
+    await user.click(category("Technology"));
+    expect(
+      screen.getByText("No current holdings in this category."),
+    ).toBeInTheDocument();
+    const metadata = Array.from({ length: 100 }, (_, i) => ({
+      ...fixtureHoldings[0]!,
+      ticker: `T${i}`,
+      sector: "Technology",
+    }));
+    const large = membershipAnalytics();
+    large.positions = metadata.map((h) => ({
+      ...analyticsPriced.positions[0]!,
+      ticker: h.ticker,
+    }));
+    rerender(membershipCharts(large, metadata));
+    expect(
+      within(screen.getByRole("list", { name: "Technology holdings" })).getAllByRole(
+        "listitem",
+      ),
+    ).toHaveLength(100);
+    const region = screen.getByRole("region", {
+      name: "Current holdings in Technology",
+    });
+    expect(region).toHaveAttribute("tabindex", "0");
+    expect(region).toHaveClass("max-h-60", "overflow-y-auto", "w-full");
   });
 });

@@ -8,7 +8,118 @@ import { EmptyState } from "@/components/shared/states";
 import { formatMoney, formatPercent } from "@/lib/format";
 import { parseDecimal } from "@/lib/decimal";
 import { cn } from "@/lib/utils";
-import type { AllocationWeight } from "@/types/domain";
+import type { AsyncState } from "@/hooks/use-api-resource";
+import { decimalSign } from "@/lib/decimal";
+import {
+  UNCLASSIFIED_KEY,
+  type AllocationWeight,
+  type HoldingInfo,
+  type PortfolioAnalytics,
+} from "@/types/domain";
+
+interface AllocationHolding {
+  ticker: string;
+  weight: string | undefined;
+  unpriced: boolean;
+}
+type Membership = ReadonlyMap<string, readonly AllocationHolding[]>;
+interface AllocationBreakdown {
+  holdings: AsyncState<HoldingInfo[]>;
+  analytics: PortfolioAnalytics;
+}
+
+/** Join metadata to backend open positions, not just priced allocation rows. */
+function groupHoldings({ holdings, analytics }: AllocationBreakdown): {
+  sector: AsyncState<Membership>;
+  industry: AsyncState<Membership>;
+} {
+  if (holdings.status !== "success") return { sector: holdings, industry: holdings };
+  const metadata = new Map(holdings.data.map((holding) => [holding.ticker, holding]));
+  const weights = new Map(
+    analytics.allocation_by_ticker.map((row) => [row.key, row.weight]),
+  );
+  const unpriced = new Set(analytics.unpriced_tickers);
+  const sector = new Map<string, AllocationHolding[]>();
+  const industry = new Map<string, AllocationHolding[]>();
+  for (const position of analytics.positions) {
+    if (decimalSign(position.open_quantity) !== 1) continue;
+    const info = metadata.get(position.ticker);
+    const member: AllocationHolding = {
+      ticker: position.ticker,
+      weight: weights.get(position.ticker),
+      unpriced: unpriced.has(position.ticker),
+    };
+    for (const [groups, label] of [
+      [sector, info?.sector],
+      [industry, info?.industry],
+    ] as const) {
+      // Backend uses `label or UNCLASSIFIED`: no trimming or case folding.
+      const key = label || UNCLASSIFIED_KEY;
+      const members = groups.get(key) ?? [];
+      members.push(member);
+      groups.set(key, members);
+    }
+  }
+  for (const groups of [sector, industry]) {
+    for (const members of groups.values()) {
+      members.sort((left, right) => left.ticker.localeCompare(right.ticker));
+    }
+  }
+  return {
+    sector: { status: "success", data: sector },
+    industry: { status: "success", data: industry },
+  };
+}
+
+function HoldingList({
+  category,
+  membership,
+}: {
+  category: string;
+  membership: AsyncState<Membership>;
+}) {
+  if (membership.status === "loading")
+    return <p role="status">Loading holdings breakdown…</p>;
+  if (membership.status === "error")
+    return (
+      <p role="alert">
+        Could not load holdings breakdown. Allocation chart remains available.
+      </p>
+    );
+  const members = membership.data.get(category) ?? [];
+  if (members.length === 0) return <p>No current holdings in this category.</p>;
+  return (
+    <div
+      role="region"
+      aria-label={`Current holdings in ${category}`}
+      tabIndex={0}
+      className="mt-2 max-h-60 w-full overflow-y-auto overscroll-contain rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <ul aria-label={`${category} holdings`} className="space-y-2">
+        {members.map((member) => (
+          <li
+            key={member.ticker}
+            className="flex flex-wrap justify-between gap-x-4 gap-y-1 border-t border-border py-2"
+          >
+            <span className="break-all font-medium">{member.ticker}</span>
+            <span className="text-right tabular-nums">
+              {formatPercent(member.weight)} of portfolio
+              {member.unpriced ? (
+                <span className="block text-xs text-muted-foreground">
+                  Unpriced — weight unavailable
+                </span>
+              ) : member.weight === undefined ? (
+                <span className="block text-xs text-muted-foreground">
+                  Weight unavailable
+                </span>
+              ) : null}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 function renderActiveSector(props: PieSectorDataItem) {
   return (
@@ -58,10 +169,12 @@ export function AllocationChart({
   title,
   rows,
   currency,
+  membership,
 }: {
   title: string;
   rows: AllocationWeight[];
   currency: string;
+  membership?: AsyncState<Membership>;
 }) {
   const data = React.useMemo(
     () => rows.map((row) => ({ ...row, arc: weightToArcValue(row.weight) })),
@@ -228,7 +341,7 @@ export function AllocationChart({
               </ul>
             </div>
             <div className="mt-4 flex min-h-20 flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-popover p-3 text-sm text-popover-foreground shadow-sm">
-              <div id={detailId} className="min-w-0">
+              <div id={detailId} className="min-w-0 w-full">
                 {activeRow ? (
                   <>
                     <p className="break-words font-semibold">{activeRow.key}</p>
@@ -240,6 +353,9 @@ export function AllocationChart({
                       <p className="text-xs text-muted-foreground">
                         No visible slice for this weight.
                       </p>
+                    ) : null}
+                    {membership ? (
+                      <HoldingList category={activeRow.key} membership={membership} />
                     ) : null}
                   </>
                 ) : (
@@ -269,22 +385,37 @@ export function AllocationCharts({
   currency,
   bySector,
   byIndustry,
+  breakdown,
 }: {
   currency: string;
   bySector: AllocationWeight[];
   byIndustry: AllocationWeight[];
+  breakdown?: AllocationBreakdown;
 }) {
+  const membership = React.useMemo(
+    () => (breakdown ? groupHoldings(breakdown) : undefined),
+    [breakdown],
+  );
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {breakdown && breakdown.analytics.unpriced_tickers.length > 0 ? (
+        <p className="text-sm text-muted-foreground lg:col-span-2">
+          Partial pricing: backend % of portfolio weights cover priced holdings only,
+          not the full portfolio. Unpriced holdings remain listed with unavailable
+          weights. Categories with no priced holdings have no allocation slice.
+        </p>
+      ) : null}
       <AllocationChart
         title="Allocation by sector"
         rows={bySector}
         currency={currency}
+        membership={membership?.sector}
       />
       <AllocationChart
         title="Allocation by industry"
         rows={byIndustry}
         currency={currency}
+        membership={membership?.industry}
       />
     </div>
   );
