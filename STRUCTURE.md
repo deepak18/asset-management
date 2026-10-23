@@ -443,3 +443,63 @@ with two pre-existing warnings in untouched legacy provider logic. The initial n
 module indexing error cleared on recheck. All existing API path contracts and old
 schema properties were compared against HEAD and preserved. No staging or commits
 were performed.
+
+## Vanguard retirement import slice 2a inventory
+
+Backend-only import core delivered; frontend/Robinhood/legacy analytics are unchanged.
+New active files (relative to repository root):
+
+```text
+backend/
+  app/
+    portfolio/vanguard.py                       # Frozen typed source/review/activity contracts, pure two-section parsing, canonical alias/event hashes, reconciliation and state-bound review policy
+    portfolio/vanguard_service.py               # Bounded synchronous preview/commit orchestration with typed provider/storage seams and retained-byte checksum/reparse verification
+    providers/retirement_import_provider.py     # RetirementImportProvider protocol and SQLAlchemy read-only review, locked atomic ownership/security/snapshot/activity writes and persisted history/detail/activity reads
+    api/v1/routes/retirement.py                  # Thin multipart preview/strict confirmation and scoped retained import/activity HTTP routes
+  migrations/versions/0010_vanguard_imports.py  # Adds retirement_imports and retirement_activity with checksum uniqueness, ownership FKs and indexed nonunique fingerprints
+  tests/
+    vanguard_fixtures.py                        # Entirely fictitious Python source-export builders shared across offline tests; no tracked CSV
+    unit/portfolio/test_vanguard.py             # Pure parser/financial/hash limits and statuses plus mocked provider/storage orchestration
+    unit/providers/test_retirement_import_provider.py # Project SQLite fixture persistence, exact decimals, multiplicity, overlap/staleness, retained closed funds and injected atomic rollback/retry tests
+    api/test_retirement_routes.py               # Multipart preview/commit/read contracts, strict true, typed null/decimal/provenance/status errors and OpenAPI seam assertions
+```
+
+Updated files:
+
+- `backend/app/portfolio/models.py`: isolated retirement ownership/activity mapped
+  tables; parsed typed facts/diagnostics are serialized text, never raw file bytes.
+- `backend/app/api/deps.py`: request-scoped Vanguard provider/storage composition.
+- `backend/app/api/v1/router.py`: registers separate retirement route group.
+- `backend/tests/test_migrations.py`: 0010 upgrade/downgrade and scoped full Alembic
+  schema drift/constraint coverage; existing all-model column guard stays active.
+- `backend/openapi.json`: generated `RetirementPreview`, `RetirementImport`,
+  `ObservedActivity`, typed diagnostics/reconciliation and multipart/error schemas.
+- `backend/README.md`: head 0010 prerequisite, runnable Swagger workflow, exact
+  schemas/nullability, conservative overlap policy and remaining API limitations.
+- `README.md`: migration prerequisite and separate backend retirement workflow.
+- `PLAN.md`: slice 2a delivered backend import core checked off; post-import security
+  metadata/mapping amendment required before slice 4, not a 2a blocker; 2b unchanged.
+- `STRUCTURE.md`: this precise delivery inventory.
+
+Preview is stateless/read-only. Commit binds unassigned raw account ID/custodian,
+creates UNKNOWN/null-ticker securities for unseen plan-scoped aliases, and commits
+whole valuation/activity/import ownership atomically. Both supported source codes
+retain independent reported amounts/prices/units; unknown codes are visible and
+block commit. Partial history is not an opening lot or performance history. All
+returned decimals are strings with retained source lines/checksums/references.
+Checksum blobs stay behind StatementStorage, outside the DB/Git; failed DB commits
+may leave unreachable blobs only. Different-file fingerprint overlap is refused,
+while same-file multiplicity is preserved. Same-date snapshots retain strict
+foundation provenance/content conflict semantics.
+
+Required future work before slice 4, not a slice 2a blocker: securities POST is
+immutable and refuses existing aliases (409). Explicit pre-import mappings and
+stable UNKNOWN/null-ticker securities are approved delivered import scope.
+Post-import security metadata amendment, ticker identity confirmation/update and
+alias remapping need a separately approved schema/API slice before look-through.
+No speculative endpoint or shared identity contract change was introduced.
+Live PostgreSQL contention and frontend integration remain unexercised. No external
+calls, real CSV, live DB, staging or commits were used.
+
+Validation from backend: `uv run pytest` passed **580 tests** (3 integration tests
+deselected), `uv run ruff check .` passed and `uv run mypy` passed (57 source files).

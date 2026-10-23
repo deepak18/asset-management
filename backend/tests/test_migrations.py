@@ -282,3 +282,38 @@ def test_account_valuation_migration_preserves_legacy_and_has_no_alembic_drift(
         command.upgrade(cfg, "head")
     finally:
         engine.dispose()
+
+def test_retirement_migration_is_additive_and_reversible_without_schema_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _isolate_settings: None,
+) -> None:
+    db_path = tmp_path / "retirement.db"
+    cfg = _alembic_config(db_path, monkeypatch)
+    command.upgrade(cfg, "0009")
+    engine = create_engine(f"sqlite:///{db_path.as_posix()}")
+    try:
+        portfolios = Table("portfolios", MetaData(), autoload_with=engine)
+        with engine.begin() as conn:
+            conn.execute(portfolios.insert().values(
+                id=1, name="Fictional Existing", base_currency="USD", external_account_id="00042",
+            ))
+            original = conn.execute(select(portfolios)).one()
+        command.upgrade(cfg, "head")
+        with engine.connect() as conn:
+            scope = {"retirement_imports", "retirement_activity"}
+            context = MigrationContext.configure(conn, opts={
+                "include_object": lambda obj, name, type_, reflected, compare_to:
+                    name in scope if type_ == "table" else True,
+            })
+            assert compare_metadata(context, Base.metadata) == []
+            assert conn.execute(select(portfolios)).one() == original
+        inspector = inspect(engine)
+        assert inspector.get_unique_constraints("retirement_imports")[0]["column_names"] == ["portfolio_id", "checksum"]
+        assert len(inspector.get_foreign_keys("retirement_activity")) == 3
+        command.downgrade(cfg, "0009")
+        assert not {"retirement_imports", "retirement_activity"} & set(inspect(engine).get_table_names())
+        assert "account_valuations" in inspect(engine).get_table_names()
+        with engine.connect() as conn:
+            assert conn.execute(select(portfolios)).one() == original
+        command.upgrade(cfg, "head")
+    finally:
+        engine.dispose()

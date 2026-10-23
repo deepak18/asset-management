@@ -182,9 +182,45 @@ No slice is delivered merely because its proposed commit message appears here.
 
 Delivery status:
 - [x] Slice 1 backend foundation: account metadata, shared identities and reported valuations; 491 backend and 204 frontend regressions passed.
-- [ ] Slice 2a Vanguard preview, atomic import, activity and reconciliation.
+- [x] Slice 2a delivered backend import core: Vanguard preview, atomic import, activity and reconciliation; validated with 580 tests, Ruff and mypy. UNKNOWN stable securities and explicit mapping before import are approved scope.
 - [ ] Slice 2b typed frontend account/import/reported-holdings workflow.
 - [ ] Slices 3–9: not implemented.
+
+### Slice 2a backend implementation status
+
+- Implemented a separate synchronous retirement API/OpenAPI: multipart preview
+  (200), explicitly confirmed commit (201), retained import history/detail and all
+  source activity (200); scoped 404, conflict 409, upload-limit 413, invalid-input 422.
+- Pure parsing preserves both source sections, exact decimal facts, raw identifiers,
+  line/checksum provenance and same-file event multiplicity. Supported codes are
+  contribution 114001 and dividend reinvestment 219004; other codes are visible
+  typed blocking issues, not claimed full historical support. Unsupported movement
+  stays null. Partial history, negative implied openings and complete-history
+  mismatches are explicit; share reconciliation never enables performance.
+- Preview writes nothing. Tokens bind bytes/options and relevant account, alias,
+  import/activity and valuation state. Atomic provider commit binds unassigned
+  accounts, creates only UNKNOWN/null-ticker identities, stores the whole snapshot,
+  all activity and diagnostics together. Raw-file storage is behind StatementStorage;
+  a failed DB commit may leave only an unreachable checksum blob, never partial rows.
+- Revision 0010 adds retirement ownership/activity tables. Legacy Robinhood and
+  ticker ledger/calculators are unchanged. Different-file overlap is conservatively
+  rejected for any shared canonical fingerprint; combine nonoverlapping periods.
+  Same-date conflicts retain strict foundation provenance/content semantics.
+- **Required future work before slice 4 (not a slice 2a blocker):** existing
+  securities POST creates immutable identities and rejects an existing alias (409).
+  Explicit mappings before import and stable UNKNOWN/null-ticker securities are
+  approved slice 2a scope. Post-import security metadata amendment, ticker identity
+  confirmation/update and alias remapping require a separately approved schema/API
+  slice before fund-source integration and look-through. Do not guess public fund
+  identities or add a speculative mapping endpoint to this delivered import core.
+  Slice 2b and slices 3–9 are not implemented.
+- Offline validation from backend: `uv run pytest` **580 passed, 3 deselected**;
+  `uv run ruff check .` passed; `uv run mypy` passed (57 source files). Migration
+  upgrade/downgrade/drift, mocked storage/provider boundaries, injected rollback,
+  stale reviews, overlap, closed-fund retention and API/OpenAPI parity are covered.
+  Only fictitious fixtures and disposable SQLite databases were used. No external
+  calls, live DB, frontend edits, staging or commits. Root/backend runbooks contain
+  the 0010 prerequisite, Swagger workflow, exact schemas/nullability and limitations.
 
 ### Slice 1: identity, account and valuation contracts
 

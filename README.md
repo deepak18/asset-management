@@ -77,10 +77,11 @@ uv run alembic upgrade head
 ```
 
 Existing installations, including those already on `0006` or `0007`, must upgrade
-to `0009` before starting this backend. Revision `0006` records snapshot/observed
+to `0010` before starting this backend. Revision `0006` records snapshot/observed
 origins for holding XIRR; `0007` adds transaction-deletion audit tombstones; `0008`
 adds nullable holding-scoped history confirmation metadata; `0009` adds account
-metadata and separate reported valuation tables. Existing ledger facts
+metadata and separate reported valuation tables; `0010` adds retirement imports and
+observed account activity. Existing ledger facts
 are not rewritten or automatically confirmed. Ambiguous legacy unowned transactions
 remain unknown rather than being relabeled as observed purchases.
 No application-database migration is run automatically by the API.
@@ -317,7 +318,7 @@ project prerequisites above.
 Before starting an existing installation, run from `backend/`:
 
 ```bash
-uv run alembic upgrade head  # revision 0009: account metadata, shared securities, reported snapshots
+uv run alembic upgrade head  # head 0010: account foundations plus retirement imports/activity
 uv run python -m uvicorn app.main:app --reload
 ```
 
@@ -329,5 +330,36 @@ Swagger examples and response/status contracts are in
 Reported snapshots retain exact decimals, source provenance and nullable unknown
 basis/returns without synthetic BUY events or market-data configuration. They are a
 **separate reported view**, not additive balances alongside legacy ledger analytics.
-Existing Robinhood imports and `/positions` behavior are unchanged. No frontend or
-new CSV parser is included in this foundation.
+Existing Robinhood imports and `/positions` behavior are unchanged. Slice 1 did not
+include a CSV parser; the separate backend slice 2a workflow is now available below.
+
+### Vanguard preview and atomic import (backend only)
+
+After upgrading to **0010**, open <http://localhost:8000/docs>. Select a USD portfolio,
+then POST multipart `file`, explicit holdings `as_of` (ISO date), `currency=USD` and
+optional `history_complete=false` to
+`/api/v1/portfolios/{id}/retirement-imports/preview` (200). Inspect source holdings,
+activity, exact reported total, nullable mappings, typed issues and reconciliation.
+Preview is read-only. Confirm by POSTing the same file/options plus its
+`preview_token` and exactly `confirmed=true` to `.../retirement-imports` (201).
+Read the import history/details, `.../account-activity`, and the separate reported
+`.../valuations` view (all 200). See the
+[backend Swagger contract and limits](backend/README.md#vanguard-retirement-imports-backend-slice-2a).
+
+Unknown funds become UNKNOWN securities with null tickers, never guessed public
+share classes. Partial activity does not add to current holdings or enable FIFO,
+account return or XIRR. Unsupported historical codes remain visible and block
+commit. Same-file identical rows retain multiplicity; duplicate files, ambiguous
+overlapping exports, stale reviews and conflicting dates return 409. Invalid
+inputs return 422, missing resources 404 and uploads over 5 MiB 413. Raw exports
+stay in configured `StatementStorage`, outside Git and database blob columns.
+All relational changes commit/roll back together; failed DB commits can leave only
+an unreachable checksum-addressed raw file. Fixtures are entirely fictitious.
+
+This delivered backend slice has no frontend implementation or live-service
+dependency. Existing securities POST can pre-map an alias before import; stable
+UNKNOWN/null-ticker securities are also approved import scope. Post-import security
+metadata amendment, ticker identity confirmation/update and alias remapping require
+an approved schema/API slice before slice 4 and look-through, not completion of
+slice 2a. No speculative mapping endpoint is included.
+Legacy Robinhood import and analytics remain unchanged.

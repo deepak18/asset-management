@@ -39,7 +39,7 @@ From the **repo root** first: `docker compose up -d --wait` (starts Postgres + p
 ```bash
 cd backend
 uv sync --extra dev --extra postgres
-uv run alembic upgrade head             # includes account metadata and reported valuations (0009)
+uv run alembic upgrade head             # includes retirement imports/activity (0010)
 uv run python -m uvicorn app.main:app --reload    # http://localhost:8000/docs
 ```
 
@@ -150,7 +150,109 @@ total, without carrying forward old rows. Empty complete snapshots report zero
 holdings, not missing data. Whole snapshots commit atomically. Future import writers
 can compose security and snapshot writes (and activity on that same session) inside
 `async with provider.transaction():` for one commit/rollback; canonical hashing stays
-in `portfolio/accounts.py`, never the provider. No Vanguard parser is included.
+in `portfolio/accounts.py`, never the provider. Vanguard uses this atomic seam below.
+
+## Vanguard retirement imports (backend slice 2a)
+
+Run `uv run alembic upgrade head` from `backend/` before restarting the API.
+Head **0010** adds `retirement_imports` and `retirement_activity`; no legacy ledger
+facts change. Downgrading to 0009 removes import/activity ownership and diagnostics,
+not shared securities or reported valuation snapshots. Back up DB **and** raw storage.
+No new dependency, external service, credentials or background worker is required.
+The frontend workflow is not included; use <http://localhost:8000/docs>:
+
+1. Create/select a portfolio with base currency USD. Account type defaults UNKNOWN;
+   choose traditional/Roth only from actual account information. External account ID
+   is a nullable **string**. If unbound, commit binds the observed raw activity account
+   ID and custodian `Vanguard` atomically. Existing IDs compare after removing leading
+   zeros only; genuine mismatches return 409. Existing bound metadata is not guessed.
+2. `POST /api/v1/portfolios/{id}/retirement-imports/preview` (200), multipart:
+   required `file`, `as_of` (ISO `YYYY-MM-DD`) and `currency` (`USD`, matching account);
+   optional `history_complete` defaults false. Supply the actual holdings date:
+   trade/run dates and upload time never establish a valuation date.
+3. Inspect the `RetirementPreview`: `portfolio_id`, opaque `preview_token`, `options`,
+   `source` (checksum, raw plan/account strings, holdings and activity), `funds`, exact
+   `reported_total`, nullable/unknown basis, P&L and return, `issues`, `reconciliation`,
+   `can_commit`. Unknown funds show exact names, `security_id:null`, `ticker:null`,
+   `status:WILL_CREATE_UNKNOWN`. Mapped identities show `MAPPED` and nullable ticker.
+   Activity-only names are included even when absent from current holdings.
+4. Only when `can_commit` is true, `POST /api/v1/portfolios/{id}/retirement-imports`
+   with the **same file and options**, required `preview_token`, and `confirmed` set
+   to exactly the multipart text `true` (not `True`, `1` or `yes`). Success is 201,
+   `RetirementImport`: `id`, `portfolio_id`, `valuation_id`, UTC `imported_at`,
+   `storage_key`, `status:COMMITTED`, and persisted `preview` with resolved security IDs.
+   Preview is read-only: no stored job, blob or security is created before commit.
+   Commit reads back and reparses retained bytes and verifies the content checksum.
+5. Read `GET .../retirement-imports` (200 array, newest import first),
+   `GET .../retirement-imports/{import_id}` (200 persisted complete parsed facts and
+   diagnostics), `GET .../account-activity` (200 **all** retained source activity),
+   and `GET .../valuations` (latest snapshot by holdings date). Do not poll a job.
+   A fund absent from the latest valuation still appears in retained activity.
+
+All decimal facts are JSON **strings**, dates are ISO, and unknown values stay null.
+`ObservedActivity` has stable `id`, `import_id`, `portfolio_id`, `security_id`,
+`currency`, `source_code:VANGUARD`, and `fact`. Every source holding/activity fact
+retains `checksum`, starting `source_line`, `source_reference` and `raw_fields`.
+Activity also retains raw `account_number`, trade/run dates, code, description,
+fund name, price, quantity, amount, kind, fingerprint, nullable
+`external_contribution` and nullable `dividend_amount`. No employer/employee split
+is inferred. Code 114001 is contribution information; 219004 with positive shares
+is reinvestment information, with dividend dollars and units retained but **no**
+external contribution inferred. Source dollars and price/quantity are independent
+observations: rounded products need not agree. Current value is never counted twice.
+
+Reconciliation per fund reports `closing_units`, nullable `net_supported_movement`,
+nullable `implied_prior_units`, `status:HISTORY_INCOMPLETE|SHARES_RECONCILED|BLOCKED`,
+and always `performance_calculable:false`. Implied prior units are diagnostic only.
+`issues` contain enum `code`, `blocking`, nullable fund/source-line scope and message.
+Partial history is explicit even when shares happen to reconcile. An assertion of
+complete history requires supported activity to explain closing shares exactly;
+reconciliation alone never establishes basis, cash-flow completeness or returns.
+Unsupported codes are fully visible with null movement/prior units and **block**
+commit; negative implied opening balances, invalid acquisitions, negative dollars
+and trades after as_of also block. This is not full historical-transaction support.
+No synthetic BUY, FIFO lot, cash balance, legacy holding or XIRR input is created.
+
+Safety and limitations:
+
+- 404: missing portfolio or scoped import. 413: upload exceeds 5 MiB.
+- 422: malformed UTF-8/CSV, section/date/decimal/account structure, currency or
+  confirmation. Both exact column headers are required in holdings/activity order;
+  BOM, quoting, blank lines and trailing empty commas are supported. Nonfinite,
+  scientific-notation, overprecision and malformed/header-like rows are refused.
+  Limits: 50,000 nonblank rows (including headers), standard CSV field-size bound,
+  NUMERIC(28,10), bounded identifiers/fund names. Holdings/activity sections must
+  both contain rows; no inferred account for holdings-only exports.
+- 409: duplicate checksum per portfolio; bound-account/plan mismatch; incompatible
+  mapping/same-date snapshot; stale token; overlapping event fingerprints; blocking
+  diagnostics. Review again after changing file/options/account/mappings/imports or
+  valuations. Tokens cover relevant identity and persisted import/valuation state.
+- Exact same-file row multiplicity is preserved. With no unique event IDs, **any**
+  overlapping canonical activity fingerprint across different files is refused;
+  combine nonoverlapping export periods rather than silently collapsing events.
+  Same-date snapshot conflicts retain the foundation's strict immutable-content
+  semantics, including source provenance; different-source assertions may conflict
+  even if rounded holding values agree. No destructive replacement is available.
+- Source aliases use `VANGUARD` plus `plan-account-fund:` and SHA-256 of a JSON tuple
+  of normalized plan/account and the **exact** fund name. Use preview's `alias_value`
+  with existing securities POST **before** import to explicitly map a known class.
+  Otherwise commit creates UNKNOWN instruments with null tickers; no symbol lookup
+  or public share-class guessing occurs. Different plans/classes stay distinct.
+- **Required future identity work, not a slice 2a blocker:** existing securities POST
+  creates immutable identities;
+  duplicate aliases return 409. It cannot remap an already-created UNKNOWN alias.
+  Stable UNKNOWN/null-ticker securities and explicit mappings before import are
+  approved delivered import scope. Post-import security metadata amendment, ticker
+  identity confirmation/update and alias remapping need a separately approved schema/API
+  slice before slice 4 and look-through. This slice adds no speculative mapping
+  endpoint and does not mutate financial history.
+- Commit owns one relational transaction: account binding, new securities/aliases,
+  whole snapshot, metadata and all activity roll back together. Preview/state checks
+  repeat under the write lock. SQLite uses a write barrier; PostgreSQL locks the
+  portfolio and identity tables. Live PostgreSQL contention was not tested.
+  Existing single-API-process guidance remains. Failed DB commits may leave an
+  unreachable checksum-addressed raw blob, but no partial ledger/import rows.
+  Raw files stay behind `StatementStorage`, never in relational columns or Git.
 
 ## Point at a remote or slow (GPU-less) Ollama
 

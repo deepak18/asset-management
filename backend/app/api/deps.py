@@ -31,6 +31,7 @@ from app.portfolio.holding_analytics import HoldingAnalyticsService
 from app.portfolio.imports import StatementImportService
 from app.portfolio.ingest import PortfolioIngestService
 from app.portfolio.service import PortfolioService
+from app.portfolio.vanguard_service import VanguardService
 from app.providers.account_provider import SqlAlchemyAccountProvider
 from app.providers.base import (
     HoldingHistoryProvider,
@@ -40,6 +41,7 @@ from app.providers.base import (
 )
 from app.providers.marketdata_provider import MarketDataProvider
 from app.providers.portfolio_provider import SqlAlchemyPortfolioProvider
+from app.providers.retirement_import_provider import SqlAlchemyRetirementImportProvider
 from app.providers.statement_import_store import SqlAlchemyStatementImportStore
 from app.providers.statement_storage import StatementStorage
 from app.storage.local_disk import LocalDiskStatementStorage
@@ -265,3 +267,10 @@ def get_background_import_runner(
         batch_size=settings.import_batch_size,
         max_stored_warnings=settings.import_max_stored_warnings,
     )
+
+
+def get_vanguard_service(
+    session: AsyncSession = Depends(get_session),
+    storage: StatementStorage = Depends(get_statement_storage),
+) -> VanguardService:
+    return VanguardService(SqlAlchemyRetirementImportProvider(session), storage)

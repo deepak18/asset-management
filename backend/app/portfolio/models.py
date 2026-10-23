@@ -243,3 +243,28 @@ class AccountValuationPosition(Base):
     reported_value: Mapped[Decimal] = mapped_column(ExactDecimal)
     cost_basis: Mapped[Decimal | None] = mapped_column(ExactDecimal)
     source_reference: Mapped[str | None] = mapped_column(String(240))
+
+
+class RetirementImport(Base):
+    __tablename__ = "retirement_imports"
+    __table_args__ = (
+        UniqueConstraint("portfolio_id", "checksum", name="uq_retirement_checksum"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    portfolio_id: Mapped[int] = mapped_column(ForeignKey("portfolios.id"))
+    valuation_id: Mapped[int] = mapped_column(ForeignKey("account_valuations.id"))
+    checksum: Mapped[str] = mapped_column(String(64))
+    storage_key: Mapped[str] = mapped_column(String(120))
+    imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    preview_json: Mapped[str] = mapped_column(Text)
+
+
+class RetirementActivity(Base):
+    __tablename__ = "retirement_activity"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    import_id: Mapped[int] = mapped_column(ForeignKey("retirement_imports.id"))
+    portfolio_id: Mapped[int] = mapped_column(ForeignKey("portfolios.id"))
+    security_id: Mapped[int] = mapped_column(ForeignKey("securities.id"))
+    currency: Mapped[str] = mapped_column(String(3))
+    fingerprint: Mapped[str] = mapped_column(String(64), index=True)
+    fact_json: Mapped[str] = mapped_column(Text)

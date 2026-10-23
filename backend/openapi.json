@@ -1396,6 +1396,343 @@
         }
       }
     },
+    "/api/v1/portfolios/{portfolio_id}/retirement-imports/preview": {
+      "post": {
+        "tags": [
+          "retirement"
+        ],
+        "summary": "Preview Import",
+        "description": "Read-only review. Unknown codes remain visible and block confirmation.",
+        "operationId": "preview_import_api_v1_portfolios__portfolio_id__retirement_imports_preview_post",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_preview_import_api_v1_portfolios__portfolio_id__retirement_imports_preview_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetirementPreview"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountValidationResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/retirement-imports": {
+      "post": {
+        "tags": [
+          "retirement"
+        ],
+        "summary": "Commit Import",
+        "description": "Multipart confirmation is exactly the text `true`; no truthy coercions.\n\nRe-upload the reviewed bytes and options. State changes require a fresh preview.",
+        "operationId": "commit_import_api_v1_portfolios__portfolio_id__retirement_imports_post",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_commit_import_api_v1_portfolios__portfolio_id__retirement_imports_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetirementImport"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountValidationResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "retirement"
+        ],
+        "summary": "Import History",
+        "operationId": "import_history_api_v1_portfolios__portfolio_id__retirement_imports_get",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RetirementImport"
+                  },
+                  "title": "Response Import History Api V1 Portfolios  Portfolio Id  Retirement Imports Get"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/retirement-imports/{import_id}": {
+      "get": {
+        "tags": [
+          "retirement"
+        ],
+        "summary": "Import Detail",
+        "operationId": "import_detail_api_v1_portfolios__portfolio_id__retirement_imports__import_id__get",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          },
+          {
+            "name": "import_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Import Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetirementImport"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/account-activity": {
+      "get": {
+        "tags": [
+          "retirement"
+        ],
+        "summary": "Account Activity",
+        "operationId": "account_activity_api_v1_portfolios__portfolio_id__account_activity_get",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ObservedActivity"
+                  },
+                  "title": "Response Account Activity Api V1 Portfolios  Portfolio Id  Account Activity Get"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -1563,6 +1900,132 @@
         ],
         "title": "AccountValidationResponse"
       },
+      "ActivityFact": {
+        "properties": {
+          "checksum": {
+            "type": "string",
+            "title": "Checksum"
+          },
+          "source_line": {
+            "type": "integer",
+            "title": "Source Line"
+          },
+          "source_reference": {
+            "type": "string",
+            "title": "Source Reference"
+          },
+          "raw_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Raw Fields"
+          },
+          "account_number": {
+            "type": "string",
+            "title": "Account Number"
+          },
+          "trade_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Trade Date"
+          },
+          "run_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Run Date"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "fund_name": {
+            "type": "string",
+            "title": "Fund Name"
+          },
+          "price": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,18}|(?=[\\d.]{1,29}0*$)\\d{0,18}\\.\\d{0,10}0*$)",
+            "title": "Price"
+          },
+          "quantity": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,18}|(?=[\\d.]{1,29}0*$)\\d{0,18}\\.\\d{0,10}0*$)",
+            "title": "Quantity"
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,18}|(?=[\\d.]{1,29}0*$)\\d{0,18}\\.\\d{0,10}0*$)",
+            "title": "Amount"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ActivityKind"
+          },
+          "fingerprint": {
+            "type": "string",
+            "title": "Fingerprint"
+          },
+          "external_contribution": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Contribution"
+          },
+          "dividend_amount": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dividend Amount"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "checksum",
+          "source_line",
+          "source_reference",
+          "raw_fields",
+          "account_number",
+          "trade_date",
+          "run_date",
+          "code",
+          "description",
+          "fund_name",
+          "price",
+          "quantity",
+          "amount",
+          "kind",
+          "fingerprint",
+          "external_contribution",
+          "dividend_amount"
+        ],
+        "title": "ActivityFact"
+      },
+      "ActivityKind": {
+        "type": "string",
+        "enum": [
+          "CONTRIBUTION",
+          "REINVESTMENT",
+          "UNSUPPORTED"
+        ],
+        "title": "ActivityKind"
+      },
       "AllocationWeight": {
         "properties": {
           "key": {
@@ -1598,6 +2061,48 @@
         ],
         "title": "Availability"
       },
+      "Body_commit_import_api_v1_portfolios__portfolio_id__retirement_imports_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "preview_token": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Preview Token"
+          },
+          "confirmed": {
+            "type": "string",
+            "const": "true",
+            "title": "Confirmed"
+          },
+          "as_of": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "As Of"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "history_complete": {
+            "type": "boolean",
+            "title": "History Complete",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "preview_token",
+          "confirmed",
+          "as_of",
+          "currency"
+        ],
+        "title": "Body_commit_import_api_v1_portfolios__portfolio_id__retirement_imports_post"
+      },
       "Body_create_import_api_v1_portfolios__portfolio_id__imports_post": {
         "properties": {
           "file": {
@@ -1611,6 +2116,36 @@
           "file"
         ],
         "title": "Body_create_import_api_v1_portfolios__portfolio_id__imports_post"
+      },
+      "Body_preview_import_api_v1_portfolios__portfolio_id__retirement_imports_preview_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "as_of": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "title": "As Of"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency"
+          },
+          "history_complete": {
+            "type": "boolean",
+            "title": "History Complete",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "as_of",
+          "currency"
+        ],
+        "title": "Body_preview_import_api_v1_portfolios__portfolio_id__retirement_imports_preview_post"
       },
       "ClassificationFailure": {
         "properties": {
@@ -1738,6 +2273,58 @@
         ],
         "title": "DataGap",
         "description": "Missing facts a user can supply; provider price availability is separate."
+      },
+      "FundMapping": {
+        "properties": {
+          "fund_name": {
+            "type": "string",
+            "title": "Fund Name"
+          },
+          "alias_value": {
+            "type": "string",
+            "title": "Alias Value"
+          },
+          "security_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Security Id"
+          },
+          "ticker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticker"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "MAPPED",
+              "WILL_CREATE_UNKNOWN"
+            ],
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "fund_name",
+          "alias_value",
+          "security_id",
+          "ticker",
+          "status"
+        ],
+        "title": "FundMapping"
       },
       "HTTPValidationError": {
         "properties": {
@@ -1909,6 +2496,79 @@
         "type": "object",
         "title": "HoldingClassificationUpdate",
         "description": "Manual sector/industry override for one holding.\n\nOmitted fields are preserved; explicit null clears a field. Every edit marks\nthe holding MANUAL, including clearing both fields."
+      },
+      "HoldingFact": {
+        "properties": {
+          "checksum": {
+            "type": "string",
+            "title": "Checksum"
+          },
+          "source_line": {
+            "type": "integer",
+            "title": "Source Line"
+          },
+          "source_reference": {
+            "type": "string",
+            "title": "Source Reference"
+          },
+          "raw_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Raw Fields"
+          },
+          "plan_number": {
+            "type": "string",
+            "title": "Plan Number"
+          },
+          "plan_name": {
+            "type": "string",
+            "title": "Plan Name"
+          },
+          "fund_name": {
+            "type": "string",
+            "title": "Fund Name"
+          },
+          "quantity": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,18}|(?=[\\d.]{1,29}0*$)\\d{0,18}\\.\\d{0,10}0*$)",
+            "title": "Quantity"
+          },
+          "reported_price": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,18}|(?=[\\d.]{1,29}0*$)\\d{0,18}\\.\\d{0,10}0*$)",
+            "title": "Reported Price"
+          },
+          "reported_value": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,18}|(?=[\\d.]{1,29}0*$)\\d{0,18}\\.\\d{0,10}0*$)",
+            "title": "Reported Value"
+          },
+          "cost_basis": {
+            "type": "null",
+            "title": "Cost Basis"
+          },
+          "unrealized_pnl": {
+            "type": "null",
+            "title": "Unrealized Pnl"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "checksum",
+          "source_line",
+          "source_reference",
+          "raw_fields",
+          "plan_number",
+          "plan_name",
+          "fund_name",
+          "quantity",
+          "reported_price",
+          "reported_value"
+        ],
+        "title": "HoldingFact"
       },
       "HoldingHistoryConfirmation": {
         "properties": {
@@ -2089,6 +2749,77 @@
         ],
         "title": "HoldingValuationSource"
       },
+      "ImportIssue": {
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/IssueCode"
+          },
+          "blocking": {
+            "type": "boolean",
+            "title": "Blocking"
+          },
+          "fund_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fund Name"
+          },
+          "source_line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Line"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "blocking",
+          "message"
+        ],
+        "title": "ImportIssue"
+      },
+      "ImportOptions": {
+        "properties": {
+          "as_of": {
+            "type": "string",
+            "format": "date",
+            "title": "As Of"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency"
+          },
+          "history_complete": {
+            "type": "boolean",
+            "title": "History Complete",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "as_of",
+          "currency"
+        ],
+        "title": "ImportOptions"
+      },
       "ImportStatus": {
         "type": "string",
         "enum": [
@@ -2113,6 +2844,18 @@
           "OTHER"
         ],
         "title": "InstrumentType"
+      },
+      "IssueCode": {
+        "type": "string",
+        "enum": [
+          "UNSUPPORTED_ACTIVITY",
+          "INVALID_MOVEMENT",
+          "FUTURE_TRADE",
+          "NEGATIVE_PRIOR_BALANCE",
+          "INCOMPLETE_HISTORY",
+          "COMPLETE_HISTORY_MISMATCH"
+        ],
+        "title": "IssueCode"
       },
       "JsonValue": {},
       "LedgerIngestResult": {
@@ -2206,6 +2949,51 @@
         "title": "MoneyWeightedReturnStatus",
         "description": "Why the money-weighted return (XIRR) is, or is not, a number.\n\nA bare ``null`` cannot distinguish \"this portfolio has too little history to\nhave a return\" from \"we could not price your open positions today\". Those\ncall for completely different user action \u2014 enter more history versus\nconfigure market data \u2014 so the reason travels with the value."
       },
+      "ObservedActivity": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "import_id": {
+            "type": "integer",
+            "title": "Import Id"
+          },
+          "portfolio_id": {
+            "type": "integer",
+            "title": "Portfolio Id"
+          },
+          "security_id": {
+            "type": "integer",
+            "title": "Security Id"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency"
+          },
+          "source_code": {
+            "type": "string",
+            "const": "VANGUARD",
+            "title": "Source Code",
+            "default": "VANGUARD"
+          },
+          "fact": {
+            "$ref": "#/components/schemas/ActivityFact"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "import_id",
+          "portfolio_id",
+          "security_id",
+          "currency",
+          "fact"
+        ],
+        "title": "ObservedActivity"
+      },
       "OpenLot": {
         "properties": {
           "trade_date": {
@@ -2232,6 +3020,51 @@
         ],
         "title": "OpenLot",
         "description": "An unclosed FIFO purchase lot, valued in the portfolio base currency."
+      },
+      "ParsedVanguard": {
+        "properties": {
+          "checksum": {
+            "type": "string",
+            "title": "Checksum"
+          },
+          "plan_number": {
+            "type": "string",
+            "title": "Plan Number"
+          },
+          "plan_name": {
+            "type": "string",
+            "title": "Plan Name"
+          },
+          "account_number": {
+            "type": "string",
+            "title": "Account Number"
+          },
+          "holdings": {
+            "items": {
+              "$ref": "#/components/schemas/HoldingFact"
+            },
+            "type": "array",
+            "title": "Holdings"
+          },
+          "activity": {
+            "items": {
+              "$ref": "#/components/schemas/ActivityFact"
+            },
+            "type": "array",
+            "title": "Activity"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "checksum",
+          "plan_number",
+          "plan_name",
+          "account_number",
+          "holdings",
+          "activity"
+        ],
+        "title": "ParsedVanguard"
       },
       "PortfolioAnalytics": {
         "properties": {
@@ -2586,6 +3419,187 @@
         ],
         "title": "PositionSnapshot",
         "description": "A user's *current* holding, captured without full transaction history.\n\nThis is the answer to \"my portfolio is 10 years old and I don't want to key in\nevery trade\": you assert the position as it stands today \u2014 how many shares you\nhold and what they cost \u2014 and the system records it as a single opening ``BUY``\nlot in the ledger. Every downstream calculator then treats it like any other\nlot, so cost-basis and unrealized P&L are exact.\n\nProvide the cost basis exactly one of two ways (brokerages report both):\n\n* ``cost_basis_per_share`` \u2014 the average price paid per share, or\n* ``total_cost_basis`` \u2014 the aggregate amount invested (we divide by quantity).\n\n``as_of`` is the acquisition/opening date. When you genuinely don't know it,\nleave it unset and the service stamps today's date \u2014 but note the money-weighted\nreturn (XIRR) is only meaningful with a *real* purchase date, so a snapshot with\na placeholder date will (correctly) leave XIRR undefined while cost-basis and\nunrealized P&L stay exact."
+      },
+      "Reconciliation": {
+        "properties": {
+          "fund_name": {
+            "type": "string",
+            "title": "Fund Name"
+          },
+          "closing_units": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Closing Units"
+          },
+          "net_supported_movement": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Supported Movement"
+          },
+          "implied_prior_units": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Implied Prior Units"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "HISTORY_INCOMPLETE",
+              "SHARES_RECONCILED",
+              "BLOCKED"
+            ],
+            "title": "Status"
+          },
+          "performance_calculable": {
+            "type": "boolean",
+            "const": false,
+            "title": "Performance Calculable",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "fund_name",
+          "closing_units",
+          "net_supported_movement",
+          "implied_prior_units",
+          "status"
+        ],
+        "title": "Reconciliation"
+      },
+      "RetirementImport": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "portfolio_id": {
+            "type": "integer",
+            "title": "Portfolio Id"
+          },
+          "valuation_id": {
+            "type": "integer",
+            "title": "Valuation Id"
+          },
+          "imported_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Imported At"
+          },
+          "storage_key": {
+            "type": "string",
+            "title": "Storage Key"
+          },
+          "status": {
+            "type": "string",
+            "const": "COMMITTED",
+            "title": "Status",
+            "default": "COMMITTED"
+          },
+          "preview": {
+            "$ref": "#/components/schemas/RetirementPreview"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "portfolio_id",
+          "valuation_id",
+          "imported_at",
+          "storage_key",
+          "preview"
+        ],
+        "title": "RetirementImport"
+      },
+      "RetirementPreview": {
+        "properties": {
+          "portfolio_id": {
+            "type": "integer",
+            "title": "Portfolio Id"
+          },
+          "preview_token": {
+            "type": "string",
+            "title": "Preview Token"
+          },
+          "options": {
+            "$ref": "#/components/schemas/ImportOptions"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ParsedVanguard"
+          },
+          "funds": {
+            "items": {
+              "$ref": "#/components/schemas/FundMapping"
+            },
+            "type": "array",
+            "title": "Funds"
+          },
+          "reported_total": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Reported Total"
+          },
+          "cost_basis": {
+            "type": "null",
+            "title": "Cost Basis"
+          },
+          "unrealized_pnl": {
+            "type": "null",
+            "title": "Unrealized Pnl"
+          },
+          "money_weighted_return": {
+            "type": "null",
+            "title": "Money Weighted Return"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/ImportIssue"
+            },
+            "type": "array",
+            "title": "Issues"
+          },
+          "reconciliation": {
+            "items": {
+              "$ref": "#/components/schemas/Reconciliation"
+            },
+            "type": "array",
+            "title": "Reconciliation"
+          },
+          "can_commit": {
+            "type": "boolean",
+            "title": "Can Commit"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "portfolio_id",
+          "preview_token",
+          "options",
+          "source",
+          "funds",
+          "reported_total",
+          "issues",
+          "reconciliation",
+          "can_commit"
+        ],
+        "title": "RetirementPreview"
       },
       "SecurityAlias": {
         "properties": {
