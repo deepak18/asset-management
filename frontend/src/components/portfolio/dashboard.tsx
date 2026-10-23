@@ -13,6 +13,11 @@ import { CreatePortfolioDialog } from "@/components/portfolio/create-portfolio-d
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ErrorState, LoadingRows } from "@/components/shared/states";
 import { HoldingsTable } from "@/components/portfolio/holdings-table";
+import { AccountSettings } from "@/components/portfolio/account-settings";
+import { RetirementImportPanel } from "@/components/portfolio/retirement-import-panel";
+import { ReportedHoldings } from "@/components/portfolio/reported-holdings";
+import { useReportedAccount } from "@/hooks/use-retirement";
+import { Button } from "@/components/ui/button";
 
 /**
  * Unified Portfolio Dashboard (§1.4).
@@ -60,8 +65,134 @@ export function Dashboard() {
     );
   }
 
-  const currency = selected?.base_currency;
+  return (
+    <DashboardAccount
+      key={selectedId}
+      portfolioId={selectedId}
+      currency={selected?.base_currency}
+      dataVersion={dataVersion}
+      refreshData={refreshData}
+    />
+  );
+}
 
+function DashboardAccount({
+  portfolioId,
+  currency,
+  dataVersion,
+  refreshData,
+}: {
+  portfolioId: number;
+  currency?: string;
+  dataVersion: number;
+  refreshData: () => void;
+}) {
+  const { reloadPortfolios } = usePortfolioSelection();
+  const resource = useReportedAccount(portfolioId, dataVersion);
+  const [mode, setMode] = React.useState<"reported" | "ledger" | null>(null);
+  const [lastDefaultReported, setLastDefaultReported] = React.useState<boolean | null>(null);
+  const [listError, setListError] = React.useState("");
+  function changed() {
+    refreshData();
+    void reloadPortfolios().then(
+      () => setListError(""),
+      () =>
+        setListError(
+          "Portfolio selector could not refresh. Account panels use freshly loaded account data.",
+        ),
+    );
+  }
+  const autoReported =
+    resource.status === "success"
+      ? resource.data.valuation.status !== "EMPTY" ||
+        ["TRADITIONAL_401K", "ROTH_401K", "TRADITIONAL_IRA", "ROTH_IRA"].includes(
+          resource.data.account.account_type ?? "UNKNOWN",
+        )
+      : lastDefaultReported;
+  // Retain view policy only, never a previous generation's reported values.
+  // The account-keyed parent resets this on selection changes. Updating during
+  // render avoids an effect frame that could briefly mount the wrong view.
+  if (resource.status === "success" && autoReported !== lastDefaultReported) {
+    setLastDefaultReported(autoReported);
+  }
+  const reported = mode === "reported" || (mode == null && autoReported === true);
+  const ledger = mode === "ledger" || (mode == null && autoReported === false);
+  return (
+    <div className="flex flex-col gap-6">
+      <AccountSettings
+        portfolioId={portfolioId}
+        refreshToken={dataVersion}
+        onChanged={changed}
+      />
+      {listError && <p role="alert">{listError}</p>}
+      <nav aria-label="Account valuation view" className="flex gap-2">
+        <Button
+          variant="outline"
+          aria-pressed={reported}
+          onClick={() => setMode("reported")}
+        >
+          Reported Holdings
+        </Button>
+        <Button
+          variant="outline"
+          aria-pressed={ledger}
+          onClick={() => setMode("ledger")}
+        >
+          Ledger Analytics
+        </Button>
+      </nav>
+      {resource.status === "loading" ? (
+        <p role="status">Loading account valuation…</p>
+      ) : resource.status === "error" ? (
+        <>
+          <ErrorState message={resource.error.message} />
+          <Button onClick={refreshData}>Reload Account View</Button>
+        </>
+      ) : null}
+      {reported && resource.status === "success" ? (
+        <ReportedHoldings
+          valuation={resource.data.valuation}
+          securities={resource.data.securities}
+        />
+      ) : null}
+      {ledger ? (
+        <>
+          <p className="text-sm text-muted-foreground">
+            Ledger Analytics: trade-ledger figures only, not a retirement account
+            balance. Reported snapshots are never added to these values.
+          </p>
+          <LegacyLedger
+            portfolioId={portfolioId}
+            currency={currency}
+            dataVersion={dataVersion}
+            refreshData={refreshData}
+          />
+        </>
+      ) : null}
+      <RetirementImportPanel
+        portfolioId={portfolioId}
+        refreshToken={dataVersion}
+        onSuccess={() => {
+          setMode("reported");
+          changed();
+        }}
+      />
+    </div>
+  );
+}
+
+function LegacyLedger({
+  portfolioId: selectedId,
+  currency,
+  dataVersion,
+  refreshData,
+}: {
+  portfolioId: number;
+  currency?: string;
+  dataVersion: number;
+  refreshData: () => void;
+}) {
+  // Keep the existing dashboard return (summary through Robinhood ImportPanel) here unchanged.
   return (
     <div className="flex flex-col gap-6">
       <PortfolioSummary portfolioId={selectedId} refreshToken={dataVersion} />

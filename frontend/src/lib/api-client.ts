@@ -15,6 +15,13 @@ import type {
   TransactionInput,
   HoldingHistoryReview,
   HoldingHistoryConfirmation,
+  AccountUpdate,
+  SecurityInfo,
+  ValuationView,
+  RetirementOptions,
+  RetirementPreview,
+  RetirementImport,
+  ObservedActivity,
 } from "@/types/domain";
 
 /**
@@ -430,6 +437,66 @@ export const apiClient = {
       signal,
     );
   },
+
+  updateAccount(
+    id: number,
+    body: AccountUpdate,
+    signal?: AbortSignal,
+  ): Promise<PortfolioSummary> {
+    return patchJson(`${API_V1}/portfolios/${id}/account`, body, signal);
+  },
+  listSecurities(signal?: AbortSignal): Promise<SecurityInfo[]> {
+    return getJson(`${API_V1}/securities`, signal);
+  },
+  getValuation(id: number, signal?: AbortSignal): Promise<ValuationView> {
+    return getJson(`${API_V1}/portfolios/${id}/valuations`, signal);
+  },
+  previewRetirementImport(
+    id: number,
+    file: File,
+    options: RetirementOptions,
+    signal?: AbortSignal,
+  ): Promise<RetirementPreview> {
+    return postForm(
+      `${API_V1}/portfolios/${id}/retirement-imports/preview`,
+      retirementForm(file, options),
+      signal,
+    );
+  },
+  commitRetirementImport(
+    id: number,
+    file: File,
+    options: RetirementOptions,
+    previewToken: string,
+    signal?: AbortSignal,
+  ): Promise<RetirementImport> {
+    const form = retirementForm(file, options);
+    form.append("preview_token", previewToken);
+    form.append("confirmed", "true");
+    return postForm(`${API_V1}/portfolios/${id}/retirement-imports`, form, signal);
+  },
+  listRetirementImports(id: number, signal?: AbortSignal): Promise<RetirementImport[]> {
+    return getJson(`${API_V1}/portfolios/${id}/retirement-imports`, signal);
+  },
+  getRetirementImport(
+    id: number,
+    importId: number,
+    signal?: AbortSignal,
+  ): Promise<RetirementImport> {
+    return getJson(`${API_V1}/portfolios/${id}/retirement-imports/${importId}`, signal);
+  },
+  listAccountActivity(id: number, signal?: AbortSignal): Promise<ObservedActivity[]> {
+    return getJson(`${API_V1}/portfolios/${id}/account-activity`, signal);
+  },
 } as const;
 
 export type ApiClient = typeof apiClient;
+
+function retirementForm(file: File, options: RetirementOptions): FormData {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("as_of", options.as_of);
+  form.append("currency", options.currency);
+  form.append("history_complete", String(options.history_complete ?? false));
+  return form;
+}

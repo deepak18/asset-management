@@ -25,6 +25,7 @@ import {
   confirmHistoryReview,
   addMockTransactions,
 } from "@/mocks/state";
+import { retirementHandlers } from "@/mocks/retirement-handlers";
 
 /**
  * MSW request handlers implementing the OpenAPI contract against fixtures +
@@ -54,6 +55,7 @@ function uniqueTickers(items: { ticker?: string }[]): string[] {
 }
 
 export const handlers = [
+  ...retirementHandlers,
   http.get(`${base}/health`, () => HttpResponse.json({ status: "ok" })),
 
   http.get(`${base}/api/v1/portfolios`, () => HttpResponse.json(listPortfolios())),

@@ -455,3 +455,100 @@ resubmits. Adding a missing transaction remains a repair: refresh and reload whi
 keeping the review open. Regression coverage includes
 `src/__tests__/components/history-confirm-dismissal.test.tsx` and
 `src/__tests__/components/button-labels.test.tsx`.
+
+## Vanguard retirement accounts (slice 2b)
+
+Live prerequisites: the published backend contract and migrations through **0010**;
+normal frontend setup above is unchanged. No MCP or market-data integration is used.
+Create/select a USD portfolio, open **Edit Account Settings**, save known metadata
+(or leave account type Unknown), then choose a CSV and **Holdings as of date** in
+**Vanguard Retirement Import**. The date starts blank because this export does not
+supply a holdings date. Currency is currently fixed to USD. Inception history is an
+explicit conservative opt-in and never enables returns by itself.
+
+**Preview Vanguard Import** displays all source funds/units/prices/reported values,
+source plan/account identifiers, every mapping (including activity-only funds),
+full inspectable activity/source facts, reconciliation and backend issues. No public
+fund ticker, tax type, instrument classification or opening lot is inferred. Review
+acknowledgement starts unchecked; confirmation also requires `can_commit`. File,
+date, history assertion, portfolio and dashboard-refresh changes invalidate review.
+On 409, backend duplicate/overlap/stale guidance is shown and a new preview is
+required. Other errors preserve file/options and, for commit failures, the review.
+Cancel/unmount/switch aborts transport and ignores abandoned results; submitted
+server commits can nevertheless finish, so reload history before another upload.
+
+Successful import refreshes reported snapshot/security names, account metadata,
+portfolio selector resource, persisted import history/detail and observed activity.
+Unsaved account-settings drafts survive resource refresh. Settings are seeded from
+GET of the actual selected portfolio, not the selector's cached summary. Blank
+nullable metadata fields explicitly clear with null; account IDs remain strings.
+
+**Reported Holdings** becomes primary for AVAILABLE/PARTIAL snapshots or known
+retirement account types. It joins security names by numeric identity with an
+`Unknown security #id` fallback, not ticker guesses. Its total is the backend's
+reported total, never units times price, ledger value, or an aggregate of snapshots.
+PARTIAL coverage, source/date/import provenance and valuation-only return limits are
+visible. Null values use the existing dash formatters, not zero. **Ledger Analytics**
+is an explicit separate view retaining the existing brokerage workflow, Robinhood
+import, allocation inspection, trade forms and history/deletion controls. No snapshot
+is inserted into that ledger and the two views must never be summed.
+
+### Consumed published REST seam
+
+- GET `/api/v1/portfolios/{id}` and portfolio list (existing account reads).
+- PATCH `/api/v1/portfolios/{id}/account`: AccountUpdate -> PortfolioSummary;
+  omitted fields preserve values, null clears nullable strings; 200/404/422.
+- GET `/api/v1/securities`: SecurityInfo[]; names join by numeric ID, null ticker
+  stays unconfirmed. No speculative post-import identity/mapping editor is offered.
+- GET `/api/v1/portfolios/{id}/valuations`: ValuationView with nullable snapshot
+  and AVAILABLE/PARTIAL/EMPTY; latest by backend valuation date, never summed.
+- POST `.../retirement-imports/preview`: multipart file, explicit ISO `as_of`,
+  `currency=USD`, `history_complete=false|true` -> RetirementPreview (200).
+- POST `.../retirement-imports`: identical reviewed bytes/options plus preview_token
+  and exact text `confirmed=true` -> RetirementImport (201).
+- GET `.../retirement-imports`, `.../retirement-imports/{import_id}` and
+  `.../account-activity`: retained import list/detail and ObservedActivity[] (200).
+- Import writes surface 404/409/413/422 and preserve backend detail. The browser
+  supplies multipart boundaries; the client never sets JSON Content-Type on files.
+
+Types are regenerated with `npm run typegen`. OpenAPI's generator makes defaulted
+account_type required in generated types; request aliases explicitly allow omission
+under the published contract, while PortfolioSummary remains the strict read type.
+Decimals stay strings through formatting; no financial or history policy is in TS.
+
+### Files, mocks and regression evidence
+
+- `src/hooks/use-retirement.ts`: abortable, generation-tagged reads and single-write
+  scope guard; old resources are hidden immediately on key changes.
+- `src/components/portfolio/account-settings.tsx`: selected-account Save/Cancel,
+  leading-zero/null fidelity, pending/error drafts and refreshed server metadata.
+- `src/components/portfolio/retirement-import-panel.tsx`: review/confirmation,
+  persisted history inspection and full observed facts, without ledger ingestion.
+- `src/components/portfolio/reported-holdings.tsx`: separate reported balance,
+  partial/empty states, identity join, decimal/null formatting and provenance.
+- `src/components/portfolio/dashboard.tsx`: scoped view selection and write refresh.
+- `src/mocks/retirement-fixtures.ts` / `retirement-handlers.ts`: wholly fictitious
+  fixed demo bytes, account/valuation/security reads and persisted preview/commit.
+  Existing mock state resets this slice between tests and keeps legacy data intact.
+- `src/__tests__/lib/retirement-api.test.ts`: multipart exact values, status/detail,
+  decimal/null contracts, read/write persistence, scope and mock limitations.
+- `src/__tests__/lib/retirement-transport.ts`: test-only jsdom/Node multipart and
+  File-brand bridge, restored after tests; production transport is unchanged.
+- `src/__tests__/components/{account-settings,retirement-import,reported-holdings}.test.tsx`:
+  accessible saves/leading zeros, actual workflow refresh, explicit date/review,
+  blockers, failures/conflicts, drafts, abort/stale scope, no double submit, history
+  recovery, nullable snapshots and primary balance vs legacy brokerage view.
+- `button-labels.test.tsx` adds the new fixed Title Case actions; all original
+  dashboard allocation/history/classification/deletion regressions remain active.
+
+Mock mode is intentionally limited: only a file named `demo-retirement.csv` with
+exactly the exported `demoRetirementCsv` bytes is accepted. To try it, write that
+fictitious constant to a local temporary CSV with LF newlines; do not substitute
+private metadata. Arbitrary exports must use the real backend. The mock is not a
+Vanguard parser or a replacement for backend reconciliation/overlap policy.
+
+Validation: `npm run typegen` succeeded; `npm test` **235 passed in 31 files**;
+`npm run lint` and `npm run typecheck` exited 0. No dependencies, backend code, MCP,
+real account fixtures or CSV files changed. Live browser/API integration was not
+exercised. Post-import security metadata/ticker/alias amendment remains an explicit
+future backend contract slice before fund look-through, not a guessed frontend API.

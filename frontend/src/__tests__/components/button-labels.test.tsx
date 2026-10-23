@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it } from "vitest";
 import { Dashboard } from "@/components/portfolio/dashboard";
 import { Nav } from "@/components/app-shell/nav";
 import { PortfolioSelectionProvider } from "@/hooks/use-portfolio-selection";
@@ -9,123 +9,160 @@ import { AllocationCharts } from "@/components/portfolio/allocation-chart";
 import { formatMoney, formatPercent } from "@/lib/format";
 import type { AllocationWeight } from "@/types/domain";
 
-it("uses explicit Title Case for dashboard actions, icon actions and dialog controls without changing data", async () => {
+beforeEach(() => {
   window.localStorage.clear();
   window.localStorage.setItem("am.selected.portfolio", "1");
+});
+
+afterEach(() => {
+  window.localStorage.clear();
+  document.documentElement.classList.remove("dark");
+});
+
+async function renderDashboard() {
   const user = userEvent.setup();
-  try {
-    render(
-      <PortfolioSelectionProvider>
-        <Nav />
-        <Dashboard />
-      </PortfolioSelectionProvider>,
-    );
-    // Portfolio selection loads before panel reads; parallel jsdom/MSW workers
-    // can exceed the default 1s wait even though no handler delays the response.
-    await screen.findByRole(
-      "button",
-      { name: "Review History For AAPL" },
-      { timeout: 3_000 },
-    );
-    await screen.findByRole("button", { name: "Delete AAPL BUY Transaction 101" });
-    const categoryButtons = new Set<HTMLElement>();
-    for (const [title, rows] of [
-      ["Allocation by sector", getAnalytics(1)!.allocation_by_sector],
-      ["Allocation by industry", getAnalytics(1)!.allocation_by_industry],
-    ] as const) {
-      const list = await screen.findByRole("list", { name: `${title} categories` });
-      expect(within(list).getAllByRole("button")).toHaveLength(rows.length);
-      for (const row of rows) {
-        const name = `${row.key} ${formatMoney(row.market_value, "USD")} ${formatPercent(row.weight)}`;
-        const button = within(list).getByRole("button", { name });
-        expect(button).toHaveAccessibleName(name);
-        expect(button).toHaveAttribute("aria-pressed", "false");
-        categoryButtons.add(button);
-      }
-    }
-    const visible = new Set([
-      "Clear Selection",
-      "New Portfolio",
-      "Classify Holdings",
-      "Review History",
-      "Delete",
-      "Add",
-      "Add Position",
-      "Add Transaction",
-      "Choose File",
-      "",
-    ]);
-    const names = new Set([
-      "Clear Selection",
-      "New Portfolio",
-      "Classify Holdings",
-      "Add",
-      "Add Position",
-      "Add Transaction",
-      "Choose File",
-      "Toggle Theme",
-    ]);
-    for (const holding of getHoldings(1)!) {
-      names.add(`Review History For ${holding.ticker}`);
-      names.add(`Edit ${holding.ticker} Sector`);
-      names.add(`Edit ${holding.ticker} Industry`);
-    }
-    for (const row of getTransactions(1)!)
-      names.add(`Delete ${row.ticker} ${row.type} Transaction ${row.id}`);
-    for (const button of screen.getAllByRole("button")) {
-      if (categoryButtons.has(button)) continue;
-      expect(visible.has(button.textContent!.trim())).toBe(true);
-      const name = button.getAttribute("aria-label") ?? button.textContent!.trim();
-      expect(names.has(name)).toBe(true);
+  render(
+    <PortfolioSelectionProvider>
+      <Nav />
+      <Dashboard />
+    </PortfolioSelectionProvider>,
+  );
+  // Portfolio selection loads before panel reads; parallel jsdom/MSW workers
+  // can exceed the default 1s wait even though no handler delays the response.
+  await screen.findByRole(
+    "button",
+    { name: "Review History For AAPL" },
+    { timeout: 3_000 },
+  );
+  return user;
+}
+
+it("uses explicit Title Case and accessible names for every fixed dashboard action without changing allocation data", async () => {
+  await renderDashboard();
+  await screen.findByRole("button", { name: "Delete AAPL BUY Transaction 101" });
+  const categoryButtons = new Set<HTMLElement>();
+  for (const [title, rows] of [
+    ["Allocation by sector", getAnalytics(1)!.allocation_by_sector],
+    ["Allocation by industry", getAnalytics(1)!.allocation_by_industry],
+  ] as const) {
+    const list = await screen.findByRole("list", { name: `${title} categories` });
+    expect(within(list).getAllByRole("button")).toHaveLength(rows.length);
+    for (const row of rows) {
+      const name = `${row.key} ${formatMoney(row.market_value, "USD")} ${formatPercent(row.weight)}`;
+      const button = within(list).getByRole("button", { name });
       expect(button).toHaveAccessibleName(name);
+      expect(button).toHaveAttribute("aria-pressed", "false");
+      categoryButtons.add(button);
     }
-    expect(screen.getByLabelText("Upload Broker Statement")).toHaveAttribute(
-      "type",
-      "file",
-    );
-    await user.type(screen.getByRole("textbox", { name: "Add ticker" }), "NVDA");
-    await user.click(screen.getByRole("button", { name: "Add" }));
-    expect(screen.getByRole("button", { name: "Remove NVDA" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "New Portfolio" }));
-    expect(
-      within(screen.getByRole("dialog"))
-        .getAllByRole("button")
-        .map((button) => button.getAttribute("aria-label") ?? button.textContent),
-    ).toEqual(["Close Dialog", "Cancel", "Create"]);
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
-    await user.click(screen.getByRole("button", { name: "Review History For AAPL" }));
-    const ui = within(screen.getByRole("dialog"));
-    await ui.findByRole("table");
-    expect(
-      ui
-        .getAllByRole("button")
-        .map((button) => button.getAttribute("aria-label") ?? button.textContent),
-    ).toEqual([
-      "Close Dialog",
-      "Reload History / Retry",
-      "Add Transaction",
-      "Confirm History",
-      "Cancel",
-    ]);
-    await user.click(ui.getByRole("button", { name: "Cancel" }));
-    await user.click(screen.getByRole("button", { name: "Edit AAPL Sector" }));
-    expect(screen.getByRole("button", { name: "Save AAPL Sector" })).toHaveTextContent(
-      "Save",
-    );
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
-    await user.click(
-      screen.getByRole("button", { name: "Delete AAPL BUY Transaction 101" }),
-    );
-    expect(
-      within(screen.getByRole("dialog"))
-        .getAllByRole("button")
-        .map((button) => button.getAttribute("aria-label") ?? button.textContent),
-    ).toEqual(["Close Dialog", "Cancel", "Delete Transaction"]);
-    expect(screen.getAllByText("Consumer Electronics").length).toBeGreaterThan(0);
-  } finally {
-    window.localStorage.clear();
-    document.documentElement.classList.remove("dark");
   }
+  const visible = new Set([
+    "Clear Selection",
+    "New Portfolio",
+    "Classify Holdings",
+    "Review History",
+    "Delete",
+    "Add",
+    "Add Position",
+    "Add Transaction",
+    "Choose File",
+    "",
+    "Edit Account Settings",
+    "Reported Holdings",
+    "Ledger Analytics",
+    "Preview Vanguard Import",
+    "Reload Retirement History",
+  ]);
+  const names = new Set([
+    "Clear Selection",
+    "New Portfolio",
+    "Classify Holdings",
+    "Add",
+    "Add Position",
+    "Add Transaction",
+    "Choose File",
+    "Toggle Theme",
+    "Edit Account Settings",
+    "Reported Holdings",
+    "Ledger Analytics",
+    "Preview Vanguard Import",
+    "Reload Retirement History",
+  ]);
+  for (const holding of getHoldings(1)!) {
+    names.add(`Review History For ${holding.ticker}`);
+    names.add(`Edit ${holding.ticker} Sector`);
+    names.add(`Edit ${holding.ticker} Industry`);
+  }
+  for (const row of getTransactions(1)!)
+    names.add(`Delete ${row.ticker} ${row.type} Transaction ${row.id}`);
+  for (const button of screen.getAllByRole("button")) {
+    if (categoryButtons.has(button)) continue;
+    expect(visible.has(button.textContent!.trim())).toBe(true);
+    const name = button.getAttribute("aria-label") ?? button.textContent!.trim();
+    expect(names.has(name)).toBe(true);
+    expect(button).toHaveAccessibleName(name);
+  }
+  expect(screen.getByLabelText("Upload Broker Statement")).toHaveAttribute(
+    "type",
+    "file",
+  );
+});
+
+it("preserves ticker casing in the watchlist removal action", async () => {
+  const user = await renderDashboard();
+  await user.type(screen.getByRole("textbox", { name: "Add ticker" }), "NVDA");
+  await user.click(screen.getByRole("button", { name: "Add" }));
+  expect(screen.getByRole("button", { name: "Remove NVDA" })).toBeInTheDocument();
+});
+
+it("uses Title Case for portfolio creation dialog controls", async () => {
+  const user = await renderDashboard();
+  await user.click(screen.getByRole("button", { name: "New Portfolio" }));
+  const ui = within(screen.getByRole("dialog"));
+  expect(
+    ui.getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label") ?? button.textContent),
+  ).toEqual(["Close Dialog", "Cancel", "Create"]);
+  await user.click(ui.getByRole("button", { name: "Cancel" }));
+});
+
+it("uses Title Case for loaded holding-history dialog controls", async () => {
+  const user = await renderDashboard();
+  await user.click(screen.getByRole("button", { name: "Review History For AAPL" }));
+  const ui = within(screen.getByRole("dialog"));
+  await ui.findByRole("table");
+  expect(
+    ui.getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label") ?? button.textContent),
+  ).toEqual([
+    "Close Dialog",
+    "Reload History / Retry",
+    "Add Transaction",
+    "Confirm History",
+    "Cancel",
+  ]);
+  await user.click(ui.getByRole("button", { name: "Cancel" }));
+});
+
+it("uses Title Case for the ticker-scoped classification save action", async () => {
+  const user = await renderDashboard();
+  await user.click(screen.getByRole("button", { name: "Edit AAPL Sector" }));
+  expect(screen.getByRole("button", { name: "Save AAPL Sector" })).toHaveTextContent(
+    "Save",
+  );
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+});
+
+it("uses Title Case for transaction deletion controls without changing classification data", async () => {
+  const user = await renderDashboard();
+  await user.click(
+    await screen.findByRole("button", { name: "Delete AAPL BUY Transaction 101" }),
+  );
+  expect(
+    within(screen.getByRole("dialog"))
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label") ?? button.textContent),
+  ).toEqual(["Close Dialog", "Cancel", "Delete Transaction"]);
+  expect(screen.getAllByText("Consumer Electronics").length).toBeGreaterThan(0);
 });
 
 it("preserves category data casing independently of fixed action Title Case", () => {

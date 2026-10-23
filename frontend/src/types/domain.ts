@@ -40,7 +40,10 @@ export type UnrealizedResult = components["schemas"]["UnrealizedResult"];
 export type OpenLot = components["schemas"]["OpenLot"];
 
 // Write + import surface (new in this contract revision).
-export type PortfolioCreate = components["schemas"]["PortfolioCreate"];
+// Generated defaults are required in TS; HTTP inputs may omit defaulted account_type.
+type PortfolioCreateSchema = components["schemas"]["PortfolioCreate"];
+export type PortfolioCreate = Omit<PortfolioCreateSchema, "account_type"> &
+  Partial<Pick<PortfolioCreateSchema, "account_type">>;
 export type PositionSnapshot = components["schemas"]["PositionSnapshot"];
 export type LedgerIngestResult = components["schemas"]["LedgerIngestResult"];
 export type StatementFormat = components["schemas"]["StatementFormat"];
@@ -73,3 +76,16 @@ export type HoldingHistoryConfirmation =
  * drift on the spelling.
  */
 export const UNCLASSIFIED_KEY = "UNCLASSIFIED";
+
+// Named aliases for the published account, valuation and retirement request/read schemas.
+export type AccountType = components["schemas"]["AccountType"];
+type AccountUpdateSchema = components["schemas"]["AccountUpdate"];
+export type AccountUpdate = Omit<AccountUpdateSchema, "account_type"> &
+  Partial<Pick<AccountUpdateSchema, "account_type">>;
+export type SecurityInfo = components["schemas"]["SecurityInfo"];
+export type ValuationView = components["schemas"]["ValuationView"];
+export type RetirementOptions = components["schemas"]["ImportOptions"];
+export type RetirementPreview = components["schemas"]["RetirementPreview"];
+export type RetirementImport = components["schemas"]["RetirementImport"];
+export type ObservedActivity = components["schemas"]["ObservedActivity"];
+export type ActivityFact = components["schemas"]["ActivityFact"];

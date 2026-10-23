@@ -30,7 +30,9 @@ export function Dialog({
   className?: string;
 }) {
   const panelRef = React.useRef<HTMLDivElement>(null);
-  React.useEffect(() => {
+  // Focus belongs to the DOM commit: passive cleanup can run after the dialog
+  // has disappeared, briefly leaving focus on body instead of its trigger.
+  React.useLayoutEffect(() => {
     if (!open) return;
     const previous =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;

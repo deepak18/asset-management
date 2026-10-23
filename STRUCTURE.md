@@ -503,3 +503,142 @@ calls, real CSV, live DB, staging or commits were used.
 
 Validation from backend: `uv run pytest` passed **580 tests** (3 integration tests
 deselected), `uv run ruff check .` passed and `uv run mypy` passed (57 source files).
+
+## Retirement dashboard slice 2b inventory
+Frontend-only delivery consumes the published slice 1/2a OpenAPI seam. New files
+(paths relative to repository root):
+- `frontend/src/hooks/use-retirement.ts`: abortable generation-keyed reads and single active scoped writes.
+- `frontend/src/components/portfolio/account-settings.tsx`: actual account GET, explicit metadata Save/Cancel, nullable clears and leading-zero drafts.
+- `frontend/src/components/portfolio/retirement-import-panel.tsx`: separate Vanguard preview/confirmation, source diagnostics, retained reviews/history/activity.
+- `frontend/src/components/portfolio/reported-holdings.tsx`: primary reported snapshot total, numeric security-name join, null/partial/empty provenance.
+- `frontend/src/mocks/retirement-fixtures.ts`: wholly fictitious fixed CSV bytes and typed preview/activity/valuation/security fixtures.
+- `frontend/src/mocks/retirement-handlers.ts`: contract-shaped account reads/writes and fixed-demo retirement persistence, no arbitrary parsing claim.
+- `frontend/src/__tests__/lib/retirement-api.test.ts`: exact multipart/options/true, typed errors, persistence, scope and mock refusal.
+- `frontend/src/__tests__/lib/retirement-transport.ts`: test-only jsdom/Node CSV multipart and File-brand bridge, restored after each test.
+- `frontend/src/__tests__/components/account-settings.test.tsx`: accessible metadata saves, zero-prefixed IDs, null clearing, drafts and stale/cancel guards.
+- `frontend/src/__tests__/components/retirement-import.test.tsx`: full dashboard import refresh, review invalidation, conflicts/errors/history, abort and double-submit guards.
+- `frontend/src/__tests__/components/reported-holdings.test.tsx`: identity/null/decimal/partial/empty fidelity, default view and stale portfolio isolation.
+Updated files:
+- `frontend/src/types/api.ts`: regenerated from actual `backend/openapi.json`; no manual edits.
+- `frontend/src/types/domain.ts`: separate default-optional request aliases and strict reads, plus account/security/valuation/retirement/activity aliases.
+- `frontend/src/lib/api-client.ts`: metadata PATCH, shared security and reported snapshot GETs, multipart preview/strict confirmation and retained import/activity reads.
+- `frontend/src/components/portfolio/dashboard.tsx`: account-keyed view boundary, automatic reported selection, explicit Ledger Analytics view and sibling/selector refresh.
+- `frontend/src/mocks/state.ts`: resettable scoped retirement persistence and immutable metadata replacement; existing mock creation fills default response metadata.
+- `frontend/src/mocks/handlers.ts`: registers retirement handlers for browser and test use.
+- `frontend/src/mocks/fixtures.ts`: required defaulted account_type on four legacy summaries; ledger values unchanged.
+- `frontend/src/__tests__/components/button-labels.test.tsx`: adds five new fixed dashboard actions to the exhaustive Title Case/accessibility inventory.
+- `README.md`: runnable account-settings, preview/confirm and reported-holdings click path, migration 0010 prerequisite and fixed-demo/live limits.
+- `frontend/README.md`: precise consumed REST seam, request/read distinctions, cancellation/drafts/refresh semantics, exact file map and validation evidence.
+- `PLAN.md`: delivered slice 2b status and scope; future identity amendment is not an import-workflow blocker.
+- `STRUCTURE.md`: this exact delivery inventory; pre-existing trees and backend inventories unchanged.
+Consumed contract: `backend/openapi.json`, with existing portfolio GET/list;
+PATCH `/api/v1/portfolios/{portfolio_id}/account`; GET `/api/v1/securities`;
+GET `/api/v1/portfolios/{portfolio_id}/valuations`; POST
+`/api/v1/portfolios/{portfolio_id}/retirement-imports/preview` and
+`/api/v1/portfolios/{portfolio_id}/retirement-imports`; GET that import collection,
+its `/{import_id}` detail and `/api/v1/portfolios/{portfolio_id}/account-activity`.
+Preview/commit use multipart file bytes and explicit date/currency/history options;
+commit adds the preview token and strict `confirmed=true`. Request aliases retain
+default omission semantics separately from strict response types. No backend or
+contract files are changed by slice 2b.
+Reported and legacy ledger values are never combined. Snapshots remain valuation-only;
+no frontend financial calculations, ticker guesses, acquisitions or returns are added.
+Mock mode accepts only the exported fictitious fixture, not arbitrary user CSVs.
+Success refreshes snapshot, names, account/selector metadata, history and activity;
+source/date/options/refresh changes invalidate reviews without discarding drafts.
+Stable UNKNOWN/null-ticker securities support the delivered workflow now;
+post-import identity amendment is future look-through work, not a slice 2b blocker.
+Validation from the implementation: typegen succeeded; full npm test passed 235/235
+in 31 files; npm run lint and npm run typecheck exited 0. No backend executable
+changes, dependencies, private fixtures, staging or commits. Live services/browser
+integration were not exercised.
+
+Final documentation review: HEAD prefix byte equality, zero U+FFFD in all four
+delivery docs, tracked/new-file whitespace checks and docs diagnostics passed.
+Frontend reruns: lint/typecheck passed; both full test runs had 234 passed and
+one focus-restoration failure at history-confirm-dismissal.test.tsx:68. The
+isolated file also failed that assertion (5 passed, 1 failed). No executable
+files changed during this review; this regression is reported, not hidden.
+
+## Retirement dashboard focus/refetch follow-up
+
+Exact files changed by this follow-up (prior uncommitted slice work is preserved):
+- `frontend/src/components/portfolio/dashboard.tsx`: keeps only the account-keyed
+  last resolved default-view boolean across refetches; renders legitimate ledger
+  panels in a stable sibling slot through valuation loading/errors. Reported data
+  still renders only from the current successful request generation. Portfolio
+  changes reset policy, explicit view choice, drafts and ledger component identity.
+- `frontend/src/components/ui/dialog.tsx`: focus acquisition/restoration uses layout
+  effect setup/cleanup so dismissal restores the connected trigger in the DOM
+  commit, not a later passive-effect flush. Keyboard/dismissal behavior is unchanged.
+- `frontend/src/__tests__/components/dashboard-account-refresh.test.tsx`: four
+  contract-shaped MSW regressions cover original-trigger identity/focus after
+  confirmation, sibling refresh, persisted confirmation, draft preservation through
+  errors/recovery, no stale/zero/empty reported fallback, explicit ledger selection,
+  account remounting and aborted older request-generation isolation.
+- `frontend/src/__tests__/components/dialog-focus.test.tsx`: two commit-time focus
+  regressions cover button/Escape dismissal, initial modal focus and restoration.
+- `STRUCTURE.md`: this inventory and validation record.
+
+The previously reported `history-confirm-dismissal.test.tsx:68` failure initially
+reproduced neither in isolation (6/6 passed) nor in the unchanged full suite
+(235/235 passed, 31 files). The new dashboard test then deterministically failed
+with focus on body because reported-resource loading unmounted the ledger trigger.
+After the dashboard fix, a full run reproduced the original **detail** focus failure
+(238 passed, 1 failed), which cannot be caused by Dashboard. The shared Dialog's
+passive cleanup allowed its DOM to disappear before focus restoration. New
+layout-phase observations independently reproduced body focus on dismissal (2/2
+failed before the primitive fix); switching that focus lifecycle to a layout effect
+fixed both commit-time regressions. The original history-confirm-dismissal tests
+remain completely unchanged: no skipped assertions, wait-budget or runner changes.
+
+Final validation from `frontend/`:
+- Focused `npm test -- src/__tests__/components/dialog-focus.test.tsx src/__tests__/components/dashboard-account-refresh.test.tsx src/__tests__/components/history-confirm-dismissal.test.tsx`: **12/12 passed**, 3 files.
+- First full run after both fixes: **240 passed, 1 failed** because the existing
+  button-labels test exceeded its 5000ms whole-test limit; no test/config changes
+  were made to mask that timeout.
+- Consecutive final full runs: `npm test -- --reporter=dot` **241/241 passed in 33
+  files** (23.76s), then `npm test` **241/241 passed in 33 files** (24.58s).
+- `npm run lint` and `npm run typecheck`: exit 0.
+- Editor diagnostics checked every follow-up file: no errors; Dialog retains the
+  pre-existing Next.js TS71007 warning for its unchanged `onClose` callback prop.
+- `git diff --check`: passed (only existing CRLF normalization notices).
+
+Consumed seam remains existing typed portfolio/valuation/security GETs and scoped
+holding-history GET/POST from `backend/openapi.json`; no contract/type regeneration,
+backend code, financial calculations, dependencies, staging or commits changed.
+`use-retirement.ts` generation guards are unchanged. README/PLAN semantics and run
+steps are unchanged, so those documents were not edited by this follow-up. Live
+browser/API integration was not exercised.
+
+## Button-label timeout follow-up
+
+Exact follow-up paths:
+- `frontend/src/__tests__/components/button-labels.test.tsx`: splits the single
+  dashboard workflow into independent fixed-action inventory, watchlist ticker,
+  creation dialog, loaded history dialog, classification editor and deletion dialog
+  cases. Shared render/storage cleanup isolates each case; dialog queries are scoped.
+  Every existing assertion is retained, including exhaustive accessible names,
+  allocation decimal formatting, ticker/classification casing and the unchanged
+  standalone uppercase/lowercase/mixed-case category regression. Existing focus
+  regression files, production code and global/per-test timeouts are unchanged;
+  the existing initial loaded-data query retains its 3s maximum retry budget.
+- `STRUCTURE.md`: this inventory and validation evidence.
+
+The parent reproduced the original combined case exceeding 5000ms (240 passed,
+1 failed), without a matcher failure. This follow-up addresses the shared whole-test
+budget rather than retrying that case until lucky. No validation command failed
+following the split:
+- `npm test -- src/__tests__/components/button-labels.test.tsx`: 7/7 passed;
+  cases took 71-831ms (8.59s command duration).
+- Two consecutive `npm test` runs: 246/246 passed in 33 files (20.77s, 19.65s).
+  The slowest split case took 1962ms and 1691ms respectively, below the unchanged
+  5000ms per-test budget. Full logs: `$env:TEMP\asset-button-split-full-1.log`
+  and `$env:TEMP\asset-button-split-full-2.log`.
+- `npm run lint` and `npm run typecheck`: exit 0.
+
+Consumed seam remains the published `backend/openapi.json` via existing typed
+REST client and contract-shaped MSW handlers: portfolio/account, valuation/security,
+ledger/holdings/analytics, holding-history and retirement-history/activity reads.
+No API/schema/typegen changes, dependencies, backend edits, staging or commits.
+README/PLAN setup and feature semantics are unchanged; no updates are required.

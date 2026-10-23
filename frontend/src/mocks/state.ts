@@ -1,3 +1,4 @@
+import type { AccountUpdate, RetirementImport, ObservedActivity, ValuationView } from "@/types/domain";
 import type {
   AllocationWeight,
   ClassificationFailure,
@@ -44,6 +45,7 @@ interface JobRuntime {
 }
 
 interface State {
+  retirement: Map<number, { imports: RetirementImport[]; activity: ObservedActivity[]; valuation: ValuationView }>;
   portfolios: PortfolioSummary[];
   nextPortfolioId: number;
   holdings: Map<number, HoldingInfo[]>;
@@ -58,6 +60,7 @@ interface State {
 
 function seed(): State {
   return {
+    retirement: new Map(),
     portfolios: [
       summariesById[1]!,
       summariesById[2]!,
@@ -113,6 +116,9 @@ export function createPortfolio(body: PortfolioCreate): PortfolioSummary {
     id: state.nextPortfolioId++,
     name: body.name,
     base_currency: body.base_currency,
+    account_type: body.account_type ?? "UNKNOWN",
+    custodian: body.custodian ?? null,
+    external_account_id: body.external_account_id ?? null,
   };
   state.portfolios = [...state.portfolios, summary];
   return summary;
@@ -710,4 +716,21 @@ export function confirmHistoryReview(
   holding.history_complete = true;
   holding.history_gaps = [];
   return getHistoryReview(id, ticker);
+}
+
+export function updateMockAccount(id: number, update: AccountUpdate): PortfolioSummary | undefined {
+  const account = findPortfolio(id);
+  if (!account) return undefined;
+  const next = { ...account, ...update };
+  state.portfolios = state.portfolios.map((item) => item.id === id ? next : item);
+  return next;
+}
+
+export function mockRetirement(id: number) {
+  let entry = state.retirement.get(id);
+  if (!entry) {
+    entry = { imports: [], activity: [], valuation: { portfolio_id: id, view: "REPORTED_SNAPSHOT", status: "EMPTY", snapshot: null } };
+    state.retirement.set(id, entry);
+  }
+  return entry;
 }

@@ -4,6 +4,74 @@
  */
 
 export interface paths {
+    "/api/v1/portfolios/{portfolio_id}/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Account */
+        patch: operations["update_account_api_v1_portfolios__portfolio_id__account_patch"];
+        trace?: never;
+    };
+    "/api/v1/securities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Securities */
+        get: operations["list_securities_api_v1_securities_get"];
+        put?: never;
+        /**
+         * Create Security
+         * @description Create an immutable identity; only explicit source-scoped aliases deduplicate.
+         */
+        post: operations["create_security_api_v1_securities_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolios/{portfolio_id}/valuations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Latest Valuation
+         * @description Latest by as_of, never sum history or merge with the legacy ledger.
+         *
+         *     Partial snapshots report only their own positions, not carried-forward values.
+         *     Existing portfolios without a snapshot return EMPTY with snapshot=null.
+         */
+        get: operations["latest_valuation_api_v1_portfolios__portfolio_id__valuations_get"];
+        put?: never;
+        /**
+         * Write Valuation
+         * @description Store a whole snapshot, not ledger events. Exact repeats also return 201.
+         *
+         *     Unknown security IDs and currency mismatches return 422. A changed assertion
+         *     for an existing portfolio/date returns 409; replacement is not supported.
+         */
+        post: operations["write_valuation_api_v1_portfolios__portfolio_id__valuations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portfolios": {
         parameters: {
             query?: never;
@@ -391,6 +459,83 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portfolios/{portfolio_id}/retirement-imports/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Import
+         * @description Read-only review. Unknown codes remain visible and block confirmation.
+         */
+        post: operations["preview_import_api_v1_portfolios__portfolio_id__retirement_imports_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolios/{portfolio_id}/retirement-imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Import History */
+        get: operations["import_history_api_v1_portfolios__portfolio_id__retirement_imports_get"];
+        put?: never;
+        /**
+         * Commit Import
+         * @description Multipart confirmation is exactly the text `true`; no truthy coercions.
+         *
+         *     Re-upload the reviewed bytes and options. State changes require a fresh preview.
+         */
+        post: operations["commit_import_api_v1_portfolios__portfolio_id__retirement_imports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolios/{portfolio_id}/retirement-imports/{import_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Import Detail */
+        get: operations["import_detail_api_v1_portfolios__portfolio_id__retirement_imports__import_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolios/{portfolio_id}/account-activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Account Activity */
+        get: operations["account_activity_api_v1_portfolios__portfolio_id__account_activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -415,6 +560,91 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccountErrorResponse */
+        AccountErrorResponse: {
+            /** Detail */
+            detail: string;
+        };
+        /**
+         * AccountType
+         * @enum {string}
+         */
+        AccountType: "UNKNOWN" | "TAXABLE" | "TRADITIONAL_401K" | "ROTH_401K" | "TRADITIONAL_IRA" | "ROTH_IRA" | "OTHER";
+        /**
+         * AccountUpdate
+         * @description Omitted fields stay unchanged; null clears nullable strings, not account_type.
+         */
+        AccountUpdate: {
+            /** @default UNKNOWN */
+            account_type: components["schemas"]["AccountType"];
+            /** Custodian */
+            custodian?: string | null;
+            /** External Account Id */
+            external_account_id?: string | null;
+        };
+        /** AccountValidationIssue */
+        AccountValidationIssue: {
+            /** Loc */
+            loc: (string | number)[];
+            /** Msg */
+            msg: string;
+            /** Type */
+            type: string;
+            input?: components["schemas"]["JsonValue"] | null;
+            ctx?: components["schemas"]["JsonValue"] | null;
+        };
+        /** AccountValidationResponse */
+        AccountValidationResponse: {
+            /** Detail */
+            detail: string | components["schemas"]["AccountValidationIssue"][];
+        };
+        /** ActivityFact */
+        ActivityFact: {
+            /** Checksum */
+            checksum: string;
+            /** Source Line */
+            source_line: number;
+            /** Source Reference */
+            source_reference: string;
+            /** Raw Fields */
+            raw_fields: string[];
+            /** Account Number */
+            account_number: string;
+            /**
+             * Trade Date
+             * Format: date
+             */
+            trade_date: string;
+            /**
+             * Run Date
+             * Format: date
+             */
+            run_date: string;
+            /** Code */
+            code: string;
+            /** Description */
+            description: string;
+            /** Fund Name */
+            fund_name: string;
+            /** Price */
+            price: string;
+            /** Quantity */
+            quantity: string;
+            /** Amount */
+            amount: string;
+            kind: components["schemas"]["ActivityKind"];
+            /** Fingerprint */
+            fingerprint: string;
+            /** External Contribution */
+            external_contribution: string | null;
+            /** Dividend Amount */
+            dividend_amount: string | null;
+        };
+        /**
+         * ActivityKind
+         * @enum {string}
+         */
+        ActivityKind: "CONTRIBUTION" | "REINVESTMENT" | "UNSUPPORTED";
         /**
          * AllocationWeight
          * @description One row of an allocation breakdown.
@@ -427,10 +657,50 @@ export interface components {
             /** Weight */
             weight: string;
         };
+        /**
+         * Availability
+         * @enum {string}
+         */
+        Availability: "AVAILABLE" | "PARTIAL" | "EMPTY";
+        /** Body_commit_import_api_v1_portfolios__portfolio_id__retirement_imports_post */
+        Body_commit_import_api_v1_portfolios__portfolio_id__retirement_imports_post: {
+            /** File */
+            file: string;
+            /** Preview Token */
+            preview_token: string;
+            /**
+             * Confirmed
+             * @constant
+             */
+            confirmed: "true";
+            /** As Of */
+            as_of: string;
+            /** Currency */
+            currency: string;
+            /**
+             * History Complete
+             * @default false
+             */
+            history_complete: boolean;
+        };
         /** Body_create_import_api_v1_portfolios__portfolio_id__imports_post */
         Body_create_import_api_v1_portfolios__portfolio_id__imports_post: {
             /** File */
             file: string;
+        };
+        /** Body_preview_import_api_v1_portfolios__portfolio_id__retirement_imports_preview_post */
+        Body_preview_import_api_v1_portfolios__portfolio_id__retirement_imports_preview_post: {
+            /** File */
+            file: string;
+            /** As Of */
+            as_of: string;
+            /** Currency */
+            currency: string;
+            /**
+             * History Complete
+             * @default false
+             */
+            history_complete: boolean;
         };
         /** ClassificationFailure */
         ClassificationFailure: {
@@ -491,6 +761,22 @@ export interface components {
          * @enum {string}
          */
         DataGap: "SECTOR" | "INDUSTRY" | "COST_BASIS" | "CURRENCY" | "SPLIT_RATIO" | "TICKER" | "TRADE_DATE" | "QUANTITY" | "TRANSACTION";
+        /** FundMapping */
+        FundMapping: {
+            /** Fund Name */
+            fund_name: string;
+            /** Alias Value */
+            alias_value: string;
+            /** Security Id */
+            security_id: number | null;
+            /** Ticker */
+            ticker: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "MAPPED" | "WILL_CREATE_UNKNOWN";
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -586,6 +872,33 @@ export interface components {
             /** Industry */
             industry?: string | null;
         };
+        /** HoldingFact */
+        HoldingFact: {
+            /** Checksum */
+            checksum: string;
+            /** Source Line */
+            source_line: number;
+            /** Source Reference */
+            source_reference: string;
+            /** Raw Fields */
+            raw_fields: string[];
+            /** Plan Number */
+            plan_number: string;
+            /** Plan Name */
+            plan_name: string;
+            /** Fund Name */
+            fund_name: string;
+            /** Quantity */
+            quantity: string;
+            /** Reported Price */
+            reported_price: string;
+            /** Reported Value */
+            reported_value: string;
+            /** Cost Basis */
+            cost_basis?: null;
+            /** Unrealized Pnl */
+            unrealized_pnl?: null;
+        };
         /** HoldingHistoryConfirmation */
         HoldingHistoryConfirmation: {
             /** Review Token */
@@ -660,12 +973,50 @@ export interface components {
          * @enum {string}
          */
         HoldingValuationSource: "LEDGER" | "QUOTE" | "UNAVAILABLE";
+        /** ImportIssue */
+        ImportIssue: {
+            code: components["schemas"]["IssueCode"];
+            /** Blocking */
+            blocking: boolean;
+            /** Fund Name */
+            fund_name?: string | null;
+            /** Source Line */
+            source_line?: number | null;
+            /** Message */
+            message: string;
+        };
+        /** ImportOptions */
+        ImportOptions: {
+            /**
+             * As Of
+             * Format: date
+             */
+            as_of: string;
+            /** Currency */
+            currency: string;
+            /**
+             * History Complete
+             * @default false
+             */
+            history_complete: boolean;
+        };
         /**
          * ImportStatus
          * @description Lifecycle of an asynchronous statement import.
          * @enum {string}
          */
         ImportStatus: "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED";
+        /**
+         * InstrumentType
+         * @enum {string}
+         */
+        InstrumentType: "UNKNOWN" | "STOCK" | "ETF" | "MUTUAL_FUND" | "COLLECTIVE_TRUST" | "TARGET_DATE_FUND" | "CASH" | "OTHER";
+        /**
+         * IssueCode
+         * @enum {string}
+         */
+        IssueCode: "UNSUPPORTED_ACTIVITY" | "INVALID_MOVEMENT" | "FUTURE_TRADE" | "NEGATIVE_PRIOR_BALANCE" | "INCOMPLETE_HISTORY" | "COMPLETE_HISTORY_MISMATCH";
+        JsonValue: unknown;
         /**
          * LedgerIngestResult
          * @description What a write/import operation actually recorded (the endpoint's response).
@@ -721,6 +1072,26 @@ export interface components {
          * @enum {string}
          */
         MoneyWeightedReturnStatus: "OK" | "UNPRICED_POSITIONS" | "INSUFFICIENT_FLOWS";
+        /** ObservedActivity */
+        ObservedActivity: {
+            /** Id */
+            id: number;
+            /** Import Id */
+            import_id: number;
+            /** Portfolio Id */
+            portfolio_id: number;
+            /** Security Id */
+            security_id: number;
+            /** Currency */
+            currency: string;
+            /**
+             * Source Code
+             * @default VANGUARD
+             * @constant
+             */
+            source_code: "VANGUARD";
+            fact: components["schemas"]["ActivityFact"];
+        };
         /**
          * OpenLot
          * @description An unclosed FIFO purchase lot, valued in the portfolio base currency.
@@ -735,6 +1106,21 @@ export interface components {
             quantity: string;
             /** Cost Per Share Base */
             cost_per_share_base: string;
+        };
+        /** ParsedVanguard */
+        ParsedVanguard: {
+            /** Checksum */
+            checksum: string;
+            /** Plan Number */
+            plan_number: string;
+            /** Plan Name */
+            plan_name: string;
+            /** Account Number */
+            account_number: string;
+            /** Holdings */
+            holdings: components["schemas"]["HoldingFact"][];
+            /** Activity */
+            activity: components["schemas"]["ActivityFact"][];
         };
         /**
          * PortfolioAnalytics
@@ -822,6 +1208,12 @@ export interface components {
             name: string;
             /** Base Currency */
             base_currency: string;
+            /** @default UNKNOWN */
+            account_type: components["schemas"]["AccountType"];
+            /** Custodian */
+            custodian?: string | null;
+            /** External Account Id */
+            external_account_id?: string | null;
         };
         /**
          * PortfolioSummary
@@ -834,6 +1226,12 @@ export interface components {
             name: string;
             /** Base Currency */
             base_currency: string;
+            /** @default UNKNOWN */
+            account_type: components["schemas"]["AccountType"];
+            /** Custodian */
+            custodian?: string | null;
+            /** External Account Id */
+            external_account_id?: string | null;
         };
         /**
          * PositionSnapshot
@@ -873,6 +1271,117 @@ export interface components {
             sector?: string | null;
             /** Industry */
             industry?: string | null;
+        };
+        /** Reconciliation */
+        Reconciliation: {
+            /** Fund Name */
+            fund_name: string;
+            /** Closing Units */
+            closing_units: string;
+            /** Net Supported Movement */
+            net_supported_movement: string | null;
+            /** Implied Prior Units */
+            implied_prior_units: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "HISTORY_INCOMPLETE" | "SHARES_RECONCILED" | "BLOCKED";
+            /**
+             * Performance Calculable
+             * @default false
+             * @constant
+             */
+            performance_calculable: false;
+        };
+        /** RetirementImport */
+        RetirementImport: {
+            /** Id */
+            id: number;
+            /** Portfolio Id */
+            portfolio_id: number;
+            /** Valuation Id */
+            valuation_id: number;
+            /**
+             * Imported At
+             * Format: date-time
+             */
+            imported_at: string;
+            /** Storage Key */
+            storage_key: string;
+            /**
+             * Status
+             * @default COMMITTED
+             * @constant
+             */
+            status: "COMMITTED";
+            preview: components["schemas"]["RetirementPreview"];
+        };
+        /** RetirementPreview */
+        RetirementPreview: {
+            /** Portfolio Id */
+            portfolio_id: number;
+            /** Preview Token */
+            preview_token: string;
+            options: components["schemas"]["ImportOptions"];
+            source: components["schemas"]["ParsedVanguard"];
+            /** Funds */
+            funds: components["schemas"]["FundMapping"][];
+            /** Reported Total */
+            reported_total: string;
+            /** Cost Basis */
+            cost_basis?: null;
+            /** Unrealized Pnl */
+            unrealized_pnl?: null;
+            /** Money Weighted Return */
+            money_weighted_return?: null;
+            /** Issues */
+            issues: components["schemas"]["ImportIssue"][];
+            /** Reconciliation */
+            reconciliation: components["schemas"]["Reconciliation"][];
+            /** Can Commit */
+            can_commit: boolean;
+        };
+        /** SecurityAlias */
+        SecurityAlias: {
+            /** Source Code */
+            source_code: string;
+            /** Value */
+            value: string;
+        };
+        /** SecurityCreate */
+        SecurityCreate: {
+            /** Name */
+            name: string;
+            /** @default UNKNOWN */
+            instrument_type: components["schemas"]["InstrumentType"];
+            /** Ticker */
+            ticker?: string | null;
+            /** Currency */
+            currency: string;
+            /**
+             * Aliases
+             * @default []
+             */
+            aliases: components["schemas"]["SecurityAlias"][];
+        };
+        /** SecurityInfo */
+        SecurityInfo: {
+            /** Name */
+            name: string;
+            /** @default UNKNOWN */
+            instrument_type: components["schemas"]["InstrumentType"];
+            /** Ticker */
+            ticker?: string | null;
+            /** Currency */
+            currency: string;
+            /**
+             * Aliases
+             * @default []
+             */
+            aliases: components["schemas"]["SecurityAlias"][];
+            /** Id */
+            id: number;
         };
         /**
          * StatementFormat
@@ -1144,6 +1653,137 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /** ValuationCreate */
+        ValuationCreate: {
+            /**
+             * As Of
+             * Format: date
+             */
+            as_of: string;
+            /** Currency */
+            currency: string;
+            /**
+             * Complete Snapshot
+             * @default true
+             */
+            complete_snapshot: boolean;
+            /** Positions */
+            positions: components["schemas"]["ValuationPositionInput"][];
+            /**
+             * Source Code
+             * @default MANUAL
+             */
+            source_code: string;
+            /** Source Reference */
+            source_reference?: string | null;
+        };
+        /** ValuationPosition */
+        ValuationPosition: {
+            /** Security Id */
+            security_id: number;
+            /** Quantity */
+            quantity: string;
+            /** Reported Price */
+            reported_price?: string | null;
+            /** Reported Value */
+            reported_value: string;
+            /** Cost Basis */
+            cost_basis?: string | null;
+            /** Source Reference */
+            source_reference?: string | null;
+            /** Unrealized Pnl */
+            unrealized_pnl: string | null;
+            /** Money Weighted Return */
+            money_weighted_return?: null;
+            /**
+             * History Status
+             * @default VALUATION_ONLY
+             * @constant
+             */
+            history_status: "VALUATION_ONLY";
+            provenance: components["schemas"]["ValuationProvenance"];
+        };
+        /** ValuationPositionInput */
+        ValuationPositionInput: {
+            /** Security Id */
+            security_id: number;
+            /** Quantity */
+            quantity: number | string;
+            /** Reported Price */
+            reported_price?: number | string | null;
+            /** Reported Value */
+            reported_value: number | string;
+            /** Cost Basis */
+            cost_basis?: number | string | null;
+            /** Source Reference */
+            source_reference?: string | null;
+        };
+        /** ValuationProvenance */
+        ValuationProvenance: {
+            /** Source Code */
+            source_code: string;
+            /** Source Reference */
+            source_reference: string | null;
+            /**
+             * As Of
+             * Format: date
+             */
+            as_of: string;
+            /**
+             * Imported At
+             * Format: date-time
+             */
+            imported_at: string;
+        };
+        /** ValuationSnapshot */
+        ValuationSnapshot: {
+            /** Id */
+            id: number;
+            /** Portfolio Id */
+            portfolio_id: number;
+            /**
+             * As Of
+             * Format: date
+             */
+            as_of: string;
+            /** Currency */
+            currency: string;
+            /** Complete Snapshot */
+            complete_snapshot: boolean;
+            /** Positions */
+            positions: components["schemas"]["ValuationPosition"][];
+            /** Reported Total */
+            reported_total: string;
+            /** Cost Basis */
+            cost_basis: string | null;
+            /** Unrealized Pnl */
+            unrealized_pnl: string | null;
+            /** Money Weighted Return */
+            money_weighted_return?: null;
+            /**
+             * History Status
+             * @default VALUATION_ONLY
+             * @constant
+             */
+            history_status: "VALUATION_ONLY";
+            provenance: components["schemas"]["ValuationProvenance"];
+        };
+        /**
+         * ValuationView
+         * @description Separate reported view, never an additive balance alongside the legacy ledger.
+         */
+        ValuationView: {
+            /** Portfolio Id */
+            portfolio_id: number;
+            /**
+             * View
+             * @default REPORTED_SNAPSHOT
+             * @constant
+             */
+            view: "REPORTED_SNAPSHOT";
+            status: components["schemas"]["Availability"];
+            snapshot: components["schemas"]["ValuationSnapshot"] | null;
+        };
     };
     responses: never;
     parameters: never;
@@ -1153,6 +1793,205 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    update_account_api_v1_portfolios__portfolio_id__account_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioSummary"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_securities_api_v1_securities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityInfo"][];
+                };
+            };
+        };
+    };
+    create_security_api_v1_securities_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecurityCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityInfo"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    latest_valuation_api_v1_portfolios__portfolio_id__valuations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValuationView"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    write_valuation_api_v1_portfolios__portfolio_id__valuations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ValuationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValuationView"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountValidationResponse"];
+                };
+            };
+        };
+    };
     list_portfolios_api_v1_portfolios_get: {
         parameters: {
             query?: never;
@@ -1913,6 +2752,251 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    preview_import_api_v1_portfolios__portfolio_id__retirement_imports_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_preview_import_api_v1_portfolios__portfolio_id__retirement_imports_preview_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetirementPreview"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountValidationResponse"];
+                };
+            };
+        };
+    };
+    import_history_api_v1_portfolios__portfolio_id__retirement_imports_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetirementImport"][];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    commit_import_api_v1_portfolios__portfolio_id__retirement_imports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_commit_import_api_v1_portfolios__portfolio_id__retirement_imports_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetirementImport"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountValidationResponse"];
+                };
+            };
+        };
+    };
+    import_detail_api_v1_portfolios__portfolio_id__retirement_imports__import_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: number;
+                import_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetirementImport"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    account_activity_api_v1_portfolios__portfolio_id__account_activity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ObservedActivity"][];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

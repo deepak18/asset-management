@@ -356,10 +356,49 @@ stay in configured `StatementStorage`, outside Git and database blob columns.
 All relational changes commit/roll back together; failed DB commits can leave only
 an unreachable checksum-addressed raw file. Fixtures are entirely fictitious.
 
-This delivered backend slice has no frontend implementation or live-service
-dependency. Existing securities POST can pre-map an alias before import; stable
+Slice 2a is backend-only; the dashboard workflow is delivered in slice 2b below.
+MSW tests require no live-service dependency. Existing securities POST can pre-map an alias before import; stable
 UNKNOWN/null-ticker securities are also approved import scope. Post-import security
 metadata amendment, ticker identity confirmation/update and alias remapping require
 an approved schema/API slice before slice 4 and look-through, not completion of
 slice 2a. No speculative mapping endpoint is included.
 Legacy Robinhood import and analytics remain unchanged.
+
+## Vanguard dashboard workflow (frontend slice 2b)
+
+With the backend migrated to **0010** and running, start `npm run dev` from
+`frontend/` and open <http://localhost:3000>. No market-data or MCP setup is needed.
+
+1. Create/select a USD portfolio. In **Account Settings**, choose **Edit Account
+   Settings**, set the known account type (or leave Unknown), custodian and string
+   account ID, then **Save Account Settings**. Keep leading zeros; do not infer
+   traditional/Roth status from a plan name. Metadata is optional before import.
+2. In **Vanguard Retirement Import**, choose your local `.csv`, explicitly enter
+   **Holdings as of date**, and retain USD. Leave **Includes All Transactions Since
+   Inception** unchecked unless supported by your broker records.
+3. Select **Preview Vanguard Import**. Inspect every fund, source account/plan,
+   activity, mappings, issues and share reconciliation. Expand **Inspect activity**
+   and individual source lines for retained facts. Unknown tickers are not guessed.
+4. Check the review acknowledgement and select **Confirm Vanguard Import** only
+   when the backend permits it. Success opens **Reported Holdings** as the primary
+   balance and refreshes account metadata, selector metadata, imports and activity.
+   **Inspect Import #...** reopens the persisted review/diagnostics.
+
+Reported Holdings and Ledger Analytics are distinct selectable views, never summed.
+Existing snapshots (including partial snapshots) and retirement account types default
+into the reported view. Empty retirement accounts show an import prompt, not a zero
+balance. Unknown basis, prices, P&L and returns remain unavailable. A reported
+snapshot and partial activity do not establish acquisition lots, FIFO or XIRR.
+
+409 duplicate/overlap/stale conflicts show the backend explanation and require a
+new preview; file/options remain selected. Changing file, date or history assertion
+invalidates review. Cancel and portfolio switches discard browser results, but an
+already-submitted server commit may complete: inspect/reload persisted history
+before retrying. Unsupported codes, account mismatches and date conflicts remain
+backend policy, not client-side guesses.
+
+Mock mode accepts only the fictitious `demo-retirement.csv` bytes exported as
+`demoRetirementCsv` in `frontend/src/mocks/retirement-fixtures.ts`. It persists the
+fixed demo workflow, not arbitrary CSV parsing. Use live mode for your real export;
+never copy private account files into Git. See [the frontend runbook](frontend/README.md#vanguard-retirement-accounts-slice-2b)
+for API/test details. No dependencies or backend executable files changed.

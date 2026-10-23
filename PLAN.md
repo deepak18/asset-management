@@ -183,7 +183,7 @@ No slice is delivered merely because its proposed commit message appears here.
 Delivery status:
 - [x] Slice 1 backend foundation: account metadata, shared identities and reported valuations; 491 backend and 204 frontend regressions passed.
 - [x] Slice 2a delivered backend import core: Vanguard preview, atomic import, activity and reconciliation; validated with 580 tests, Ruff and mypy. UNKNOWN stable securities and explicit mapping before import are approved scope.
-- [ ] Slice 2b typed frontend account/import/reported-holdings workflow.
+- [x] Slice 2b delivered typed frontend account/import/reported-holdings workflow; final 246 frontend tests in 33 files, lint and typecheck passed.
 - [ ] Slices 3–9: not implemented.
 
 ### Slice 2a backend implementation status
@@ -213,7 +213,7 @@ Delivery status:
   confirmation/update and alias remapping require a separately approved schema/API
   slice before fund-source integration and look-through. Do not guess public fund
   identities or add a speculative mapping endpoint to this delivered import core.
-  Slice 2b and slices 3–9 are not implemented.
+  Slice 2b frontend is delivered below; slices 3–9 are not implemented.
 - Offline validation from backend: `uv run pytest` **580 passed, 3 deselected**;
   `uv run ruff check .` passed; `uv run mypy` passed (57 source files). Migration
   upgrade/downgrade/drift, mocked storage/provider boundaries, injected rollback,
@@ -343,7 +343,7 @@ never use the latest trade/run date or upload clock as a fabricated valuation da
 ### Free MCP research — documentation inspected in this delivery
 
 Research scope: public GitHub repository READMEs and official documentation retrieved
-read-only during this delivery (user session date 2026-10-22). These are documentation
+read-only during this delivery (user session date 2026-10-23). These are documentation
 findings, NOT live tool/entitlement tests. No account data was sent externally and no
 third-party MCP code was installed or executed. Sources can change; pin/recheck at
 integration time. Open-source server licence does not grant rights to upstream data.
@@ -369,3 +369,38 @@ schemas over the configured transport; test known public examples (not personal 
 files); assert units, sum/denominator, source date, full-vs-partial coverage and stale/error
 behavior; then add mocked provider tests and opt-in live smoke tests. Keep network I/O
 behind providers and citations durable. No MCP installation is needed for slices 1–2.
+
+### Slice 2b frontend implementation status
+
+- Delivered account metadata Save/Cancel with actual selected-portfolio reads,
+  leading-zero string IDs, nullable clearing and preserved error/unsaved drafts.
+- Separate Vanguard upload requires a user-supplied holdings date and USD, offers
+  conservative inception-history opt-in, displays all source holdings/mappings and
+  inspectable activity/lines, issues and backend reconciliation, then requires
+  explicit acknowledgement plus can_commit before exact multipart confirmation.
+- Reported Holdings is primary for available/partial snapshots and retirement types;
+  names join by numeric security identity, tickers are not guessed, unknown values
+  stay unavailable and no legacy zero balance is substituted. Ledger Analytics
+  remains an explicitly separate brokerage view, never summed with snapshots.
+- Scope/generation guards abort/ignore stale reads/writes and prevent double submit.
+  Changed file/options/account/resources invalidate review. Duplicate/overlap/stale
+  409 guidance requires a new preview and preserves upload drafts. Success refreshes
+  snapshot, security names, account/selector metadata, retained history and activity.
+- Published OpenAPI types regenerated; request aliases preserve omission semantics
+  for defaulted account_type without weakening read types. No backend contract,
+  executable, financial math, dependency or MCP changes. Fictitious-only MSW state
+  persists a fixed demo upload; arbitrary CSV parsing requires the live backend.
+- Validation: npm run typegen succeeded; final npm test passed 246 tests in 33 files;
+  npm run lint and npm run typecheck exited 0. Independent backend validation passed
+  580 tests (3 live integrations deselected), Ruff and mypy (57 source files).
+  Same-account refresh preserves ledger controls; dialog focus restoration runs
+  before DOM removal. Regression coverage retains the original focus assertions.
+  The broad button-label scenario was split into bounded independent tests with
+  every assertion and timeout retained after an observed five-second timeout.
+- The private attached sample passed a local read-only parse/preview: 12 holdings,
+  24 activities (22 contributions and 2 reinvestments). No private bytes entered
+  tracked fixtures or the live database. An explicitly assumed diagnostic date was
+  used only in memory; users must still supply the actual holdings valuation date.
+- Live browser/API integration and external MCP tool calls were not exercised.
+  Post-import identity amendment remains the separate future backend seam already
+  identified by slice 2a.

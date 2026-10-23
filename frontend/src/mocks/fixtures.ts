@@ -25,6 +25,7 @@ export const portfolioSummary: PortfolioSummary = {
   id: 1,
   name: "Growth Portfolio",
   base_currency: "USD",
+  account_type: "UNKNOWN",
 };
 
 export const transactions: Transaction[] = [
@@ -222,7 +223,7 @@ export const analyticsPriced: PortfolioAnalytics = {
 
 /** Unpriced analytics: no market data, so market-value fields degrade to null. */
 export const analyticsUnpriced: PortfolioAnalytics = {
-  portfolio: { id: 2, name: "Unpriced Portfolio", base_currency: "USD" },
+  portfolio: { id: 2, name: "Unpriced Portfolio", base_currency: "USD", account_type: "UNKNOWN" },
   base_currency: "USD",
   positions: analyticsPriced.positions,
   realized_pnl_base: "97.60",
@@ -253,7 +254,7 @@ export const analyticsUnpriced: PortfolioAnalytics = {
  * UNCLASSIFIED slice in dev mock mode.
  */
 export const analyticsUnclassified: PortfolioAnalytics = {
-  portfolio: { id: 3, name: "Imported Portfolio", base_currency: "USD" },
+  portfolio: { id: 3, name: "Imported Portfolio", base_currency: "USD", account_type: "UNKNOWN" },
   base_currency: "USD",
   positions: ["NVDA", "PLTR", "SOFI", "ZZZZ"].map((ticker) => ({
     ticker,
@@ -301,7 +302,7 @@ export const analyticsUnclassified: PortfolioAnalytics = {
 
 /** Empty ledger: nothing bought yet — every roll-up is zero/empty. */
 export const analyticsEmpty: PortfolioAnalytics = {
-  portfolio: { id: 99, name: "Empty Portfolio", base_currency: "USD" },
+  portfolio: { id: 99, name: "Empty Portfolio", base_currency: "USD", account_type: "UNKNOWN" },
   base_currency: "USD",
   positions: [],
   realized_pnl_base: "0",
