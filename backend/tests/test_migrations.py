@@ -14,7 +14,9 @@ from pathlib import Path
 
 import pytest
 from alembic import command
+from alembic.autogenerate import compare_metadata
 from alembic.config import Config
+from alembic.migration import MigrationContext
 from sqlalchemy import MetaData, Table, create_engine, inspect, select
 
 import app.marketdata.models  # noqa: F401  (registers the cache table on Base.metadata)
@@ -226,6 +228,57 @@ def test_confirmation_migration_is_additive_nullable_and_reversible(
         assert "history_confirmed_at" not in holdings.c
         with engine.connect() as conn:
             assert conn.execute(select(holdings.c.ticker)).scalars().all() == ["AAA"]
+        command.upgrade(cfg, "head")
+    finally:
+        engine.dispose()
+
+def test_account_valuation_migration_preserves_legacy_and_has_no_alembic_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _isolate_settings: None,
+) -> None:
+    db_path = tmp_path / "account-valuations.db"
+    cfg = _alembic_config(db_path, monkeypatch)
+    command.upgrade(cfg, "0008")
+    engine = create_engine(f"sqlite:///{db_path.as_posix()}")
+    try:
+        metadata = MetaData()
+        portfolios = Table("portfolios", metadata, autoload_with=engine)
+        transactions = Table("transactions", metadata, autoload_with=engine)
+        holdings = Table("holdings", metadata, autoload_with=engine)
+        with engine.begin() as conn:
+            conn.execute(portfolios.insert().values(id=1, name="Legacy", base_currency="USD"))
+            conn.execute(holdings.insert().values(id=1, portfolio_id=1, ticker="FICTION"))
+            conn.execute(transactions.insert().values(
+                id=1, portfolio_id=1, ticker="FICTION", type="BUY", trade_date=date(2026, 1, 1),
+                currency="USD", quantity=1, price=100, fees=0, amount=0, split_ratio=1,
+                history_origin="OBSERVED",
+            ))
+            legacy_transaction = conn.execute(select(transactions)).one()
+            legacy_holding = conn.execute(select(holdings)).one()
+            legacy_portfolio = conn.execute(select(portfolios)).one()
+        command.upgrade(cfg, "head")
+        upgraded_portfolios = Table("portfolios", MetaData(), autoload_with=engine)
+        with engine.connect() as conn:
+            assert conn.execute(select(transactions)).one() == legacy_transaction
+            assert conn.execute(select(holdings)).one() == legacy_holding
+            account = conn.execute(select(upgraded_portfolios)).one()
+            assert account.account_type == "UNKNOWN"
+            assert account.custodian is None and account.external_account_id is None
+            # Scope full Alembic drift to this additive slice. Legacy SQLite numeric
+            # DDL predates the exact-text ORM variant; its known type drift is unrelated.
+            scope = {"portfolios", "securities", "security_aliases",
+                     "account_valuations", "account_valuation_positions"}
+            context = MigrationContext.configure(conn, opts={
+                "include_object": lambda obj, name, type_, reflected, compare_to:
+                    name in scope if type_ == "table" else True,
+            })
+            assert compare_metadata(context, Base.metadata) == []
+        command.downgrade(cfg, "0008")
+        assert "securities" not in inspect(engine).get_table_names()
+        assert "account_valuations" not in inspect(engine).get_table_names()
+        with engine.connect() as conn:
+            assert conn.execute(select(transactions)).one() == legacy_transaction
+            assert conn.execute(select(holdings)).one() == legacy_holding
+            assert conn.execute(select(portfolios)).one() == legacy_portfolio
         command.upgrade(cfg, "head")
     finally:
         engine.dispose()

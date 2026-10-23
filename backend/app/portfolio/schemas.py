@@ -210,6 +210,16 @@ class HoldingLedger(BaseModel):
     confirmed_at: datetime | None = None
 
 
+class AccountType(StrEnum):
+    UNKNOWN = "UNKNOWN"
+    TAXABLE = "TAXABLE"
+    TRADITIONAL_401K = "TRADITIONAL_401K"
+    ROTH_401K = "ROTH_401K"
+    TRADITIONAL_IRA = "TRADITIONAL_IRA"
+    ROTH_IRA = "ROTH_IRA"
+    OTHER = "OTHER"
+
+
 class PortfolioSummary(BaseModel):
     """Lightweight portfolio identity + reporting base currency (provider output)."""
 
@@ -218,6 +228,9 @@ class PortfolioSummary(BaseModel):
     id: int
     name: str
     base_currency: str = Field(min_length=3, max_length=3)
+    account_type: AccountType = AccountType.UNKNOWN
+    custodian: str | None = Field(default=None, max_length=120)
+    external_account_id: str | None = Field(default=None, max_length=120)
 
 
 class ClassificationSource(StrEnum):
@@ -421,6 +434,9 @@ class PortfolioCreate(BaseModel):
 
     name: str = Field(min_length=1, max_length=120)
     base_currency: str = Field(min_length=3, max_length=3)
+    account_type: AccountType = AccountType.UNKNOWN
+    custodian: str | None = Field(default=None, max_length=120)
+    external_account_id: str | None = Field(default=None, max_length=120)
 
 
 class PositionSnapshot(BaseModel):

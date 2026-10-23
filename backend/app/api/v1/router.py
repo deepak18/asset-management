@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.v1.routes import portfolio
+from app.api.v1.routes import accounts, portfolio
 
 api_router = APIRouter()
+api_router.include_router(accounts.router)
 api_router.include_router(portfolio.router)

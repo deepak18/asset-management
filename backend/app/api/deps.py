@@ -25,11 +25,13 @@ from app.marketdata.alphavantage import PROVIDER_CODE, AlphaVantageMarketDataPro
 from app.marketdata.cache import ReadThroughCache
 from app.mcp.client import StreamableHttpMcpClient
 from app.mcp.registry import build_alphavantage_config
+from app.portfolio.accounts import AccountService
 from app.portfolio.classification import HoldingClassificationService
 from app.portfolio.holding_analytics import HoldingAnalyticsService
 from app.portfolio.imports import StatementImportService
 from app.portfolio.ingest import PortfolioIngestService
 from app.portfolio.service import PortfolioService
+from app.providers.account_provider import SqlAlchemyAccountProvider
 from app.providers.base import (
     HoldingHistoryProvider,
     PortfolioProvider,
@@ -205,6 +207,10 @@ def get_holding_history_provider(
     session: AsyncSession = Depends(get_session),
 ) -> HoldingHistoryProvider:
     return SqlAlchemyPortfolioProvider(session)
+
+
+def get_account_service(session: AsyncSession = Depends(get_session)) -> AccountService:
+    return AccountService(SqlAlchemyAccountProvider(session))
 
 
 class BackgroundImportRunner:

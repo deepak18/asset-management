@@ -64,15 +64,12 @@ class SqlAlchemyPortfolioProvider:
         row = await self._session.get(models.Portfolio, portfolio_id)
         if row is None:
             return None
-        return PortfolioSummary(id=row.id, name=row.name, base_currency=row.base_currency)
+        return PortfolioSummary.model_validate(row, from_attributes=True)
 
     async def list_portfolios(self) -> list[PortfolioSummary]:
         stmt = select(models.Portfolio).order_by(models.Portfolio.id)
         rows = (await self._session.scalars(stmt)).all()
-        return [
-            PortfolioSummary(id=row.id, name=row.name, base_currency=row.base_currency)
-            for row in rows
-        ]
+        return [PortfolioSummary.model_validate(row, from_attributes=True) for row in rows]
 
     async def list_transactions(self, portfolio_id: int) -> list[Transaction]:
         stmt = (
@@ -301,11 +298,15 @@ class SqlAlchemyPortfolioProvider:
     # --- writes -----------------------------------------------------------
 
     async def create_portfolio(self, data: PortfolioCreate) -> PortfolioSummary:
-        row = models.Portfolio(name=data.name, base_currency=data.base_currency.upper())
+        row = models.Portfolio(
+            name=data.name, base_currency=data.base_currency.upper(),
+            account_type=data.account_type.value, custodian=data.custodian,
+            external_account_id=data.external_account_id,
+        )
         self._session.add(row)
         await self._session.flush()  # assigns row.id
         await self._session.commit()
-        return PortfolioSummary(id=row.id, name=row.name, base_currency=row.base_currency)
+        return PortfolioSummary.model_validate(row, from_attributes=True)
 
     async def add_transactions(self, portfolio_id: int, transactions: Sequence[Transaction]) -> int:
         await self._session.scalar(select(models.Portfolio).where(

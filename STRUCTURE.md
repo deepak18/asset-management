@@ -17,7 +17,7 @@ asset-management/
 │       ├── backend-implementer.agent.md  # ✅ Backend-only implementation, typed API contract, pytest/ruff/mypy and exact commit handoff to the orchestrator
 │       └── frontend-implementer.agent.md # ✅ Frontend-only OpenAPI/UI implementation, MSW/RTL/lint/typecheck and exact commit handoff to the orchestrator
 ├── AGENTS.md                  # ✅ Agent operational protocol, default local slice commits and core design principles
-├── PLAN.md                    # ✅ Phased roadmap and concise delivered capabilities
+├── PLAN.md                    # ✅ Phased roadmap, delivered capabilities, resumable account/exposure slice contracts and sourced free-MCP research
 ├── STRUCTURE.md               # ✅ This file — directory source of truth
 ├── README.md                  # ✅ Human runbook (setup, run, deploy)
 ├── .gitignore                 # ✅ Ignore rules (secrets, envs, build artifacts)
@@ -389,3 +389,57 @@ backend passed 433 tests (3 integration tests deselected), Ruff and mypy for
 50 source files. This slice ships with tests/docs in a local Conventional Commit.
 Live browser/API integration was not exercised. No dependency or API contract
 change; OpenAPI's undocumented runtime analytics 404 remains noted in docs.
+
+## Account/security and reported-valuation foundation inventory
+
+Additive backend-only slice; frontend and legacy ledger analytics are unchanged.
+New active files (paths relative to repository root):
+
+```text
+backend/
+  app/
+    portfolio/accounts.py                  # Typed account/security/snapshot contracts, pure currency policy, canonical hashes, exact reported totals and service orchestration
+    providers/account_provider.py          # AccountProvider protocol and SQLAlchemy I/O with composable atomic transactions, scoped identities and immutable date snapshots
+    api/v1/routes/accounts.py              # Thin metadata PATCH, shared securities POST/GET and separate reported valuations POST/GET
+  migrations/versions/0009_account_valuations.py # Adds account metadata plus securities/security_aliases/account_valuations/account_valuation_positions; ledger rows untouched
+  tests/
+    unit/portfolio/test_accounts.py         # Pure hashing, exact totals, null basis/returns, provenance, validation and mocked provider-boundary orchestration
+    unit/providers/test_account_provider.py # Offline project-fixture persistence, aliases/fund classes, idempotency/conflicts, historical reads and composed rollback
+    api/test_account_routes.py             # Account identifier strings, immutable security identities, decimal/null/status/provenance contracts and no legacy ledger/analytics side effects
+```
+
+Updated active files:
+
+- `backend/app/portfolio/models.py`: account metadata on portfolios and four
+  isolated relational security/valuation tables; legacy holdings/ledger unchanged.
+- `backend/app/portfolio/schemas.py`: `AccountType` and backward-compatible
+  defaulted/nullable account metadata in `PortfolioCreate`/`PortfolioSummary`.
+- `backend/app/providers/portfolio_provider.py`: persists and maps metadata on
+  existing portfolio create/list/read APIs, without altering ledger policy.
+- `backend/app/api/deps.py` and `backend/app/api/v1/router.py`: compose/register
+  the account provider/service/routes on the existing request-scoped DB session.
+- `backend/tests/test_migrations.py`: 0009 upgrade/downgrade legacy-row preservation
+  and scoped Alembic type/constraint drift checks for new tables and portfolios;
+  existing all-model column drift coverage remains active. Pre-existing SQLite
+  NUMERIC/text differences in untouched legacy tables are outside the new check.
+- `backend/openapi.json`: generated account metadata, shared securities and
+  valuation-only request/response contracts, including typed error variants.
+- `backend/README.md` and `README.md`: migration 0009 prerequisite, runnable Swagger
+  examples and explicit separate-view/non-additive reported snapshot semantics.
+
+Reported views never write BUY events or infer acquisition dates. Snapshot-only
+money-weighted returns are null with typed `VALUATION_ONLY` history status;
+availability is `AVAILABLE`, `PARTIAL`, or `EMPTY`. Immutable historical snapshots
+are unique by portfolio/date, with domain-generated canonical content hashes.
+No Vanguard parser, private source files, new dependencies or frontend changes are
+included in this foundation. `PLAN.md` records the approved resumable delivery
+roadmap, financial semantics, acceptance tests and sourced free-MCP shortlist.
+
+Validation: `uv run pytest` passed 491 tests (3 integration tests deselected);
+`uv run ruff check .` passed; `uv run mypy` passed for 53 source files. Tests use
+only fictitious fixtures and disposable SQLite databases; no external services or
+live database were used. Editor diagnostics were run on every slice file: no errors,
+with two pre-existing warnings in untouched legacy provider logic. The initial new
+module indexing error cleared on recheck. All existing API path contracts and old
+schema properties were compared against HEAD and preserved. No staging or commits
+were performed.

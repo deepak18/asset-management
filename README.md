@@ -77,9 +77,10 @@ uv run alembic upgrade head
 ```
 
 Existing installations, including those already on `0006` or `0007`, must upgrade
-to `0008` before starting this backend. Revision `0006` records snapshot/observed
+to `0009` before starting this backend. Revision `0006` records snapshot/observed
 origins for holding XIRR; `0007` adds transaction-deletion audit tombstones; `0008`
-adds nullable holding-scoped history confirmation metadata. Existing ledger facts
+adds nullable holding-scoped history confirmation metadata; `0009` adds account
+metadata and separate reported valuation tables. Existing ledger facts
 are not rewritten or automatically confirmed. Ambiguous legacy unowned transactions
 remain unknown rather than being relabeled as observed purchases.
 No application-database migration is run automatically by the API.
@@ -310,3 +311,23 @@ project prerequisites above.
 - Keep business logic deterministic; AI never computes financial figures (see `AGENTS.md` §1, §7).
 - Cross-module access goes through `providers/` interfaces only.
 - Commit in small, logically-scoped, one-line Conventional Commits (`AGENTS.md` protocol #7). Local commits are part of delivery by default: the orchestrator stages each validated slice with its tests and required docs, commits it before the next slice, and reports actual hashes plus remaining working-tree status. Delegates hand off files and validation evidence rather than leaving commits to the user. Only an explicit user instruction defers commits; a later request to commit supersedes it. Never push or rewrite history without permission.
+
+## Reported account snapshots (backend foundation)
+
+Before starting an existing installation, run from `backend/`:
+
+```bash
+uv run alembic upgrade head  # revision 0009: account metadata, shared securities, reported snapshots
+uv run python -m uvicorn app.main:app --reload
+```
+
+Open <http://localhost:8000/docs> to create a portfolio with optional account type,
+custodian and string external account ID (preserves leading zeros), create shared
+securities, then POST/GET `/api/v1/portfolios/{id}/valuations`. The full fictitious
+Swagger examples and response/status contracts are in
+[the backend runbook](backend/README.md#shared-securities-and-reported-account-valuations).
+Reported snapshots retain exact decimals, source provenance and nullable unknown
+basis/returns without synthetic BUY events or market-data configuration. They are a
+**separate reported view**, not additive balances alongside legacy ledger analytics.
+Existing Robinhood imports and `/positions` behavior are unchanged. No frontend or
+new CSV parser is included in this foundation.

@@ -39,7 +39,7 @@ From the **repo root** first: `docker compose up -d --wait` (starts Postgres + p
 ```bash
 cd backend
 uv sync --extra dev --extra postgres
-uv run alembic upgrade head             # includes holding history confirmation (0008)
+uv run alembic upgrade head             # includes account metadata and reported valuations (0009)
 uv run python -m uvicorn app.main:app --reload    # http://localhost:8000/docs
 ```
 
@@ -78,6 +78,79 @@ Revision `0008` adds nullable `holdings.history_review_token` and
 no ledger facts or import-wide completeness flags are rewritten. Run
 `uv run alembic upgrade head` before restarting. Downgrading to `0007` removes
 confirmations only, preserving holdings and transactions.
+
+## Shared securities and reported account valuations
+
+Revision **0009** adds account metadata and separate securities/aliases/valuation
+and position tables; existing holdings, transactions and Robinhood imports are
+unchanged. Run `uv run alembic upgrade head` before restarting. Downgrading to
+`0008` discards only the new metadata and snapshot tables.
+
+Start with `uv run python -m uvicorn app.main:app --reload`, then open
+<http://localhost:8000/docs>. No market-data credentials are needed for this workflow:
+
+1. `POST /api/v1/portfolios` (201), for example:
+   ```json
+   {"name":"Fictitious Retirement","base_currency":"USD","account_type":"TRADITIONAL_401K","custodian":"Fictitious Custodian","external_account_id":"00001234"}
+   ```
+   Old bodies with only name/base_currency still work. `account_type` defaults to
+   `UNKNOWN`; allowed values are `UNKNOWN`, `TAXABLE`, `TRADITIONAL_401K`, `ROTH_401K`,
+   `TRADITIONAL_IRA`, `ROTH_IRA`, `OTHER`. Custodian and external account ID are
+   nullable strings; numeric identifiers are rejected, preserving leading zeros.
+   Existing GET/list/analytics portfolio identities now include these fields.
+   `PATCH /api/v1/portfolios/{id}/account` (200/404/422) preserves omitted fields;
+   explicit null clears nullable strings. Empty patches and null account_type fail.
+2. `POST /api/v1/securities` (201), for example:
+   ```json
+   {"name":"Fictitious 2050 Class A","instrument_type":"COLLECTIVE_TRUST","ticker":null,"currency":"USD","aliases":[{"source_code":"FICTITIOUS_CUSTODIAN","value":"000045"}]}
+   ```
+   Keep the returned immutable numeric `id`. `GET /api/v1/securities` (200) lists
+   shared identities. Types: `UNKNOWN` (default), `STOCK`, `ETF`, `MUTUAL_FUND`,
+   `COLLECTIVE_TRUST`, `TARGET_DATE_FUND`, `CASH`, `OTHER`. Ticker is nullable and
+   is **never inferred from a name**. Names/tickers are not identity keys; explicit
+   `(source_code, value)` aliases uniquely identify a security (duplicate: 409).
+   Aliases are case-sensitive; the same value under a different source is distinct.
+   Different fund classes must have separate IDs. With no explicit alias, a new
+   identity is created each time; name matching/manual mapping is not implemented.
+3. `POST /api/v1/portfolios/{id}/valuations` (201, including exact repeats), replacing
+   `security_id` below with the ID from step 2:
+   ```json
+   {"as_of":"2026-01-31","currency":"USD","complete_snapshot":true,"source_code":"MANUAL","source_reference":"fictitious-statement:7","positions":[{"security_id":1,"quantity":"12.3456789012","reported_price":null,"reported_value":"1234.56","cost_basis":null,"source_reference":"line:7"}]}
+   ```
+   Date/currency/positions are required; complete_snapshot defaults true. All
+   amounts must be finite, nonnegative, fit NUMERIC(28,10), and are returned as
+   **Decimal strings**, not floats. Unknown securities/currency mismatches and
+   duplicate positions fail with 422. Snapshot, security and portfolio currencies
+   must agree: no guessed FX conversion. Source code defaults `MANUAL`; references
+   are nullable. Reported value is authoritative, not quantity multiplied by price.
+4. `GET /api/v1/portfolios/{id}/valuations` (200) returns a `ValuationView`:
+   `view=REPORTED_SNAPSHOT`, `status=AVAILABLE|PARTIAL|EMPTY`, and nullable `snapshot`.
+   A portfolio without snapshots returns EMPTY/null; missing portfolios return 404.
+   Snapshot fields include id, portfolio_id, as_of, currency, complete_snapshot,
+   positions, reported_total, nullable cost_basis/unrealized_pnl, and always-null
+   money_weighted_return with `history_status=VALUATION_ONLY`. Position fields
+   include the submitted values, nullable unrealized_pnl, the same unavailable
+   return/history status, and provenance. Unknown basis stays null, including totals
+   if any position lacks basis. No acquisition date is inferred. Each figure carries
+   typed provenance: source_code, nullable source_reference, as_of, UTC imported_at.
+   Position references override the snapshot reference for position provenance.
+
+This is a **separate reported snapshot view**, not additional holdings to add to
+legacy ledger analytics. It never writes BUY events, cash balances or holdings and
+never fetches prices. `/positions` retains its old synthetic-opening-BUY behavior;
+Robinhood imports and legacy analytics are unchanged. Do not combine these views
+as if they were additive balances. Snapshot-only returns are explicitly unavailable.
+
+Historical snapshots are immutable and unique per portfolio/date. Canonical hashes
+ignore position order and equivalent decimal spelling, but include provenance and
+completeness. An exact repeat returns the original snapshot/import time; differing
+content returns 409 (no replacement endpoint). GET selects latest **as_of**, not
+last import time. A partial snapshot reports only submitted positions and a partial
+total, without carrying forward old rows. Empty complete snapshots report zero
+holdings, not missing data. Whole snapshots commit atomically. Future import writers
+can compose security and snapshot writes (and activity on that same session) inside
+`async with provider.transaction():` for one commit/rollback; canonical hashing stays
+in `portfolio/accounts.py`, never the provider. No Vanguard parser is included.
 
 ## Point at a remote or slow (GPU-less) Ollama
 
@@ -131,8 +204,8 @@ cache-first, so repeat requests don't consume free-tier quota.
 
 ## Getting data in
 
-You don't have to re-key years of history to make the app useful. Everything still
-lives in one ledger (the single source of truth), but there are three on-ramps:
+For legacy ledger analytics, there are three on-ramps below. Reported valuations
+are a separate view; see [reported account valuations](#shared-securities-and-reported-account-valuations).
 
 1. **Create a portfolio** (and list them — `GET /api/v1/portfolios` powers a UI picker)
 

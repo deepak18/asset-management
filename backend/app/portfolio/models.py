@@ -67,6 +67,11 @@ class Portfolio(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120))
     base_currency: Mapped[str] = mapped_column(String(3))
+    account_type: Mapped[str] = mapped_column(
+        String(24), default="UNKNOWN", server_default="UNKNOWN",
+    )
+    custodian: Mapped[str | None] = mapped_column(String(120))
+    external_account_id: Mapped[str | None] = mapped_column(String(120))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -189,3 +194,52 @@ class ImportUnresolvedItem(Base):
     payload_json: Mapped[str] = mapped_column(Text)
     source_line: Mapped[int] = mapped_column(Integer)
     resolved: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+
+
+class Security(Base):
+    """Stable shared identity; names and tickers are not identity keys."""
+
+    __tablename__ = "securities"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(240))
+    instrument_type: Mapped[str] = mapped_column(String(24))
+    ticker: Mapped[str | None] = mapped_column(String(20))
+    currency: Mapped[str] = mapped_column(String(3))
+
+
+class SecurityAlias(Base):
+    __tablename__ = "security_aliases"
+    __table_args__ = (UniqueConstraint("source_code", "value", name="uq_security_alias"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    security_id: Mapped[int] = mapped_column(ForeignKey("securities.id"))
+    source_code: Mapped[str] = mapped_column(String(80))
+    value: Mapped[str] = mapped_column(String(240))
+
+
+class AccountValuation(Base):
+    __tablename__ = "account_valuations"
+    __table_args__ = (UniqueConstraint("portfolio_id", "as_of", name="uq_account_valuation_date"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    portfolio_id: Mapped[int] = mapped_column(ForeignKey("portfolios.id"))
+    as_of: Mapped[date] = mapped_column(Date)
+    currency: Mapped[str] = mapped_column(String(3))
+    complete_snapshot: Mapped[bool] = mapped_column(Boolean)
+    content_hash: Mapped[str] = mapped_column(String(64))
+    source_code: Mapped[str] = mapped_column(String(80))
+    source_reference: Mapped[str | None] = mapped_column(String(240))
+    imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class AccountValuationPosition(Base):
+    __tablename__ = "account_valuation_positions"
+    __table_args__ = (
+        UniqueConstraint("valuation_id", "security_id", name="uq_valuation_security"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    valuation_id: Mapped[int] = mapped_column(ForeignKey("account_valuations.id"))
+    security_id: Mapped[int] = mapped_column(ForeignKey("securities.id"))
+    quantity: Mapped[Decimal] = mapped_column(ExactDecimal)
+    reported_price: Mapped[Decimal | None] = mapped_column(ExactDecimal)
+    reported_value: Mapped[Decimal] = mapped_column(ExactDecimal)
+    cost_basis: Mapped[Decimal | None] = mapped_column(ExactDecimal)
+    source_reference: Mapped[str | None] = mapped_column(String(240))

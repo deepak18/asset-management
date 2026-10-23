@@ -6,6 +6,267 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/v1/portfolios/{portfolio_id}/account": {
+      "patch": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Update Account",
+        "operationId": "update_account_api_v1_portfolios__portfolio_id__account_patch",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioSummary"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/securities": {
+      "get": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "List Securities",
+        "operationId": "list_securities_api_v1_securities_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SecurityInfo"
+                  },
+                  "type": "array",
+                  "title": "Response List Securities Api V1 Securities Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Create Security",
+        "description": "Create an immutable identity; only explicit source-scoped aliases deduplicate.",
+        "operationId": "create_security_api_v1_securities_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SecurityCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SecurityInfo"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/portfolios/{portfolio_id}/valuations": {
+      "post": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Write Valuation",
+        "description": "Store a whole snapshot, not ledger events. Exact repeats also return 201.\n\nUnknown security IDs and currency mismatches return 422. A changed assertion\nfor an existing portfolio/date returns 409; replacement is not supported.",
+        "operationId": "write_valuation_api_v1_portfolios__portfolio_id__valuations_post",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValuationCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValuationView"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountValidationResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Latest Valuation",
+        "description": "Latest by as_of, never sum history or merge with the legacy ledger.\n\nPartial snapshots report only their own positions, not carried-forward values.\nExisting portfolios without a snapshot return EMPTY with snapshot=null.",
+        "operationId": "latest_valuation_api_v1_portfolios__portfolio_id__valuations_get",
+        "parameters": [
+          {
+            "name": "portfolio_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValuationView"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/portfolios": {
       "get": {
         "tags": [
@@ -1164,6 +1425,144 @@
   },
   "components": {
     "schemas": {
+      "AccountErrorResponse": {
+        "properties": {
+          "detail": {
+            "type": "string",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "AccountErrorResponse"
+      },
+      "AccountType": {
+        "type": "string",
+        "enum": [
+          "UNKNOWN",
+          "TAXABLE",
+          "TRADITIONAL_401K",
+          "ROTH_401K",
+          "TRADITIONAL_IRA",
+          "ROTH_IRA",
+          "OTHER"
+        ],
+        "title": "AccountType"
+      },
+      "AccountUpdate": {
+        "properties": {
+          "account_type": {
+            "$ref": "#/components/schemas/AccountType",
+            "default": "UNKNOWN"
+          },
+          "custodian": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custodian"
+          },
+          "external_account_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Account Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AccountUpdate",
+        "description": "Omitted fields stay unchanged; null clears nullable strings, not account_type."
+      },
+      "AccountValidationIssue": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Loc"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Msg"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "input": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ctx": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "AccountValidationIssue"
+      },
+      "AccountValidationResponse": {
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AccountValidationIssue"
+                },
+                "type": "array"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "title": "AccountValidationResponse"
+      },
       "AllocationWeight": {
         "properties": {
           "key": {
@@ -1189,6 +1588,15 @@
         ],
         "title": "AllocationWeight",
         "description": "One row of an allocation breakdown."
+      },
+      "Availability": {
+        "type": "string",
+        "enum": [
+          "AVAILABLE",
+          "PARTIAL",
+          "EMPTY"
+        ],
+        "title": "Availability"
       },
       "Body_create_import_api_v1_portfolios__portfolio_id__imports_post": {
         "properties": {
@@ -1692,6 +2100,21 @@
         "title": "ImportStatus",
         "description": "Lifecycle of an asynchronous statement import."
       },
+      "InstrumentType": {
+        "type": "string",
+        "enum": [
+          "UNKNOWN",
+          "STOCK",
+          "ETF",
+          "MUTUAL_FUND",
+          "COLLECTIVE_TRUST",
+          "TARGET_DATE_FUND",
+          "CASH",
+          "OTHER"
+        ],
+        "title": "InstrumentType"
+      },
+      "JsonValue": {},
       "LedgerIngestResult": {
         "properties": {
           "portfolio_id": {
@@ -1967,6 +2390,34 @@
             "maxLength": 3,
             "minLength": 3,
             "title": "Base Currency"
+          },
+          "account_type": {
+            "$ref": "#/components/schemas/AccountType",
+            "default": "UNKNOWN"
+          },
+          "custodian": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custodian"
+          },
+          "external_account_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Account Id"
           }
         },
         "type": "object",
@@ -1992,6 +2443,34 @@
             "maxLength": 3,
             "minLength": 3,
             "title": "Base Currency"
+          },
+          "account_type": {
+            "$ref": "#/components/schemas/AccountType",
+            "default": "UNKNOWN"
+          },
+          "custodian": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custodian"
+          },
+          "external_account_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Account Id"
           }
         },
         "type": "object",
@@ -2107,6 +2586,128 @@
         ],
         "title": "PositionSnapshot",
         "description": "A user's *current* holding, captured without full transaction history.\n\nThis is the answer to \"my portfolio is 10 years old and I don't want to key in\nevery trade\": you assert the position as it stands today \u2014 how many shares you\nhold and what they cost \u2014 and the system records it as a single opening ``BUY``\nlot in the ledger. Every downstream calculator then treats it like any other\nlot, so cost-basis and unrealized P&L are exact.\n\nProvide the cost basis exactly one of two ways (brokerages report both):\n\n* ``cost_basis_per_share`` \u2014 the average price paid per share, or\n* ``total_cost_basis`` \u2014 the aggregate amount invested (we divide by quantity).\n\n``as_of`` is the acquisition/opening date. When you genuinely don't know it,\nleave it unset and the service stamps today's date \u2014 but note the money-weighted\nreturn (XIRR) is only meaningful with a *real* purchase date, so a snapshot with\na placeholder date will (correctly) leave XIRR undefined while cost-basis and\nunrealized P&L stay exact."
+      },
+      "SecurityAlias": {
+        "properties": {
+          "source_code": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Source Code"
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Value"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_code",
+          "value"
+        ],
+        "title": "SecurityAlias"
+      },
+      "SecurityCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "instrument_type": {
+            "$ref": "#/components/schemas/InstrumentType",
+            "default": "UNKNOWN"
+          },
+          "ticker": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticker"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency"
+          },
+          "aliases": {
+            "items": {
+              "$ref": "#/components/schemas/SecurityAlias"
+            },
+            "type": "array",
+            "title": "Aliases",
+            "default": []
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "currency"
+        ],
+        "title": "SecurityCreate"
+      },
+      "SecurityInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "instrument_type": {
+            "$ref": "#/components/schemas/InstrumentType",
+            "default": "UNKNOWN"
+          },
+          "ticker": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 20,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticker"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency"
+          },
+          "aliases": {
+            "items": {
+              "$ref": "#/components/schemas/SecurityAlias"
+            },
+            "type": "array",
+            "title": "Aliases",
+            "default": []
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "currency",
+          "id"
+        ],
+        "title": "SecurityInfo"
       },
       "StatementFormat": {
         "type": "string",
@@ -2701,6 +3302,399 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "ValuationCreate": {
+        "properties": {
+          "as_of": {
+            "type": "string",
+            "format": "date",
+            "title": "As Of"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency"
+          },
+          "complete_snapshot": {
+            "type": "boolean",
+            "title": "Complete Snapshot",
+            "default": true
+          },
+          "positions": {
+            "items": {
+              "$ref": "#/components/schemas/ValuationPositionInput"
+            },
+            "type": "array",
+            "title": "Positions"
+          },
+          "source_code": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Source Code",
+            "default": "MANUAL"
+          },
+          "source_reference": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 240,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Reference"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "as_of",
+          "currency",
+          "positions"
+        ],
+        "title": "ValuationCreate"
+      },
+      "ValuationPosition": {
+        "properties": {
+          "security_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Security Id"
+          },
+          "quantity": {
+            "type": "string",
+            "title": "Quantity"
+          },
+          "reported_price": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reported Price"
+          },
+          "reported_value": {
+            "type": "string",
+            "title": "Reported Value"
+          },
+          "cost_basis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Basis"
+          },
+          "source_reference": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 240,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Reference"
+          },
+          "unrealized_pnl": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unrealized Pnl"
+          },
+          "money_weighted_return": {
+            "type": "null",
+            "title": "Money Weighted Return"
+          },
+          "history_status": {
+            "type": "string",
+            "const": "VALUATION_ONLY",
+            "title": "History Status",
+            "default": "VALUATION_ONLY"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ValuationProvenance"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "security_id",
+          "quantity",
+          "reported_value",
+          "unrealized_pnl",
+          "provenance"
+        ],
+        "title": "ValuationPosition"
+      },
+      "ValuationPositionInput": {
+        "properties": {
+          "security_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Security Id"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,18}|(?=[\\d.]{1,29}0*$)\\d{0,18}\\.\\d{0,10}0*$)"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "reported_price": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,18}|(?=[\\d.]{1,29}0*$)\\d{0,18}\\.\\d{0,10}0*$)"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reported Price"
+          },
+          "reported_value": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,18}|(?=[\\d.]{1,29}0*$)\\d{0,18}\\.\\d{0,10}0*$)"
+              }
+            ],
+            "title": "Reported Value"
+          },
+          "cost_basis": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,18}|(?=[\\d.]{1,29}0*$)\\d{0,18}\\.\\d{0,10}0*$)"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Basis"
+          },
+          "source_reference": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 240,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Reference"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "security_id",
+          "quantity",
+          "reported_value"
+        ],
+        "title": "ValuationPositionInput"
+      },
+      "ValuationProvenance": {
+        "properties": {
+          "source_code": {
+            "type": "string",
+            "title": "Source Code"
+          },
+          "source_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Reference"
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date",
+            "title": "As Of"
+          },
+          "imported_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Imported At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_code",
+          "source_reference",
+          "as_of",
+          "imported_at"
+        ],
+        "title": "ValuationProvenance"
+      },
+      "ValuationSnapshot": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "portfolio_id": {
+            "type": "integer",
+            "title": "Portfolio Id"
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date",
+            "title": "As Of"
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency"
+          },
+          "complete_snapshot": {
+            "type": "boolean",
+            "title": "Complete Snapshot"
+          },
+          "positions": {
+            "items": {
+              "$ref": "#/components/schemas/ValuationPosition"
+            },
+            "type": "array",
+            "title": "Positions"
+          },
+          "reported_total": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Reported Total"
+          },
+          "cost_basis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Basis"
+          },
+          "unrealized_pnl": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unrealized Pnl"
+          },
+          "money_weighted_return": {
+            "type": "null",
+            "title": "Money Weighted Return"
+          },
+          "history_status": {
+            "type": "string",
+            "const": "VALUATION_ONLY",
+            "title": "History Status",
+            "default": "VALUATION_ONLY"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ValuationProvenance"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "portfolio_id",
+          "as_of",
+          "currency",
+          "complete_snapshot",
+          "positions",
+          "reported_total",
+          "cost_basis",
+          "unrealized_pnl",
+          "provenance"
+        ],
+        "title": "ValuationSnapshot"
+      },
+      "ValuationView": {
+        "properties": {
+          "portfolio_id": {
+            "type": "integer",
+            "title": "Portfolio Id"
+          },
+          "view": {
+            "type": "string",
+            "const": "REPORTED_SNAPSHOT",
+            "title": "View",
+            "default": "REPORTED_SNAPSHOT"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Availability"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ValuationSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "portfolio_id",
+          "status",
+          "snapshot"
+        ],
+        "title": "ValuationView",
+        "description": "Separate reported view, never an additive balance alongside the legacy ledger."
       }
     }
   }

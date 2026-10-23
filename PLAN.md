@@ -142,3 +142,194 @@ Testing is a **build-time discipline, not a phase.** Each task below is only com
 - [x] Holding-history review, missing-transaction repair and fingerprint-bound confirmation, with read-only ledger provenance.
 - [x] Portfolio-scoped sector/industry suggestions with accessible editing and explicit saves.
 - [x] Interactive allocation donuts with linked slice/legend previews, pinning and current-holding breakdowns using backend weights.
+
+## Account & Exposure Intelligence — Approved Delivery Plan
+
+This is the next product priority, before broad Phase 2 news/RAG work. The goal is
+trustworthy personal-account accounting and household economic exposure, followed by
+fund-manager decision tools and an equity-research workstation. Implementation status
+must be checked against Git and OpenAPI, not inferred from this document alone.
+
+### Fresh-chat entry point
+
+1. Read `AGENTS.md`, `STRUCTURE.md`, this section, and the applicable agent profile.
+2. Check `git status --short` and recent commits before editing. Do not overwrite
+   unrelated work. Backend/UI implementation uses separate delegated agent contexts.
+3. Read `backend/app/portfolio/accounts.py`, `providers/account_provider.py`, the
+   portfolio schemas/models, import modules, and actual `backend/openapi.json`.
+4. Implement one test-green slice, update docs and OpenAPI/types, commit explicit
+   paths with a one-line Conventional Commit, then proceed to its dependent slice.
+5. No calculations in LLMs, no direct service I/O, no invented fund identities or
+   market data, no null-to-zero coercion. Keep raw personal exports outside Git.
+
+### Dependency-ordered feature slices
+
+| # | Scope / layer | Depends on | Acceptance tests | Intended commit |
+|---|---|---|---|---|
+| 1 | Shared security identity, account metadata, valuation-only snapshots; migrations → pure policy → providers → API | Existing portfolio engine | Additive migration/drift, old portfolio compatibility, exact decimals, nullable basis, dates, alias conflicts, atomic rollback, no ledger side effects | `feat(portfolio): add account and valuation foundations` |
+| 2a | Vanguard two-section CSV; pure parse/preview → atomic persistence → API/OpenAPI | 1 | Both sections, incomplete/full activity, date/identifier validation, repeated and overlapping imports, reinvestment semantics, reconciliation, conflicts, rollback | `feat(imports): import vanguard retirement statements` |
+| 2b | Account metadata, preview/confirm upload, reported balances/activity/reconciliation; typed client/hooks → UI | 2a published contract | MSW/RTL success/failure/cancellation, decimal/null fidelity, portfolio switching, refresh, repeated upload, leading zeros, unknown fund symbols | `feat(frontend): add retirement account import workflow` |
+| 3 | Selected-account meta-portfolio with direct-instrument aggregation | 1–2 | Deduplicate account selection, canonical security identity, FX availability, incomplete denominators, zero/empty accounts, account drill-down | `feat(portfolio): aggregate selected account exposure` |
+| 4 | Free-source capability spike; dated fund constituent snapshots behind a provider | Verified fund identities | Actual tool discovery, free entitlement, source dates, full-vs-partial weights, missing data, stale cache, licence/transport checks | `feat(marketdata): add dated fund holdings provider` |
+| 5 | Fund look-through and direct-plus-indirect company exposure; API then UI | 3–4 | Value conservation, unexplained residuals, company/share-class mappings, fund-of-fund recursion/cycles, no double counting | `feat(portfolio): add fund look-through exposure` |
+| 6 | Concentration, fund overlap, targets/drift, contribution scenarios and fund fees | 5 | Source-weight denominators, partial expense-ratio coverage, deterministic scenario totals and constraints | `feat(portfolio): add allocation decision tools` |
+| 7 | Account cash-flow ledger, valuation history and meaningful performance | Account event design | External vs internal flows, reinvestments, fee/dividend treatment, transfer cancellation at aggregate scope, benchmark total-return consistency | `feat(performance): add account cash flows and history` |
+| 8 | Fundamentals, peer comparison, valuations, thesis and decision journal | Existing statements + persisted citations | Period/unit/currency consistency, deterministic ratios/valuation sensitivity, source-linked facts and thesis revisions | `feat(research): add fundamental analysis workspace` |
+| 9 | Targeted review queue, filings/earnings monitoring, then grounded AI | 6–8, document/citation foundations | Relevant owned-company events, deduplication, review triggers, citation enforcement and structured AI scaffolding | `feat(research): add evidence-based monitoring` |
+
+First release boundary: slices 1–5. Current requested implementation: 1, 2a and 2b.
+No slice is delivered merely because its proposed commit message appears here.
+
+Delivery status:
+- [x] Slice 1 backend foundation: account metadata, shared identities and reported valuations; 491 backend and 204 frontend regressions passed.
+- [ ] Slice 2a Vanguard preview, atomic import, activity and reconciliation.
+- [ ] Slice 2b typed frontend account/import/reported-holdings workflow.
+- [ ] Slices 3–9: not implemented.
+
+### Slice 1: identity, account and valuation contracts
+
+- A portfolio remains the account boundary; add optional custodian, string
+  `external_account_id` and account type: UNKNOWN, TAXABLE, TRADITIONAL_401K,
+  ROTH_401K, TRADITIONAL_IRA, ROTH_IRA, OTHER. Preserve leading zeros.
+- Shared numeric security IDs are independent of ticker. Instrument types include
+  UNKNOWN, STOCK, ETF, MUTUAL_FUND, COLLECTIVE_TRUST, TARGET_DATE_FUND, CASH, OTHER.
+  Source-scoped aliases distinguish plan investments/share classes. Existing ticker
+  ledgers remain backward compatible; migrating their identities is separate work.
+- Never map abbreviated plan fund names to a public ticker without confirmation.
+  A target-date name does not prove a listed share class or product structure.
+- Reported valuation snapshots are independent, dated observations, NOT opening
+  BUYs. Require an explicit valuation date and currency. Cost basis is nullable;
+  present value does not imply historical acquisition cost or performance.
+- Use reported values as authoritative observations; do not overwrite them with
+  quantity × rounded displayed price. Preserve all three original decimal fields.
+- Store snapshot history atomically. Exact same-date content is idempotent;
+  conflicting same-date content is 409, not an implicit destructive replacement.
+  Latest is by valuation date, not upload order. Incomplete snapshots are explicit.
+- Mixed-currency snapshots are refused until supported FX is available. Returned
+  money/quantity values are decimal strings. Unknown P&L and returns remain null.
+- API: existing portfolio POST/GET gain backward-compatible metadata;
+  PATCH `/api/v1/portfolios/{id}/account` (200/404/422);
+  POST/GET `/api/v1/securities` (201/200, 409 conflict, 422 validation);
+  POST/GET `/api/v1/portfolios/{id}/valuations` (201/200, 404/409/422).
+  GET returns a REPORTED_SNAPSHOT envelope with AVAILABLE/PARTIAL/EMPTY and
+  nullable snapshot. This is a separate view, never added to legacy analytics.
+- Additive migration `0009_account_valuations`; explicit Alembic upgrade required.
+
+### Slice 2: Vanguard CSV requirements and financial policy
+
+The user supplied a private Vanguard CSV with two headers separated by blank lines:
+
+- Holdings: `Plan Number,Plan Name,Fund Name,Shares,Price,Total Value,`
+- Activity: `Account Number,Trade Date,Run Date,Transaction Activity,Transaction Description,Investment Name,Share Price,Transaction Shares,Dollar Amount,`
+
+Do not commit that private sample or real plan/account metadata. Use fully fictitious
+fixtures with the same structure. Support trailing empty columns, blank lines,
+UTF-8 BOM, CSV quoting and decimal/date validation. Preserve source line references.
+The first section is current holdings, not the opening balance before activity.
+The export has no holdings date, currency, cost basis, public tickers or unique
+transaction IDs. UI/API must request a real holdings `as_of` date and currency;
+never use the latest trade/run date or upload clock as a fabricated valuation date.
+
+1. **Preview before commit:** return reported holdings/total, source account/plan,
+   activity, mapped/unmapped securities, warnings and typed reconciliation. Preview
+   is read-only. Unsupported activity remains visible, not silently skipped.
+2. **Account scope:** one source account per import in the first iteration. Plan
+   number and activity account may differ only in leading-zero formatting; compare
+   normalized identifiers but preserve the raw strings. Refuse genuine mismatch or
+   inconsistent fund/security mappings. Do not guess traditional vs Roth or employer
+   vs employee contributions from generic descriptions.
+3. **Activity facts:** `114001` / Plan Contribution has acquired units and a reported
+   dollar amount, but must not become both a fictitious opening BUY and another
+   purchase on top of current balances. `219004` / Dividends on Equity Investments
+   with acquired shares represents reinvestment information; preserve the cash
+   distribution and acquired units without double-counting external contributions.
+   Trade date and run date are separate facts; source amount is authoritative when
+   share price × rounded units differs. Unknown codes need review.
+4. **Separate activity:** retain observed account activity with source ownership,
+   code, dates, quantities and amounts. Do not feed a partial-period history into
+   legacy FIFO/XIRR or claim a trustworthy opening lot. Support future explicit
+   external-flow and reinvestment event modeling without manufacturing history.
+5. **Reconciliation:** current holdings are the balance observation; activity is
+   explanatory history, not extra holdings. Show observed movement, closing units,
+   prior units implied by the supplied period and mismatches/unsupported events.
+   Implied prior units are diagnostics, never fabricated acquisitions/cost basis.
+   Complete-history assertions require validation; a one-month export is not
+   proof of inception history. Negative inferred balances are blockers.
+6. **Idempotency:** checksum blocks identical uploads; source-event fingerprints
+   detect overlap across different exports. Source activity code is NOT a unique
+   event ID. Preserve identical-row multiplicity or refuse ambiguous overlap for
+   review; do not collapse legitimate equal contributions. Commit securities,
+   snapshot, activity and import metadata atomically. A failed transaction leaves
+   no partial positions/security aliases; retries must not inflate holdings.
+7. **Safety:** date/account/currency validation and upload limits; explicit 404,
+   409 conflicts and 422 invalid input. Do not repurpose the Robinhood import flow
+   until schemas, recovery, frontend and regressions are covered. A separate typed
+   retirement import API is acceptable; published OpenAPI is the final contract.
+8. **UI workflow:** create/select retirement portfolio → enter account metadata →
+   choose Vanguard CSV/date/currency → inspect preview and warnings → confirm →
+   inspect reported holdings and activity. Unknown basis/returns render as dashes,
+   security names remain usable without tickers, and repeat uploads explain conflicts.
+   Preserve drafts/errors; discard stale portfolio/upload responses after switching.
+
+### Meta-portfolio and look-through invariant contract (slices 3–5)
+
+- Select accounts explicitly; never count an account twice. Report owned instruments
+  separately from underlying economic exposures; constituents never become tax lots.
+- Company exposure = direct market value + sum(fund market value × constituent weight).
+  Weights divide by the selected accounts' supported total value; expose missing
+  account valuations/FX and never call a priced subset the complete household total.
+- Fund weights require as-of dates, source URLs/filing identifiers, retrieval time,
+  coverage and FULL/PARTIAL/UNAVAILABLE/STALE distinctions. Never normalize a top-ten
+  holdings list to 100%. Keep unmapped/unexplained weight and cash/non-equity exposure.
+- Fund-of-funds traversal needs deterministic cycle/depth guards and retained paths
+  explaining which account/fund created exposure. Company aggregation and share-class
+  mappings must be sourced or manually confirmed, never LLM-guessed.
+- Cache dated snapshots persistently; do not replace holdings history with one mutable
+  cache entry. Surface mismatched source dates rather than implying simultaneous data.
+
+### Subsequent priorities and changes to the original roadmap
+
+- Data trust precedes new metrics: import/ledger reconciliation, overlapping-export
+  safety, a data-health panel, and backup/export plus a tested restore runbook.
+- Concentration limits, asset-class/geographic/currency exposure, fund overlap,
+  allocation drift and contribution-led rebalancing precede elaborate VaR/factors.
+- Performance must distinguish external contributions/withdrawals from trades;
+  inter-account transfers cancel for the selected aggregate. Audit portfolio XIRR
+  history gates: holding-level safeguards are not currently applied equivalently
+  by `PortfolioService`. Do not advertise existing trade-flow XIRR as account return.
+- Adding time-weighted return and benchmark comparisons deliberately extends resolved
+  decision #4; existing investor-centric XIRR remains available under honest labels.
+- Ratios, peer matrices and valuations are deterministic. Phase 2.3's AI wording means
+  explain/extract from unstructured cited documents, NOT calculate a peer matrix from
+  already structured financial statements. Prefer a thin source-linked research
+  workflow before a broad generic RAG/news/chat subsystem.
+
+### Free MCP research — documentation inspected in this delivery
+
+Research scope: public GitHub repository READMEs and official documentation retrieved
+read-only during this delivery (user session date 2026-10-22). These are documentation
+findings, NOT live tool/entitlement tests. No account data was sent externally and no
+third-party MCP code was installed or executed. Sources can change; pin/recheck at
+integration time. Open-source server licence does not grant rights to upstream data.
+
+| Candidate / evidence | Useful coverage | Free/access and integration limits |
+|---|---|---|
+| [Official AlphaVantage MCP](https://github.com/alphavantage/alpha_vantage_mcp), [hosted docs](https://mcp.alphavantage.co/), [ETF API docs](https://www.alphavantage.co/documentation/#etf-profile) | Existing quotes/profiles/statements; REST ETF_PROFILE documents holdings and asset/sector allocation | Free API-key signup advertised; endpoint quotas/entitlements still need testing. Hosted MCP tool catalogue did not list ETF_PROFILE in retrieved docs although REST does. Do not promise free MCP constituent access until tools/list + a real free-key request succeeds. Docs now recommend OAuth; existing API-key-in-URL transport is marked deprecated. Never log keys. |
+| [narumiruna/yfinance-mcp](https://github.com/narumiruna/yfinance-mcp), [yfinance fund data](https://ranaroussi.github.io/yfinance/reference/api/yfinance.domain.funds.FundsData.html) | `yfinance_get_fund_data`: ETF/mutual-fund top holdings, asset classes, sectors and operations; price/news/fundamental tools | MIT server using yfinance; no paid upstream subscription assumed, but Yahoo access/terms/rate limits apply. `max_rows=0` removes tool truncation, NOT upstream top-holdings incompleteness. Treat as PARTIAL until coverage verified. Transport needs pin/source inspection before integrating with existing HTTP-only client. |
+| [EdgarTools upstream](https://github.com/dgunning/edgartools), [MCP setup](https://edgartools.readthedocs.io/en/latest/ai/mcp-setup/), [N-PORT guide](https://edgartools.readthedocs.io/en/latest/guides/nport-data-object-guide/) | Company filings/XBRL; library explicitly supports fund portfolios from N-PORT | Self-hosted MIT library/server; no API key, identified SEC user agent required and fair-access limits apply. Docs support stdio and streamable HTTP. Distinguish free self-hosting from hosted edgar.tools paid/full-result service. N-PORT library capability does NOT prove a particular MCP tool exposes complete portfolios; verify tool schemas or add a narrow local wrapper. Filing-based data is delayed, not live ETF holdings; match fund series/share class and filing dates. |
+| [stefanoamorelli/sec-edgar-mcp](https://github.com/stefanoamorelli/sec-edgar-mcp) | Company facts, filings and source SEC URLs | Self-hosted AGPL-3.0; identified SEC user agent, stdio/streamable HTTP advertised. No authentication built in; bind privately. Not established as a complete fund holdings source. Review licence before redistribution/modification. |
+| [stefanoamorelli/fred-mcp-server](https://github.com/stefanoamorelli/fred-mcp-server) | `fred_browse`, `fred_search`, `fred_get_series` for macro series | Self-hosted AGPL-3.0; FRED API key required; stdio or HTTP. Free-access candidate, not live validated. FRED official key-doc request timed out during research, so upstream key terms were not independently revalidated. Not a constituent provider. |
+| [Alex2Yang97/yahoo-finance-mcp](https://github.com/Alex2Yang97/yahoo-finance-mcp) | Prices, statements, corporate actions and news | MIT; README showed local process configuration. `get_holder_info` describes OWNERS of a security, not investments inside a fund; do not confuse institutional ownership with fund constituents. Secondary candidate, not the primary look-through source. |
+
+**Recommended source strategy:** verify existing AlphaVantage ETF free entitlement/MCP
+capability first; for mutual funds, evaluate free self-hosted EdgarTools N-PORT plus
+issuer holdings files behind the same typed provider. Use yfinance MCP as explicitly
+partial composition/metadata fallback, and retain manual issuer-file upload. Add FRED
+only when macro workflows need it. No researched source establishes full coverage of
+all plan-specific investments. Do not substitute ETFs for unresolved mutual funds/CITs.
+
+**Integration gate:** pin version/commit and review licence/dependencies; discover tool
+schemas over the configured transport; test known public examples (not personal account
+files); assert units, sum/denominator, source date, full-vs-partial coverage and stale/error
+behavior; then add mocked provider tests and opt-in live smoke tests. Keep network I/O
+behind providers and citations durable. No MCP installation is needed for slices 1–2.
