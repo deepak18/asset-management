@@ -447,3 +447,27 @@ See [the browser runbook](frontend/README.md#chromium-browser-e2e-frontend-only)
 for debugging, artifact paths and coverage limits. Terminal Playwright works now;
 Playwright MCP registration is a separate optional IDE/plugin setup, not installed
 or configured by this slice. No IDE MCP tools or full-stack coverage are claimed.
+
+### Dialog layout regressions (browser slice 2)
+
+The shared dialog now portals to `document.body` rather than the filtered sticky
+header. Panels stay within the viewport with 16px top/bottom clearance and internal
+scrolling; long history reviews keep their title, Close and footer reachable.
+Keyboard traversal includes form controls and links, dismissal restores trigger
+focus during the layout commit, and body scrolling is locked until the last modal
+closes. Server rendering omits the portal until hydration can safely mount it.
+
+From `frontend/`, run `npm run test:e2e -- e2e/dialog.spec.ts` or
+`npm run test:e2e:headed -- e2e/dialog.spec.ts --project=chromium`.
+Coverage includes 1280x720, 390x844, short 1280x320 and 844x390 landscape creation
+layouts, history scrolling, cancellation/focus and one fictitious portfolio creation
+through the existing MSW POST (201), list refresh and auto-selection. Successful
+layout tests attach screenshots and geometry JSON to the HTML report as well as
+retaining normal failure evidence. See the frontend runbook for actual validation
+results and preserved pre-fix evidence. This remains Chromium/frontend-only, not
+live API, full-stack, mobile-device or Playwright MCP validation.
+
+Slice 2 validation: `npm test` passed 275/275 (34 files); `npm run test:e2e`
+passed 24/24; the targeted headed command above passed 9/9. `npm run lint`, `npm run typecheck` and `npm run build` exited 0. Before/after PNG/JSON pairs
+are locally preserved under `frontend/playwright/.cache/dialog-evidence/`; the
+frontend runbook records intermediate failures and exact report commands.

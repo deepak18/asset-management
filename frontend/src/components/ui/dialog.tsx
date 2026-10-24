@@ -1,19 +1,44 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
-/**
- * Minimal modal dialog.
- *
- * Deliberately dependency-free (no Radix): a fixed overlay plus a centered
- * panel, rendered inline in the tree when `open`. That keeps it trivial to test
- * under jsdom while still exposing `role="dialog"`/`aria-modal` and closing on
- * the backdrop, the ✕ button, or the Escape key. Promote to a portal-based
- * primitive if stacking/scroll-locking needs grow.
- */
+// Server/hydration snapshots omit portal markup; ordinary client opens render
+// immediately so focus still moves in the same layout commit as the trigger.
+const subscribe = () => () => {};
+const clientSnapshot = () => true;
+const serverSnapshot = () => false;
+const panels: HTMLDivElement[] = [];
+let bodyOverflow = "";
+
+function focusableControls(panel: HTMLDivElement) {
+  return [
+    ...panel.querySelectorAll<HTMLElement>(
+      'button, a[href], input, select, textarea, [tabindex], [contenteditable="true"], audio[controls], video[controls], summary',
+    ),
+  ]
+    .filter((element) => {
+      if (element.tabIndex < 0 || element.matches(':disabled, input[type="hidden"]'))
+        return false;
+      for (let node: HTMLElement | null = element; node; node = node.parentElement) {
+        const style = getComputedStyle(node);
+        if (
+          node.hidden ||
+          node.hasAttribute("inert") ||
+          style.display === "none" ||
+          style.visibility === "hidden"
+        )
+          return false;
+      }
+      return true;
+    })
+    .sort((a, b) => (a.tabIndex || Infinity) - (b.tabIndex || Infinity));
+}
+
+/** Viewport-bounded modal; its portal escapes ancestor filters/containing blocks. */
 export function Dialog({
   open,
   onClose,
@@ -30,57 +55,96 @@ export function Dialog({
   className?: string;
 }) {
   const panelRef = React.useRef<HTMLDivElement>(null);
+  const ready = React.useSyncExternalStore(subscribe, clientSnapshot, serverSnapshot);
+  const descriptionId = React.useId();
+  const returnFocus = React.useRef<HTMLElement | null>(null);
+  // Descendant autoFocus runs in layout before the parent layout effect.
+  // Capture the trigger earlier, but acquire/restore focus only in layout.
+  React.useInsertionEffect(() => {
+    if (open && ready)
+      returnFocus.current =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }, [open, ready]);
   // Focus belongs to the DOM commit: passive cleanup can run after the dialog
   // has disappeared, briefly leaving focus on body instead of its trigger.
   React.useLayoutEffect(() => {
-    if (!open) return;
-    const previous =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    panelRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
-    return () => previous?.focus();
-  }, [open]);
-  React.useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      if (e.key !== "Tab") return;
-      const buttons = [
-        ...(panelRef.current?.querySelectorAll<HTMLButtonElement>(
-          "button:not(:disabled)",
-        ) ?? []),
-      ];
-      const first = buttons[0];
-      const last = buttons.at(-1);
-      if (!first || !last) return;
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
+    const panel = panelRef.current;
+    if (!open || !ready || !panel) return;
+    const previous = returnFocus.current;
+    if (!panels.length) {
+      bodyOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+    }
+    panels.push(panel);
+    (focusableControls(panel)[0] ?? panel).focus({ preventScroll: true });
+    return () => {
+      const wasTop = panels.at(-1) === panel;
+      panels.splice(panels.indexOf(panel), 1);
+      if (!panels.length) document.body.style.overflow = bodyOverflow;
+      if (wasTop && previous?.isConnected) previous.focus({ preventScroll: true });
     };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, ready]);
 
-  if (!open) {
-    return null;
-  }
+  React.useEffect(() => {
+    const panel = panelRef.current;
+    if (!open || !ready || !panel) return;
+    // Capture Tab before consumer-specific traps; only the top modal owns it.
+    const onTab = (event: KeyboardEvent) => {
+      if (event.key !== "Tab" || panels.at(-1) !== panel) return;
+      const controls = focusableControls(panel);
+      const first = controls[0];
+      const last = controls.at(-1);
+      if (!first || !last) {
+        event.preventDefault();
+        panel.focus();
+      } else if (
+        !panel.contains(document.activeElement) ||
+        (event.shiftKey && document.activeElement === first) ||
+        (!event.shiftKey && document.activeElement === last)
+      ) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else return;
+      event.stopPropagation();
+    };
+    // Bubble Escape so an inner combobox can consume it without dismissing.
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || panels.at(-1) !== panel)
+        return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      onClose();
+    };
+    document.addEventListener("keydown", onTab, true);
+    document.addEventListener("keydown", onEscape);
+    return () => {
+      document.removeEventListener("keydown", onTab, true);
+      document.removeEventListener("keydown", onEscape);
+    };
+  }, [open, ready, onClose]);
 
-  return (
+  if (!open || !ready) return null;
+
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={onClose}
+      onClick={(event) => {
+        if (event.target === event.currentTarget && panels.at(-1) === panelRef.current)
+          onClose();
+        event.stopPropagation();
+      }}
     >
       <div
         ref={panelRef}
         role="dialog"
+        tabIndex={-1}
         aria-modal="true"
         aria-label={title}
+        aria-describedby={description ? descriptionId : undefined}
         className={cn(
           "w-full max-w-lg rounded-lg border bg-card p-6 text-card-foreground shadow-lg",
           className,
+          "max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain",
         )}
         onClick={(e) => e.stopPropagation()}
       >
@@ -88,12 +152,15 @@ export function Dialog({
           <div>
             <h2 className="text-lg font-semibold">{title}</h2>
             {description ? (
-              <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+              <p id={descriptionId} className="mt-1 text-sm text-muted-foreground">
+                {description}
+              </p>
             ) : null}
           </div>
           <Button
             variant="ghost"
             size="icon"
+            className="shrink-0"
             aria-label="Close Dialog"
             onClick={onClose}
           >
@@ -102,6 +169,7 @@ export function Dialog({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

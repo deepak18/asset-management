@@ -437,9 +437,16 @@ than treating SEC filings as a universal market-data replacement.
   isolated Next E2E output/lock, browser error checks and failure artifacts/HTML report.
   Headless, headed, UI, debug, report and Chromium-install terminal commands are
   documented. IDE Playwright MCP registration is separate and not configured.
-- [ ] Slice 2: investigate and repair actual dialog/layout problems in real Chromium,
-  then add targeted browser regressions. No production dialog change or clipping
-  assertion belongs to slice 1.
+- [x] Slice 2: repair New Portfolio's filtered-header containing block with a
+  hydration-safe body portal, viewport-bounded internal scrolling, full-control
+  keyboard boundary, layout-phase trigger restoration and nested-safe body lock.
+  Chromium regressions assert overlay/panel/control geometry and hit-testing at
+  desktop, narrow, short and landscape sizes; long history scrolling, cancellation,
+  focus, mock POST 201/list refresh and one-write auto-selection are covered.
+  Successful tests attach screenshots/geometry; locally preserved tests-before-fix
+  evidence proves the old overlay-height failure. Original navigation/form and focus
+  regressions stay active. No backend/OpenAPI, typegen or financial policy changes;
+  browser evidence remains frontend/MSW-only, not live/full-stack or MCP validation.
 
 Slice 1 validation: Chromium desktop/narrow **6/6 passed**; existing Vitest suite
 **270/270 passed in 34 files**. Published `backend/openapi.json` is unchanged;
@@ -448,3 +455,10 @@ Unit-runner tooling caps expensive jsdom/MSW fan-out at four workers after repea
 parallel whole-test timeouts; existing assertions, isolation, timeouts and retries
 are unchanged. The frontend runbook records the experiment and the separate
 creation-dialog containing-block bug reproduced read-only for slice 2.
+
+Slice 2 final validation: `npm test` 275/275 (34 files); `npm run test:e2e`
+24/24 including unchanged navigation/form cases; targeted headed dialog suite 9/9.
+Lint, typecheck and normal production build exited 0. Generated next-env.d.ts is
+restored, with no delivered diff. The frontend runbook records tests-before-fix,
+intermediate autofocus/test-authoring failures and ignored before/after PNG/JSON
+evidence. No live/full-stack/MCP coverage, staging or commit is claimed.

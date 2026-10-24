@@ -717,3 +717,67 @@ Final slice validation (commands run from `frontend/`):
   No old test was edited/skipped, and no timeout, assertion or retry policy was relaxed.
 - Installation reported 18 npm audit findings; dependency remediation was not attempted.
   No full-stack/live-account test, staging or commit was performed.
+
+## Chromium dialog layout repair (browser slice 2)
+
+Exact slice paths:
+- `frontend/src/components/ui/dialog.tsx`: body portal, hydration-safe mount,
+  viewport-bounded internal scroll, full-control Tab boundary, nested top-modal
+  ownership, body overflow restoration and layout-phase trigger focus restoration.
+- `frontend/e2e/dialog.spec.ts` (new): real Chromium overlay/panel/control geometry,
+  pointer hit-testing, desktop/narrow/short/landscape creation layouts, long history
+  scrolling, cancellation/focus and one fictitious MSW portfolio POST/list refresh/
+  auto-selection. Layout successes also attach screenshots and geometry JSON.
+- `frontend/src/__tests__/components/dialog-focus.test.tsx`: retains original
+  commit-time focus assertions and adds portals, full controls, disabled/hidden
+  exclusion, Strict Mode lock cleanup, nested focus/dismissal, SSR hydration and
+  descendant autofocus restoration regressions.
+- `README.md`: targeted browser commands, portal behavior and frontend-only limits.
+- `frontend/README.md`: consumed seam, exact coverage, local pre-fix artifacts,
+  commands, validation results and explicit browser/live-service limitations.
+- `PLAN.md`: slice 2 delivery status and bounded scope.
+- `STRUCTURE.md`: this inventory and validation handoff.
+
+No Playwright project/config change is needed: layout cases set explicit viewports
+inside both existing projects. Existing navigation/form tests are unchanged. Backend,
+OpenAPI, generated API/domain types, client, handlers, forms, dependencies and
+financial/history logic are unchanged. POST `/api/v1/portfolios` still consumes
+PortfolioCreate and returns PortfolioSummary with 201; selector and scoped history/
+portfolio reads still use the existing typed REST client and fictitious MSW state.
+No staging, commits, live account writes, private fixtures or MCP calls.
+
+Tests ran before the production edit, preserving ignored logs, screenshots,
+geometry and traces in `frontend/playwright/.cache/dialog-before-*` and corrected
+`history-before-*`. The four creation sizes failed actual old overlay-height
+assertions; old history reached its footer but lacked body scroll locking. Initial
+history disabled-button hit-testing was corrected and is explicitly not treated as
+clipping evidence. `dialog-unit-before.log` records four new unit failures with the
+original two focus regressions passing. Browser success evidence is available as
+HTML report attachments; these artifacts are not tracked source files.
+
+Final slice 2 validation from frontend/: `npm test` passed 275/275 in 34 files
+(43.29s); focused original/new focus/history/refetch tests passed 17/17 (9.39s).
+`npm run test:e2e` passed 24/24 (1.2m), targeted headed dialog suite passed 9/9
+(37.2s), and lint/typecheck/normal build all exited 0. Normal build restored the
+generated next-env.d.ts path; it has no remaining diff. Editor diagnostics on all
+seven slice paths reported no errors, with only the pre-existing Dialog TS71007
+callback-prop warning. Whitespace checks passed.
+
+Intermediate failures are retained in the frontend runbook/logs, not hidden: the
+first portal browser pass found descendant autoFocus stealing the return target;
+a new unit independently reproduced it. An insertion-phase target capture preserves
+layout-phase restoration. The later 22/24 browser result was an incorrect selector
+separator expectation, now exact. No existing test/assertion/timeout was relaxed.
+
+Ignored `frontend/playwright/.cache/dialog-evidence/` contains named before/after
+PNG/JSON pairs at all four creation sizes, exported from genuine report attachments.
+The complete successful full/headed reports are `dialog-validated-report/` and
+`dialog-headed-report/` in that cache. Local artifacts are not additional slice
+source files. No live services, real mobile/assistive-device certification or MCP
+validation is claimed. Exactly the seven listed source/doc paths remain for the
+orchestrator to stage; no staging/commit or backend edits were performed.
+
+## Browser gate operational handoff
+
+- `AGENTS.md`: testing principle 11 now requires the Playwright gate for layout, navigation, dialog and browser-interaction changes, with geometry/evidence assertions and accurate mocked-versus-live coverage reporting. The twelve core principles remain intact.
+- The dialog slice includes this operational documentation alongside its seven implementation/test/runbook paths. Local commit hashes and final working-tree status are reported by the orchestrator, not inferred from delegate handoff notes.

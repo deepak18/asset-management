@@ -665,8 +665,8 @@ HTML report: `playwright-report/`. Failed tests retain screenshot, video and tra
 under `test-results/`; browser-health JSON records errors and mocked reads. Use
 `npm run test:e2e:report` or `npx playwright show-trace test-results/<case>/trace.zip`.
 Artifacts, worker and caches are git-ignored; generated report scripts are excluded
-from ESLint. No screenshot baselines or dialog clipping assertions are introduced;
-production dialog repair is the next slice. Run `npm test`, `npm run lint` and
+from ESLint. Dialog layout tests also attach screenshots and geometry on success;
+there are no screenshot baselines. Run `npm test`, `npm run lint` and
 `npm run typecheck` alongside browser tests.
 
 The Vitest runner now caps jsdom/MSW fan-out at **four workers**. The original
@@ -676,11 +676,124 @@ A four-worker experiment passed all 270 tests and reduced cumulative test execut
 from roughly 170s to 61s. File isolation and parallelism remain enabled; no existing
 test, assertion, wait budget, retry policy or financial behavior was changed.
 
-**Slice 2 evidence (read-only):** open `/` in the mock app and click **New Portfolio**,
-then dismiss with Escape without submitting. At 1280×720, its overlay measures only
-108px high and its panel starts at y = −109px; at 390×844, those values are 224px
-and −61px. The title and Close Dialog sit above the viewport. The inline fixed
-modal is inside the sticky header with `backdrop-filter: blur(8px)`, which establishes
-its containing block. Local ignored evidence: `playwright/.cache/layout-investigation/`
-contains `create-1280.png`, `create-390.png` and `create-geometry.json`. This bug is
-not repaired or asserted by slice 1; slice 2 must ship the targeted browser regression.
+### Dialog layout and keyboard regressions (slice 2)
+The shared `src/components/ui/dialog.tsx` now portals to `document.body`, escaping
+its filtered sticky-header containing block. The old New Portfolio overlay was
+108px high at 1280x720 (panel y=-109), and 224px at 390x844 (panel y=-61).
+A higher z-index cannot repair that geometry. Panels now have a viewport-bounded
+`max-height: calc(100dvh - 2rem)`, 16px clearance and internal vertical scrolling.
+Caller width classes remain supported; height overrides cannot remove the safety
+bound. Title/Close scroll with long content rather than hiding a short viewport
+behind a fixed footer. Labels, aria-modal and description association are retained.
+Tab/Shift+Tab traverse enabled visible controls (including inputs, currency selects,
+links, textareas and tabindex controls), excluding disabled/hidden fields. Escape
+bubbles so inner widgets can consume it. Only the top open modal traps/dismisses;
+the body overflow lock is restored after the last closes. Trigger focus restoration
+remains layout-phase. The return target is captured in an insertion effect before
+descendant autoFocus layout work can replace it with the Name input; focus itself
+still moves only in layout. Server/hydration snapshots omit the portal until safely mounted;
+ordinary client opens still focus during the same commit. Forms and API logic are
+unchanged, including existing pending/error/draft/scope/nullable behavior.
+Run from `frontend/`:
+```powershell
+npm test -- src/__tests__/components/dialog-focus.test.tsx src/__tests__/components/history-confirm-dismissal.test.tsx src/__tests__/components/dashboard-account-refresh.test.tsx
+npm run test:e2e -- e2e/dialog.spec.ts
+npm run test:e2e:headed -- e2e/dialog.spec.ts --project=chromium
+npm test
+npm run lint
+npm run typecheck
+npm run build  # restores normal next-env route-type path after E2E
+```
+`e2e/dialog.spec.ts` checks full overlay/panel bounds and title, Close, Name,
+currency and button bounds/center hit-testing at 1280x720, 390x844, 1280x320 and
+844x390. Short panels scroll to expose each control. History checks desktop,
+narrow and short title/Close/footer reachability, actual internal scrolling and
+body overflow restoration. Keyboard tests include Name/currency in both directions;
+Escape/backdrop/Close/Cancel restore focus without POSTs. A fresh mock-only case
+creates a fictitious portfolio via the actual typed client/MSW, asserts POST 201
+and payload, exactly one write/list refresh, auto-selection and selection on navigation.
+Both existing Chromium projects run all cases; no new viewport project is needed.
+Existing navigation/form tests and original commit-phase focus assertions are unchanged.
+Unit coverage adds portal ancestry, full controls, disabled/hidden fields, Strict Mode
+scroll cleanup, nested focus/dismissal and initially open SSR hydration.
+All layout cases attach `*-geometry` JSON and `*-screenshot` PNG before assertions
+and at their footer, including successes. Inspect attachments in the HTML report.
+Local ignored evidence under `playwright/.cache/`:
+- `dialog-before.log`, `dialog-before-results/`, `dialog-before-report/`: all four
+  old creation layouts fail actual overlay-height assertions. No production revert
+  or history rewriting was used; new tests ran before the implementation edit.
+- The initial history tests wrongly hit-tested disabled Confirm (pointer-events:none).
+  The corrected actionable Cancel footer is recorded in `history-before.log`,
+  `history-before-results/`, `history-before-report/`: all three old history cases
+  reached the footer and then failed missing body-lock assertions. No history clipping
+  failure is claimed from the test-authoring mistake.
+- `dialog-unit-before.log`: original two focus tests passed, four new portal,
+  lock/nesting/server-markup tests failed against old production code.
+Consumed unchanged seam: `backend/openapi.json`; POST `/api/v1/portfolios`
+(`PortfolioCreate` -> `PortfolioSummary`, 201), selector GET list and existing
+scoped portfolio/holding/history/analytics/valuation/security GET mocks. No typegen,
+new handler, dependency, financial calculation or backend change. The loopback runner
+forces existing fictitious MSW responses, never private/live account writes.
+Only Chromium desktop emulation is covered, not Firefox/WebKit, real mobile devices,
+virtual keyboards, assistive-technology certification, full-stack API or MCP behavior.
+Existing unit suites retain API error, cancellation/stale, pending, scope, nullable
+and refresh coverage; this browser slice does not claim live transport coverage.
+
+Intermediate validation: the first portal full unit run passed 274/274 in 34 files
+(38.93s), lint/typecheck passed. The first full browser run then had 12 passed /
+12 failed (3.6m): geometry/history/navigation passed, but creation dismissal lost
+trigger focus because descendant autoFocus ran first. The added autofocus unit
+regression independently failed (6 passed / 1 failed). Capturing the return target
+before descendant layout effects fixed it; the original commit-phase observations
+and all focused focus/refetch tests then passed 17/17 in 3 files (9.39s). Logs:
+`playwright/.cache/dialog-e2e-after.log`, `dialog-autofocus-before.log` and
+`dialog-focus-final.log`. No assertion, timeout, retry or runner setting was relaxed.
+
+The next full browser run passed 22/24 (1.7m); both failures were the new
+creation test omitting the selector's literal middle-dot separator. The assertion
+now checks the exact existing text using a Unicode escape, not a relaxed matcher.
+All layout, cancellation, history and navigation cases passed on that run.
+`playwright/.cache/dialog-e2e-final.log` preserves this test-authoring failure.
+
+### Slice 2 final validation and inspection
+
+All commands below ran from `frontend/`; no retries, skips, timeout increases or
+existing navigation/form-test edits were used.
+
+| Command | Actual final result |
+| --- | --- |
+| `npm test` | 275/275 passed, 34 files, 43.29s |
+| Focused three-file focus/history/refetch command above | 17/17 passed, 9.39s |
+| `npm run test:e2e` | 24/24 passed, both projects, 1.2m |
+| `npm run test:e2e:headed -- e2e/dialog.spec.ts --project=chromium` | 9/9 passed, 37.2s |
+| `npm run lint` | exit 0 |
+| `npm run typecheck` | exit 0 |
+| `npm run build` | exit 0; normal route types regenerated, next-env.d.ts has no diff |
+Editor diagnostics checked all seven slice files: no errors; the existing Next
+TS71007 callback-prop warning for Dialog's unchanged `onClose` signature remains.
+No Server Action is invented to silence it. Whitespace validation passed.
+Logs are `playwright/.cache/dialog-full-unit-final.log`, `dialog-e2e-validated.log`,
+`dialog-headed.log`, `dialog-lint-validated.log`, `dialog-typecheck-validated.log`
+and `dialog-build.log`. Inspect preserved reports without rerunning:
+```powershell
+npx playwright show-report playwright/.cache/dialog-validated-report --host 127.0.0.1
+npx playwright show-report playwright/.cache/dialog-headed-report --host 127.0.0.1
+npx playwright show-report playwright/.cache/dialog-before-report --host 127.0.0.1
+```
+Convenience copies exported directly from report attachments (not synthetic images):
+`playwright/.cache/dialog-evidence/{before,after}-{1280x720,390x844,1280x320,844x390}.{png,json}`.
+For example compare `before-1280x720.png` with `after-1280x720.png` and their JSON.
+Measured creation geometry:
+
+| Viewport | Old overlay height / panel top | Fixed overlay height / panel top-bottom |
+| --- | --- | --- |
+| 1280x720 | 108 / -109 | 720 / 197-523 |
+| 390x844 | 224 / -61 | 844 / 249-595 |
+| 1280x320 | 108 / -109 | 320 / 16-304 |
+| 844x390 | 108 / -109 | 390 / 32-358 |
+The pre-fix browser command was `npm run test:e2e -- e2e/dialog.spec.ts --project=chromium -g 'creation layout|long history' --output=playwright/.cache/dialog-before-results`;
+corrected history baseline used `-g 'long history' --output=playwright/.cache/history-before-results`.
+Pre-fix unit command: `npm test -- src/__tests__/components/dialog-focus.test.tsx`.
+See the failure explanations above rather than treating every test-authoring failure
+as a production defect. No staging/commit was performed. The only remaining source
+changes are the seven documented slice paths; generated artifacts remain ignored.
