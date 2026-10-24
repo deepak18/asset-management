@@ -100,7 +100,7 @@ function HoldingDetailForTicker({
     }
   }, [holding]);
   const back = (
-    <Link className="underline" href={`/?portfolio=${portfolioId}`}>
+    <Link className="underline" href={`/ledger?portfolio=${portfolioId}`}>
       ← Back to portfolio
     </Link>
   );

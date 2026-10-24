@@ -1,3 +1,4 @@
+import { RouteHarness } from "./route-harness";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it } from "vitest";
@@ -10,6 +11,7 @@ import { formatMoney, formatPercent } from "@/lib/format";
 import type { AllocationWeight } from "@/types/domain";
 
 beforeEach(() => {
+  window.history.replaceState(null, "", "/");
   window.localStorage.clear();
   window.localStorage.setItem("am.selected.portfolio", "1");
 });
@@ -64,13 +66,7 @@ it("uses explicit Title Case and accessible names for every fixed dashboard acti
     "Add",
     "Add Position",
     "Add Transaction",
-    "Choose File",
     "",
-    "Edit Account Settings",
-    "Reported Holdings",
-    "Ledger Analytics",
-    "Preview Vanguard Import",
-    "Reload Retirement History",
   ]);
   const names = new Set([
     "Clear Selection",
@@ -79,13 +75,7 @@ it("uses explicit Title Case and accessible names for every fixed dashboard acti
     "Add",
     "Add Position",
     "Add Transaction",
-    "Choose File",
     "Toggle Theme",
-    "Edit Account Settings",
-    "Reported Holdings",
-    "Ledger Analytics",
-    "Preview Vanguard Import",
-    "Reload Retirement History",
   ]);
   for (const holding of getHoldings(1)!) {
     names.add(`Review History For ${holding.ticker}`);
@@ -101,10 +91,8 @@ it("uses explicit Title Case and accessible names for every fixed dashboard acti
     expect(names.has(name)).toBe(true);
     expect(button).toHaveAccessibleName(name);
   }
-  expect(screen.getByLabelText("Upload Broker Statement")).toHaveAttribute(
-    "type",
-    "file",
-  );
+  expect(screen.queryByLabelText("Upload Broker Statement")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Vanguard CSV")).not.toBeInTheDocument();
 });
 
 it("preserves ticker casing in the watchlist removal action", async () => {
@@ -119,7 +107,8 @@ it("uses Title Case for portfolio creation dialog controls", async () => {
   await user.click(screen.getByRole("button", { name: "New Portfolio" }));
   const ui = within(screen.getByRole("dialog"));
   expect(
-    ui.getAllByRole("button")
+    ui
+      .getAllByRole("button")
       .map((button) => button.getAttribute("aria-label") ?? button.textContent),
   ).toEqual(["Close Dialog", "Cancel", "Create"]);
   await user.click(ui.getByRole("button", { name: "Cancel" }));
@@ -131,7 +120,8 @@ it("uses Title Case for loaded holding-history dialog controls", async () => {
   const ui = within(screen.getByRole("dialog"));
   await ui.findByRole("table");
   expect(
-    ui.getAllByRole("button")
+    ui
+      .getAllByRole("button")
       .map((button) => button.getAttribute("aria-label") ?? button.textContent),
   ).toEqual([
     "Close Dialog",
@@ -207,4 +197,44 @@ it("preserves category data casing independently of fixed action Title Case", ()
     expect(button.textContent).toBe("Clear Selection");
     expect(button).toBeDisabled();
   }
+});
+
+it("keeps import and settings action labels on their dedicated routes", async () => {
+  const user = userEvent.setup();
+  window.history.replaceState(null, "", "/imports");
+  render(
+    <PortfolioSelectionProvider>
+      <RouteHarness />
+    </PortfolioSelectionProvider>,
+  );
+  expect(await screen.findByRole("button", { name: "Choose File" })).toHaveTextContent(
+    "Choose File",
+  );
+  expect(screen.getByLabelText("Upload Broker Statement")).toHaveAttribute(
+    "type",
+    "file",
+  );
+  await user.selectOptions(
+    screen.getByRole("combobox", { name: "Brokerage" }),
+    "vanguard",
+  );
+  expect(
+    screen.getByRole("button", { name: "Preview Vanguard Import" }),
+  ).toHaveTextContent("Preview Vanguard Import");
+  expect(
+    screen.getByRole("button", { name: "Reload Retirement History" }),
+  ).toHaveTextContent("Reload Retirement History");
+  const nav = within(screen.getByRole("navigation", { name: "Primary navigation" }));
+  for (const name of [
+    "Reported Holdings",
+    "Ledger Analytics",
+    "Imports",
+    "Account Settings",
+  ])
+    expect(nav.getByRole("link", { name })).toHaveAccessibleName(name);
+  await user.click(nav.getByRole("link", { name: "Account Settings" }));
+  expect(
+    await screen.findByRole("button", { name: "Edit Account Settings" }),
+  ).toHaveTextContent("Edit Account Settings");
+  window.history.replaceState(null, "", "/");
 });

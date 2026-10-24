@@ -218,7 +218,11 @@ frontend/
 └── src/
     ├── app/                   # ✅ App Router
     │   ├── layout.tsx         # ✅ Root layout: globals, terminal chrome (Nav), Providers
-    │   ├── page.tsx           # ✅ dashboard mount point (renders client <Dashboard/>)
+    │   ├── holdings/page.tsx # Dedicated reported snapshots
+    │   ├── ledger/page.tsx # Ledger analytics and manual entry
+    │   ├── imports/page.tsx # Brokerage-selected imports
+    │   ├── settings/page.tsx # Account metadata settings
+    │   ├── page.tsx           # ✅ automatic selected-account overview mount point
     │   ├── portfolios/[id]/holdings/[ticker]/page.tsx # ✅ Validated, bookmarkable URL-scoped holding detail route
     │   ├── providers.tsx      # ✅ Client bootstrap; mounts MSW mock (ssr:false) + PortfolioSelectionProvider
     │   └── globals.css        # ✅ Tailwind layers + light/dark design tokens
@@ -245,7 +249,7 @@ frontend/
     │   │   ├── add-position-form.tsx       # ✅ POST /positions; cost basis = exactly one of per-share/total (422-proof); explains XIRR trade-off
     │   │   ├── manual-transaction-form.tsx # ✅ Type-aware transaction input with optional locked ticker, unique control IDs, abort guards and preserved error drafts
     │   │   ├── import-panel.tsx            # ✅ CSV upload/poll and refreshable import history with retry-safety label
-    │   │   └── dashboard.tsx               # ✅ Panels refetch after writes, imports or deletion
+    │   │   └── dashboard.tsx               # ✅ Route-owned panels; imports/settings have dedicated pages, overview retains automatic view policy
     │   ├── app-shell/         # ✅ nav.tsx — top bar + portfolio picker + light/dark toggle
     │   ├── research/          # ⬜ Ticker workstation, competitor matrix, thesis canvas
     │   └── workspace-panel/   # ⬜ Context-aware side panel (streaming tokens)
@@ -642,3 +646,24 @@ REST client and contract-shaped MSW handlers: portfolio/account, valuation/secur
 ledger/holdings/analytics, holding-history and retirement-history/activity reads.
 No API/schema/typegen changes, dependencies, backend edits, staging or commits.
 README/PLAN setup and feature semantics are unchanged; no updates are required.
+
+## Dedicated portfolio pages delivery
+New frontend components:
+- `frontend/src/components/app-shell/portfolio-links.tsx`: account-preserving feature links with active-page semantics.
+- `frontend/src/components/portfolio/portfolio-boundary.tsx`: URL query synchronization, account-keyed loading/empty states and shared refresh boundary.
+- `frontend/src/components/portfolio/imports-page.tsx`: Robinhood/Vanguard selector mounts one existing import form and links to results.
+New frontend test files under `src/__tests__/components/`:
+- `feature-pages.test.tsx`: route mounts, active links, TAXABLE label/value, import refresh/errors and account/brokerage/navigation isolation.
+- `route-harness.tsx`: shared route-aware layout/provider mounting for regression tests.
+- `router-state.ts`: deterministic test-only Next navigation state.
+Updated layout/Nav provide responsive persistent navigation and a skip link.
+Account Settings labels TAXABLE as Taxable Brokerage. Holding detail returns to
+Ledger Analytics. Existing dashboard, button-label, account-refresh, holdings,
+history-deletion/review, reported-holdings and retirement-import tests target their
+owning routes while preserving history/focus/financial assertions. Both import forms,
+OpenAPI, generated types, dependencies and backend executable code are unchanged.
+Root/frontend README document the new pages and import click path; PLAN marks scope
+delivered. Independent checks: 270 frontend tests in 34 files, lint/typecheck passed;
+580 backend tests passed, 3 live integration tests deselected, Ruff passed, mypy
+passed for 57 source files. Delegate production build passed. Live browser/backend
+integration was not exercised.

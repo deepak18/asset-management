@@ -1,3 +1,4 @@
+import "./router-state";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
@@ -203,7 +204,7 @@ it("refreshes dashboard holdings and allocations after success", async () => {
   render(
     <PortfolioSelectionProvider>
       <Selector />
-      <Dashboard />
+      <Dashboard page="ledger" />
     </PortfolioSelectionProvider>,
   );
   await user.click(

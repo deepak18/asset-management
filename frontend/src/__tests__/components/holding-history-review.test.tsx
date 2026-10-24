@@ -1,3 +1,4 @@
+import "./router-state";
 import {
   act,
   fireEvent,
@@ -198,7 +199,7 @@ it("refreshes dashboard sibling summary, allocation and ledger reads after confi
   const holdings = vi.spyOn(apiClient, "listHoldings");
   render(
     <PortfolioSelectionProvider>
-      <Dashboard />
+      <Dashboard page="ledger" />
     </PortfolioSelectionProvider>,
   );
   const { user, ui } = await open();

@@ -13,17 +13,15 @@ export const metadata: Metadata = {
  * client Providers wrapper that boots mock mode when enabled. Kept as a Server
  * Component; only the interactive pieces (Nav, Providers) opt into the client.
  */
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="min-h-screen bg-background text-foreground antialiased">
         <Providers>
           <Nav />
-          <main className="container py-6">{children}</main>
+          <main id="main-content" tabIndex={-1} className="container py-6">
+            {children}
+          </main>
         </Providers>
       </body>
     </html>

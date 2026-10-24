@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { expect, it } from "vitest";
 import { http, HttpResponse } from "msw";
 import { ReportedHoldings } from "@/components/portfolio/reported-holdings";
-import { Dashboard } from "@/components/portfolio/dashboard";
+import { RouteHarness } from "./route-harness";
 import {
   PortfolioSelectionProvider,
   usePortfolioSelection,
@@ -58,7 +58,7 @@ it("shows an import prompt rather than zero for an empty snapshot", () => {
   expect(screen.queryByText(/USD 0/)).not.toBeInTheDocument();
 });
 
-it("automatically selects existing snapshots and retirement metadata, isolates stale reads on account switch and supports an explicit ledger toggle", async () => {
+it("automatically selects existing snapshots and retirement metadata, isolates stale reads on account switch and supports an explicit ledger route", async () => {
   const user = userEvent.setup();
   window.localStorage.setItem("am.selected.portfolio", "99");
   window.history.replaceState(null, "", "/");
@@ -85,7 +85,7 @@ it("automatically selects existing snapshots and retirement metadata, isolates s
   render(
     <PortfolioSelectionProvider>
       <Switch />
-      <Dashboard />
+      <RouteHarness />
     </PortfolioSelectionProvider>,
   );
   await waitFor(() => expect(signal).toBeDefined());
@@ -99,11 +99,22 @@ it("automatically selects existing snapshots and retirement metadata, isolates s
   expect(
     screen.queryByRole("table", { name: "Reported holdings" }),
   ).not.toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Reported Holdings" }));
-  expect(screen.getByText(/No reported snapshot yet/)).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Ledger Analytics" }));
+  await user.click(
+    within(screen.getByRole("navigation", { name: "Primary navigation" })).getByRole(
+      "link",
+      { name: "Reported Holdings" },
+    ),
+  );
+  expect(await screen.findByText(/No reported snapshot yet/)).toBeInTheDocument();
+  await user.click(
+    within(screen.getByRole("navigation", { name: "Primary navigation" })).getByRole(
+      "link",
+      { name: "Ledger Analytics" },
+    ),
+  );
   expect(await screen.findByText("Allocation by sector")).toBeInTheDocument();
   window.localStorage.clear();
+  window.history.replaceState(null, "", "/");
 });
 
 it("prefers a snapshot for an UNKNOWN account without combining ledger balances", async () => {
@@ -112,19 +123,27 @@ it("prefers a snapshot for an UNKNOWN account without combining ledger balances"
   mockRetirement(99).valuation = demoValuation(99, "2026-10-20");
   render(
     <PortfolioSelectionProvider>
-      <Dashboard />
+      <RouteHarness />
     </PortfolioSelectionProvider>,
   );
   expect(
     await screen.findByRole("table", { name: "Reported holdings" }),
   ).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Reported Holdings" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
+  expect(
+    within(screen.getByRole("navigation", { name: "Primary navigation" })).getByRole(
+      "link",
+      { name: "Overview" },
+    ),
+  ).toHaveAttribute("aria-current", "page");
+  await user.click(
+    within(screen.getByRole("navigation", { name: "Primary navigation" })).getByRole(
+      "link",
+      { name: "Ledger Analytics" },
+    ),
   );
-  await user.click(screen.getByRole("button", { name: "Ledger Analytics" }));
   expect(await screen.findByText("Allocation by sector")).toBeInTheDocument();
   window.localStorage.clear();
+  window.history.replaceState(null, "", "/");
 });
 
 it("opens a retirement account with no snapshot in the reported import-prompt view", async () => {
@@ -132,15 +151,18 @@ it("opens a retirement account with no snapshot in the reported import-prompt vi
   updateMockAccount(99, { account_type: "TRADITIONAL_IRA" });
   render(
     <PortfolioSelectionProvider>
-      <Dashboard />
+      <RouteHarness />
     </PortfolioSelectionProvider>,
   );
   expect(await screen.findByText(/No reported snapshot yet/)).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Reported Holdings" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  expect(
+    within(screen.getByRole("navigation", { name: "Primary navigation" })).getByRole(
+      "link",
+      { name: "Overview" },
+    ),
+  ).toHaveAttribute("aria-current", "page");
   expect(screen.queryByText(/USD 0.00/)).not.toBeInTheDocument();
   expect(screen.queryByText("Allocation by sector")).not.toBeInTheDocument();
   window.localStorage.clear();
+  window.history.replaceState(null, "", "/");
 });

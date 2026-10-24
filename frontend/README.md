@@ -128,11 +128,57 @@ strings** (never floats). The UI honors that end-to-end:
 - Charts use a float **only** to size an SVG wedge; every number the user reads
   is formatted from the original string.
 
+## Routes and account workflow
+
+| URL | Purpose |
+| --- | --- |
+| `/` | Automatic account overview: reported holdings for a nonempty snapshot or known retirement type; otherwise ledger analytics. Loading/errors never become a zero balance. |
+| `/holdings` | Reported holdings only, including honest empty/partial states and source provenance. |
+| `/ledger` | Trade-ledger summary, allocations, holdings/history, transactions, watchlist and manual entry. No statement import forms or account settings. |
+| `/imports` | Choose **Robinhood** or **Vanguard** in the Brokerage selector. Only that brokerage's existing form and history are mounted. |
+| `/settings` | Selected account metadata with explicit Edit/Save/Cancel. **Taxable Brokerage** uses the existing `TAXABLE` value and means an ordinary non-retirement investment account, not a 401(k) or IRA. |
+| `/portfolios/{id}/holdings/{ticker}` | Existing URL-scoped holding detail. Back to portfolio targets `/ledger?portfolio={id}`. |
+
+The persistent layout owns the portfolio picker and theme toggle. Primary navigation
+uses real Next links with `aria-current="page"`, keyboard focus styles, wrapping
+small-screen layout and a skip-to-content link. Feature links include
+`?portfolio={id}` for bookmarking; query selection overrides stored selection on
+route/query entry, including browser history changes, but is not reapplied after
+same-page metadata refreshes or picker changes. Invalid/unknown query IDs retain the
+normal stored/first-account fallback. Holding-detail navigation uses the URL account,
+not an unrelated picker selection.
+
+Import workflow: select the destination portfolio, open **Imports**, choose the
+brokerage, then upload. Robinhood retains its asynchronous 202/poll/history and
+explicit duplicate-override workflow. Vanguard retains preview, unchecked review
+acknowledgement and strict confirmed commit. After success the shared refresh token
+and portfolio list update, the mounted import history/activity reload, and a result
+link opens **Ledger Analytics** or **Reported Holdings**. Destination pages read
+fresh data when mounted; imports are not embedded in either data page.
+
+Same-account refreshes preserve open editors, drafts and history-trigger identity.
+Account, route and brokerage changes unmount obsolete work and reset local upload
+state. Vanguard transport aborts on unmount and ignores stale responses. The unchanged
+Robinhood uploader does not abort an already-submitted POST, but detached results
+cannot start a new mounted poller or refresh the newly selected scope; polling stops
+on unmount. Browser cancellation cannot undo server writes: inspect history before
+resubmitting an abandoned import.
+
+Page ownership lives in `components/portfolio/dashboard.tsx`,
+`portfolio-boundary.tsx` (query/selection/loading/error/empty and metadata refresh),
+`imports-page.tsx` (one brokerage at a time) and
+`components/app-shell/portfolio-links.tsx` (shared destinations).
+`feature-pages.test.tsx` mounts actual route modules using a thin Next navigation
+harness; existing financial/history/draft regressions remain active on their owning
+surfaces. Long workflows are split by responsibility, not given larger timeouts.
+The contract, generated API/domain types and both import forms are unchanged; no
+`typegen` is needed for this navigation-only slice.
+
 ## Layout
 
 ```
 src/
-├── app/            App Router: dashboard + portfolios/[id]/holdings/[ticker]/page.tsx
+├── app/            App Router: overview + holdings/ledger/imports/settings + portfolios/[id]/holdings/[ticker]/page.tsx
 ├── components/
 │   ├── ui/         shadcn-style primitives (card, table, badge, button, input, select, label, progress, dialog, skeleton)
 │   ├── shared/     loading / error / empty state blocks
@@ -173,9 +219,8 @@ The dashboard is no longer pinned to a single portfolio id:
   entry; `409` (duplicate) offers an explicit "import anyway"
   (`allow_duplicate=true`), `413`/`422` are explained.
 
-After any successful write, or an import job reaching `SUCCEEDED`, the selected
-portfolio's analytics/holdings/transactions refetch (a `dataVersion` token in the
-selection context that every per-portfolio hook folds into its deps).
+After a successful write or import, a shared `dataVersion` token invalidates
+selected-account reads. Mounted panels refetch; other routes read fresh data on entry.
 
 > **Contract note:** these routes came from a backend contract bump. Regenerate
 > types with `npm run typegen`, then reconcile the MSW handlers/fixtures in
@@ -186,7 +231,7 @@ selection context that every per-portfolio hook folds into its deps).
 - The dashboard holdings table links each ticker to
   `/portfolios/{id}/holdings/{ticker}`. The URL, not the locally selected id,
   identifies the detail page's portfolio. **Back to portfolio** restores that
-  portfolio on the dashboard.
+  portfolio on `/ledger?portfolio={id}`.
 - Warning icons include readable explanations from the API's typed `data_gaps`.
   Missing prices are a separate provider-availability message, not a manual
   classification field. Other ledger gaps direct you to review source history;
@@ -460,9 +505,9 @@ keeping the review open. Regression coverage includes
 
 Live prerequisites: the published backend contract and migrations through **0010**;
 normal frontend setup above is unchanged. No MCP or market-data integration is used.
-Create/select a USD portfolio, open **Edit Account Settings**, save known metadata
-(or leave account type Unknown), then choose a CSV and **Holdings as of date** in
-**Vanguard Retirement Import**. The date starts blank because this export does not
+Create/select a USD portfolio, open **Account Settings** and **Edit Account Settings**,
+save known metadata (or leave account type Unknown), then open **Imports**, select
+**Vanguard** and choose a CSV and **Holdings as of date** in **Vanguard Retirement Import**. The date starts blank because this export does not
 supply a holdings date. Currency is currently fixed to USD. Inception history is an
 explicit conservative opt-in and never enables returns by itself.
 
@@ -477,20 +522,21 @@ required. Other errors preserve file/options and, for commit failures, the revie
 Cancel/unmount/switch aborts transport and ignores abandoned results; submitted
 server commits can nevertheless finish, so reload history before another upload.
 
-Successful import refreshes reported snapshot/security names, account metadata,
-portfolio selector resource, persisted import history/detail and observed activity.
+Successful import invalidates shared data and refreshes account/selector metadata,
+persisted import history/detail and observed activity. Follow the result link for a
+fresh reported snapshot/security-name read on `/holdings`.
 Unsaved account-settings drafts survive resource refresh. Settings are seeded from
 GET of the actual selected portfolio, not the selector's cached summary. Blank
 nullable metadata fields explicitly clear with null; account IDs remain strings.
 
-**Reported Holdings** becomes primary for AVAILABLE/PARTIAL snapshots or known
+On `/`, **Reported Holdings** becomes primary for AVAILABLE/PARTIAL snapshots or known
 retirement account types. It joins security names by numeric identity with an
 `Unknown security #id` fallback, not ticker guesses. Its total is the backend's
 reported total, never units times price, ledger value, or an aggregate of snapshots.
 PARTIAL coverage, source/date/import provenance and valuation-only return limits are
 visible. Null values use the existing dash formatters, not zero. **Ledger Analytics**
-is an explicit separate view retaining the existing brokerage workflow, Robinhood
-import, allocation inspection, trade forms and history/deletion controls. No snapshot
+is an explicit `/ledger` page retaining allocation inspection, trade forms and
+history/deletion controls. Robinhood imports live only on `/imports`. No snapshot
 is inserted into that ledger and the two views must never be summed.
 
 ### Consumed published REST seam
@@ -526,7 +572,7 @@ Decimals stay strings through formatting; no financial or history policy is in T
   persisted history inspection and full observed facts, without ledger ingestion.
 - `src/components/portfolio/reported-holdings.tsx`: separate reported balance,
   partial/empty states, identity join, decimal/null formatting and provenance.
-- `src/components/portfolio/dashboard.tsx`: scoped view selection and write refresh.
+- `src/components/portfolio/dashboard.tsx`: feature page ownership, automatic overview and write refresh.
 - `src/mocks/retirement-fixtures.ts` / `retirement-handlers.ts`: wholly fictitious
   fixed demo bytes, account/valuation/security reads and persisted preview/commit.
   Existing mock state resets this slice between tests and keeps legacy data intact.
@@ -547,8 +593,19 @@ fictitious constant to a local temporary CSV with LF newlines; do not substitute
 private metadata. Arbitrary exports must use the real backend. The mock is not a
 Vanguard parser or a replacement for backend reconciliation/overlap policy.
 
-Validation: `npm run typegen` succeeded; `npm test` **235 passed in 31 files**;
+Slice 2b historical validation: `npm run typegen` succeeded; `npm test` **235 passed in 31 files**;
 `npm run lint` and `npm run typecheck` exited 0. No dependencies, backend code, MCP,
 real account fixtures or CSV files changed. Live browser/API integration was not
 exercised. Post-import security metadata/ticker/alias amendment remains an explicit
 future backend contract slice before fund look-through, not a guessed frontend API.
+### Navigation slice validation
+- Two consecutive full `npm test` runs: **270/270 tests, 34 files** (21.64s and 18.59s).
+- `npm run lint` and `npm run typecheck`: exit 0.
+- `npm run build`: exit 0; `/`, `/holdings`, `/ledger`, `/imports`, `/settings`
+  prerender successfully and the existing URL-scoped holding route stays dynamic.
+- Earlier integration failures (old mode ownership, router-mock ordering and long
+  whole-workflow test budgets) were corrected without skipped assertions or larger
+  timeout settings. Boundary loading/error/empty, shared metadata refresh failures,
+  both brokerage result links and abandoned-work isolation are covered with MSW.
+- No API contract, generated types, dependencies, backend or import-form edits.
+  Live browser/backend integration was not exercised.

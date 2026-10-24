@@ -1,10 +1,6 @@
 import { Dashboard } from "@/components/portfolio/dashboard";
 
-/**
- * Unified Portfolio Dashboard (§1.4). The portfolio shown is chosen in the app
- * shell picker (persisted in localStorage) and shared via the selection context,
- * so this page is just a thin mount point for the client {@link Dashboard}.
- */
+/** Automatic overview; explicit feature destinations live in the persistent nav. */
 export default function DashboardPage() {
   return <Dashboard />;
 }

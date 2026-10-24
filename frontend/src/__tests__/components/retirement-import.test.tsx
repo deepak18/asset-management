@@ -11,7 +11,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { http, HttpResponse } from "msw";
 import { RetirementImportPanel } from "@/components/portfolio/retirement-import-panel";
-import { Dashboard } from "@/components/portfolio/dashboard";
+import { RouteHarness } from "./route-harness";
 import {
   PortfolioSelectionProvider,
   usePortfolioSelection,
@@ -64,11 +64,16 @@ it("previews and explicitly confirms a real multipart mock import, refreshing th
       </output>
     );
   }
+  window.history.replaceState(null, "", "/imports");
   render(
     <PortfolioSelectionProvider>
       <SelectionProbe />
-      <Dashboard />
+      <RouteHarness />
     </PortfolioSelectionProvider>,
+  );
+  await user.selectOptions(
+    await screen.findByRole("combobox", { name: "Brokerage" }),
+    "vanguard",
   );
   const previewButton = await screen.findByRole("button", {
     name: "Preview Vanguard Import",
@@ -103,20 +108,11 @@ it("previews and explicitly confirms a real multipart mock import, refreshing th
   await acknowledge(user);
   await user.click(screen.getByRole("button", { name: "Confirm Vanguard Import" }));
   expect(await screen.findByText(/Vanguard import committed/)).toBeInTheDocument();
-  expect(
-    await screen.findByRole("table", { name: "Reported holdings" }),
-  ).toHaveTextContent("Example Balanced Trust");
-  expect(screen.getByText("Reported balance")).toHaveTextContent("USD 247.05");
-  expect(screen.queryByText("USD 0.00")).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Reported Holdings" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
   expect(screen.queryByText("Allocation by sector")).not.toBeInTheDocument();
   await waitFor(() =>
     expect(screen.getByLabelText("Selected account ID")).toHaveTextContent("000042"),
   );
-  expect(await screen.findByText("Vanguard", { exact: true })).toBeInTheDocument();
+  expect((await apiClient.getPortfolio(99)).custodian).toBe("Vanguard");
   expect(await screen.findByText(/Persisted account activity: 1/)).toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Confirm Vanguard Import" }),
@@ -129,6 +125,28 @@ it("previews and explicitly confirms a real multipart mock import, refreshing th
   await user.click(screen.getByRole("button", { name: "Preview Vanguard Import" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("already imported");
   expect(screen.getByLabelText("Holdings as of date")).toHaveValue(options.as_of);
+  const result = screen.getByRole("link", { name: "View Reported Holdings" });
+  expect(result).toHaveAttribute("href", "/holdings?portfolio=99");
+  expect(screen.queryByRole("table", { name: "Reported holdings" })).toBeNull();
+  await user.click(result);
+  expect(
+    await screen.findByRole("table", { name: "Reported holdings" }),
+  ).toHaveTextContent("Example Balanced Trust");
+  expect(screen.getByText("Reported balance")).toHaveTextContent("USD 247.05");
+  expect(screen.queryByText("USD 0.00")).not.toBeInTheDocument();
+  expect(
+    within(screen.getByRole("navigation", { name: "Primary navigation" })).getByRole(
+      "link",
+      { name: "Reported Holdings" },
+    ),
+  ).toHaveAttribute("aria-current", "page");
+  await user.click(
+    within(screen.getByRole("navigation", { name: "Primary navigation" })).getByRole(
+      "link",
+      { name: "Account Settings" },
+    ),
+  );
+  expect(await screen.findByText("Vanguard", { exact: true })).toBeInTheDocument();
 });
 
 it("requires an explicit date and discards reviews on date, history and file changes; blocking issues prohibit confirmation", async () => {

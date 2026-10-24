@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 
 const accountTypes: { value: AccountType; label: string }[] = [
   { value: "UNKNOWN", label: "Unknown" },
-  { value: "TAXABLE", label: "Taxable" },
+  { value: "TAXABLE", label: "Taxable Brokerage" },
   { value: "TRADITIONAL_401K", label: "Traditional 401(k)" },
   { value: "ROTH_401K", label: "Roth 401(k)" },
   { value: "TRADITIONAL_IRA", label: "Traditional IRA" },
@@ -117,6 +117,7 @@ function SettingsScope({
                 <Label htmlFor={`${uid}-type`}>Account type</Label>
                 <select
                   id={`${uid}-type`}
+                  aria-describedby={`${uid}-type-help`}
                   className="block rounded border bg-background p-2"
                   value={draft.account_type}
                   onChange={(e) => {
@@ -157,9 +158,10 @@ function SettingsScope({
                   }
                 />
               </div>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground" id={`${uid}-type-help`}>
                 Keep leading zeros. Blank custodian or account ID clears that field.
-                Account type is not inferred from a fund name.
+                Account type is not inferred from a fund name. Taxable Brokerage means
+                an ordinary, non-retirement investment account, unlike a 401(k) or IRA.
               </p>
               <Button type="submit">
                 {pending ? "Saving…" : "Save Account Settings"}

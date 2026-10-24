@@ -369,22 +369,23 @@ Legacy Robinhood import and analytics remain unchanged.
 With the backend migrated to **0010** and running, start `npm run dev` from
 `frontend/` and open <http://localhost:3000>. No market-data or MCP setup is needed.
 
-1. Create/select a USD portfolio. In **Account Settings**, choose **Edit Account
-   Settings**, set the known account type (or leave Unknown), custodian and string
-   account ID, then **Save Account Settings**. Keep leading zeros; do not infer
-   traditional/Roth status from a plan name. Metadata is optional before import.
-2. In **Vanguard Retirement Import**, choose your local `.csv`, explicitly enter
+1. Create/select a USD portfolio. Open **Account Settings** (`/settings`), choose
+   **Edit Account Settings**, set the known account type (or leave Unknown), custodian
+   and string account ID, then **Save Account Settings**. Keep leading zeros; do not
+   infer traditional/Roth status from a plan name. Metadata is optional before import.
+2. Open **Imports** (`/imports`), select **Vanguard** under **Brokerage**, then in
+   **Vanguard Retirement Import**, choose your local `.csv`, explicitly enter
    **Holdings as of date**, and retain USD. Leave **Includes All Transactions Since
    Inception** unchecked unless supported by your broker records.
 3. Select **Preview Vanguard Import**. Inspect every fund, source account/plan,
    activity, mappings, issues and share reconciliation. Expand **Inspect activity**
    and individual source lines for retained facts. Unknown tickers are not guessed.
 4. Check the review acknowledgement and select **Confirm Vanguard Import** only
-   when the backend permits it. Success opens **Reported Holdings** as the primary
-   balance and refreshes account metadata, selector metadata, imports and activity.
-   **Inspect Import #...** reopens the persisted review/diagnostics.
+   when the backend permits it. Success refreshes account metadata, selector metadata,
+   imports and activity, and provides **View Reported Holdings** to open the balance
+   page. **Inspect Import #...** reopens the persisted review/diagnostics.
 
-Reported Holdings and Ledger Analytics are distinct selectable views, never summed.
+Reported Holdings and Ledger Analytics are distinct pages, never summed.
 Existing snapshots (including partial snapshots) and retirement account types default
 into the reported view. Empty retirement accounts show an import prompt, not a zero
 balance. Unknown basis, prices, P&L and returns remain unavailable. A reported
@@ -402,3 +403,21 @@ Mock mode accepts only the fictitious `demo-retirement.csv` bytes exported as
 fixed demo workflow, not arbitrary CSV parsing. Use live mode for your real export;
 never copy private account files into Git. See [the frontend runbook](frontend/README.md#vanguard-retirement-accounts-slice-2b)
 for API/test details. No dependencies or backend executable files changed.
+
+## Portfolio pages
+
+Persistent navigation provides bookmarkable pages and preserves the selected portfolio:
+
+| Page | URL | Purpose |
+|---|---|---|
+| Overview | `/` | Automatic reported-holdings or ledger view for the selected account |
+| Reported Holdings | `/holdings` | Dated reported balances, separate from the ledger |
+| Ledger Analytics | `/ledger` | Trade-based holdings, allocation, history and manual entry |
+| Imports | `/imports` | Select Robinhood or Vanguard to display its form and history |
+| Account Settings | `/settings` | Edit account type, custodian and string account ID |
+
+Conventional non-retirement investing accounts use **Taxable Brokerage** (`TAXABLE`
+in the API). Account type describes tax treatment; custodian identifies the brokerage.
+Imports no longer appear beneath holdings or ledger analytics. Switching brokerage
+or leaving the page discards local review/upload state, but already-submitted server
+work may complete. Inspect retained history before retrying.

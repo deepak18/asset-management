@@ -93,7 +93,10 @@ describe("holdings table", () => {
       "Keep this draft",
     );
     await user.click(screen.getByRole("button", { name: "Edit PLTR Sector" }));
-    await user.type(screen.getByRole("combobox", { name: "PLTR sector" }), "Technology");
+    await user.type(
+      screen.getByRole("combobox", { name: "PLTR sector" }),
+      "Technology",
+    );
     await user.click(screen.getByRole("button", { name: "Save PLTR Sector" }));
     await waitFor(() => expect(changed).toHaveBeenCalledTimes(1));
     await waitFor(() =>
@@ -139,7 +142,7 @@ describe("holding detail", () => {
     expect(await screen.findByText("USD 1,290.00")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Back to portfolio/ })).toHaveAttribute(
       "href",
-      "/?portfolio=1",
+      "/ledger?portfolio=1",
     );
     // Holding-level XIRR: this ticker's own return, with its valuation provenance.
     expect(
@@ -149,14 +152,14 @@ describe("holding detail", () => {
     expect(
       screen.getByText(/Annualized money-weighted return on your AAPL cash flows/),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/from ALPHAVANTAGE GLOBAL_QUOTE/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/from ALPHAVANTAGE GLOBAL_QUOTE/)).toBeInTheDocument();
     // The obsolete portfolio-wide fallback must be gone.
     expect(
       screen.queryByText(/whole portfolio, not this ticker/),
     ).not.toBeInTheDocument();
-    expect(screen.queryByText(/does not expose a per-holding XIRR/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/does not expose a per-holding XIRR/),
+    ).not.toBeInTheDocument();
     const ledger = await screen.findByRole("table");
     expect(within(ledger).queryByText("MSFT")).not.toBeInTheDocument();
     expect(within(ledger).getAllByRole("link", { name: "AAPL" })).toHaveLength(3);
@@ -171,7 +174,10 @@ describe("holding detail", () => {
       "Draft industry",
     );
     await user.click(screen.getByRole("button", { name: "Edit PLTR Sector" }));
-    await user.type(screen.getByRole("combobox", { name: "PLTR sector" }), "Technology");
+    await user.type(
+      screen.getByRole("combobox", { name: "PLTR sector" }),
+      "Technology",
+    );
     await user.click(screen.getByRole("button", { name: "Save PLTR Sector" }));
     await waitFor(() =>
       expect(screen.queryByText("Sector missing")).not.toBeInTheDocument(),
@@ -232,7 +238,9 @@ describe("holding-level XIRR statuses", () => {
       await screen.findByRole("button", { name: "Edit PLTR Sector" }),
     ).toBeEnabled();
     expect(screen.queryByText(/Could not load this holding's return/)).toBeNull();
-    expect(await screen.findByText(/Could not load this holding's return/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Could not load this holding's return/),
+    ).toBeInTheDocument();
   });
 
   it("treats a missing return as local to its card, not a missing holding", async () => {
@@ -242,7 +250,9 @@ describe("holding-level XIRR statuses", () => {
       ),
     );
     render(<HoldingDetail portfolioId={3} ticker="PLTR" />);
-    expect(await screen.findByText("No return reported for this holding.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("No return reported for this holding."),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit PLTR Sector" })).toBeEnabled();
   });
 

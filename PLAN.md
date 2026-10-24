@@ -142,6 +142,7 @@ Testing is a **build-time discipline, not a phase.** Each task below is only com
 - [x] Holding-history review, missing-transaction repair and fingerprint-bound confirmation, with read-only ledger provenance.
 - [x] Portfolio-scoped sector/industry suggestions with accessible editing and explicit saves.
 - [x] Interactive allocation donuts with linked slice/legend previews, pinning and current-holding breakdowns using backend weights.
+- [x] Persistent bookmarkable Overview, Reported Holdings, Ledger Analytics, Imports and Account Settings pages; brokerage-selected Robinhood/Vanguard forms live only on Imports, and Taxable Brokerage maps to the existing TAXABLE account type.
 
 ## Account & Exposure Intelligence — Approved Delivery Plan
 
