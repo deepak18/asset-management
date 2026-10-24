@@ -667,3 +667,53 @@ delivered. Independent checks: 270 frontend tests in 34 files, lint/typecheck pa
 580 backend tests passed, 3 live integration tests deselected, Ruff passed, mypy
 passed for 57 source files. Delegate production build passed. Live browser/backend
 integration was not exercised.
+
+## Chromium browser foundation (slice 1)
+
+New active files:
+```text
+frontend/
+  playwright.config.ts          # Own mock-only loopback Next server, desktop/narrow Chromium, failure artifacts and HTML reporter
+  e2e/
+    fixtures.ts                 # Real browser health checks, MSW response verification and narrowly recorded missing-favicon 404
+    navigation.spec.ts          # Actual route/active-link clicks, persisted portfolio/query selection and exclusive brokerage forms
+```
+
+Updated files and responsibilities:
+- `frontend/package.json` / `frontend/package-lock.json`: npm-pinned Playwright and
+  headless/headed/UI/debug/report/Chromium-install commands; Vitest scripts unchanged.
+- `frontend/next.config.ts`: `FRONTEND_E2E=1` selects `.next/e2e` to avoid the ordinary
+  dev output/lock; default runtime configuration is unchanged.
+- `frontend/tsconfig.json`: includes Next-generated E2E route types alongside normal types.
+- `frontend/.gitignore`: ignores reports, test results, blob reports and Playwright cache.
+- `frontend/vitest.config.ts`: caps costly jsdom/MSW fan-out at four workers after measured default-pool timeouts, with isolation/assertions/timeouts unchanged.
+- `frontend/eslint.config.mjs`: excludes generated report scripts/artifacts from linting.
+- `README.md` / `frontend/README.md`: runnable browser setup, terminal workflows,
+  artifact/error policies, explicit frontend-only/MSW versus full-stack/MCP limits;
+  frontend runbook retains read-only creation-dialog geometry and reproduction.
+- `PLAN.md`: marks browser foundation delivered and production dialog fix deferred.
+- `STRUCTURE.md`: this file inventory; existing application/backend inventory unchanged.
+
+The published `backend/openapi.json` is unchanged. Browser navigation consumes the
+existing typed client and MSW portfolio/account, holdings/analytics/ledger,
+valuation/security and import-history/activity GETs; no API stubs, financial logic,
+private fixtures, live smoke, production dialog changes or backend edits were added.
+Generated worker, reports/recordings and `.next` output remain untracked. Local
+`frontend/playwright/.cache/layout-investigation/create-*.png` and
+`create-geometry.json` preserve read-only creation-dialog evidence for slice 2.
+Final slice validation (commands run from `frontend/`):
+- `npm install --save-dev --save-exact @playwright/test`: pinned 1.64.1; Chromium
+  installed with `npx playwright install chromium`; documented `npm run test:e2e:install` also passed.
+- `npm run test:e2e`: 6/6 passed (41.4s); `npm run test:e2e:headed -- --project=chromium`: 3/3 passed (22.2s).
+- Two consecutive final plain `npm test` runs: 270/270, 34 files (42.87s and 44.59s).
+- `npm run lint`, `npm run typecheck`, `npm run build`: exit 0. Normal build regenerated
+  default Next ambient types; `next-env.d.ts` is unchanged in the delivered diff.
+- Earlier launch/locator/lint failures were corrected with isolated output, semantic
+  level-one title queries and a non-hook fixture callback name. Headed Chromium's
+  exact missing-favicon 404 is trace-verified and recorded, not generically suppressed.
+- Default-pool full unit runs had 269/270, 269/270 and 267/270 with five-second
+  whole-test timeouts in existing dashboard/refetch workflows. Focused refetch tests
+  passed 4/4; a four-worker experiment passed 270/270 before persisting the cap.
+  No old test was edited/skipped, and no timeout, assertion or retry policy was relaxed.
+- Installation reported 18 npm audit findings; dependency remediation was not attempted.
+  No full-stack/live-account test, staging or commit was performed.

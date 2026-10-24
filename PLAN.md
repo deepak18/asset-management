@@ -426,3 +426,25 @@ This spike informs roadmap slices 4 (dated fund holdings) and 8 (fundamentals);
 it does not mark either implemented or claim complete ETF coverage. Reuse the
 existing quote provider and issuer-file/explicit-partial fallback strategy rather
 than treating SEC filings as a universal market-data replacement.
+
+## Frontend browser testing and dialog follow-up
+
+- [x] Slice 1: pinned Playwright Chromium foundation with desktop/narrow real-browser
+  route navigation, active-page semantics, persisted portfolio/query selection,
+  Robinhood/Vanguard form selection and no imports on Overview. Uses the existing
+  fictitious MSW contract responses, not full-stack/live accounts. Own loopback
+  server on 3100, forced mock/same-origin API config, automatic public worker,
+  isolated Next E2E output/lock, browser error checks and failure artifacts/HTML report.
+  Headless, headed, UI, debug, report and Chromium-install terminal commands are
+  documented. IDE Playwright MCP registration is separate and not configured.
+- [ ] Slice 2: investigate and repair actual dialog/layout problems in real Chromium,
+  then add targeted browser regressions. No production dialog change or clipping
+  assertion belongs to slice 1.
+
+Slice 1 validation: Chromium desktop/narrow **6/6 passed**; existing Vitest suite
+**270/270 passed in 34 files**. Published `backend/openapi.json` is unchanged;
+no backend changes, generated API changes, live smoke or financial calculations.
+Unit-runner tooling caps expensive jsdom/MSW fan-out at four workers after repeated
+parallel whole-test timeouts; existing assertions, isolation, timeouts and retries
+are unchanged. The frontend runbook records the experiment and the separate
+creation-dialog containing-block bug reproduced read-only for slice 2.

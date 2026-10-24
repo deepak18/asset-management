@@ -11,7 +11,13 @@
     "typecheck": "tsc --noEmit",
     "typegen": "openapi-typescript ../backend/openapi.json --output src/types/api.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui --ui-host=127.0.0.1",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:report": "playwright show-report --host 127.0.0.1",
+    "test:e2e:install": "playwright install chromium"
   },
   "dependencies": {
     "class-variance-authority": "0.7.1",
@@ -24,6 +30,7 @@
     "tailwind-merge": "2.6.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@testing-library/dom": "10.4.0",
     "@testing-library/jest-dom": "6.6.3",
     "@testing-library/react": "16.1.0",

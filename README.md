@@ -421,3 +421,29 @@ in the API). Account type describes tax treatment; custodian identifies the brok
 Imports no longer appear beneath holdings or ledger analytics. Switching brokerage
 or leaving the page discards local review/upload state, but already-submitted server
 work may complete. Inspect retained history before retrying.
+
+## Frontend Chromium browser testing
+
+From the repository root:
+
+```powershell
+cd frontend
+npm ci
+npm run test:e2e:install  # download pinned Chromium
+npm run test:e2e          # real browser, desktop + narrow viewport
+npm run test:e2e:headed   # watch automated clicks in a visible browser
+npm run test:e2e:ui       # interactive test selection and re-runs
+npm run test:e2e:debug -- --project=chromium -g "feature links"
+npm run test:e2e:report   # last HTML report, loopback only
+```
+
+This is **frontend browser E2E, not full-stack**: the real Next app uses existing
+fictitious MSW responses, with no backend or live-account writes. The runner owns
+`http://127.0.0.1:3100`, refuses existing servers, forces mocking and a same-origin
+API URL regardless of local live settings, and generates the public MSW worker.
+Next test build output is isolated under `.next/e2e`. No live URL override is provided.
+Failure screenshots/video/traces and the HTML report are generated and git-ignored.
+See [the browser runbook](frontend/README.md#chromium-browser-e2e-frontend-only)
+for debugging, artifact paths and coverage limits. Terminal Playwright works now;
+Playwright MCP registration is a separate optional IDE/plugin setup, not installed
+or configured by this slice. No IDE MCP tools or full-stack coverage are claimed.

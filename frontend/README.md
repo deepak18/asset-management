@@ -609,3 +609,78 @@ future backend contract slice before fund look-through, not a guessed frontend A
   both brokerage result links and abandoned-work isolation are covered with MSW.
 - No API contract, generated types, dependencies, backend or import-form edits.
   Live browser/backend integration was not exercised.
+
+## Chromium browser E2E (frontend only)
+
+Playwright drives the real Next app with existing fictitious MSW browser responses.
+This is **frontend browser E2E, not full-stack**: no FastAPI, database, private CSV
+or live account is used. The published OpenAPI, generated types and typed client
+are unchanged. From the repository root:
+
+```powershell
+cd frontend
+npm ci
+npm run test:e2e:install  # install pinned Chromium; repeat after Playwright upgrades
+npm run test:e2e          # desktop + 390px narrow Chromium
+npm run test:e2e:headed   # visible Chromium windows, automated clicks
+npm run test:e2e:ui       # interactive test picker, re-runs and trace inspection
+npm run test:e2e:debug -- --project=chromium -g "feature links"
+npm run test:e2e:report   # last HTML report, loopback only
+```
+
+Linux CI also needs `npx playwright install --with-deps chromium`. `.github/`
+contains agent profiles only; this slice adds no CI job or IDE registration.
+Each run owns <http://127.0.0.1:3100>, generates `public/mockServiceWorker.js`,
+forces `NEXT_PUBLIC_API_MOCKING=enabled` and a same-origin API base regardless of
+shell/`.env.local` live settings. No live-URL override or optional live smoke exists.
+Existing servers are never reused: occupied 3100 fails. `FRONTEND_E2E=1` selects
+isolated `.next/e2e` output/lock in Next config, leaving ordinary dev output alone.
+Next regenerates ambient route types when switching between dev/build modes.
+Each test gets fresh browser storage and fixture state; mock writes do not survive reloads.
+
+Terminal automation works now: headed mode shows real clicks, UI mode selects and
+re-runs tests, debug mode opens the Inspector for stepping/pausing. While paused,
+interact with the visible mock app. Add typed specs under `e2e/` importing
+`test`/`expect` from `./fixtures`, use role/label locators, and run
+`npm run test:e2e -- e2e/your-file.spec.ts --project=chromium`. Add `await page.pause()`
+for an explicit breakpoint. **Playwright MCP is a separate optional IDE/plugin
+integration** requiring actual supported installation/registration; npm Playwright
+does not register MCP. This session has terminal tools only; no guessed IDE MCP
+configuration or MCP browser capability is supplied.
+
+Coverage: actual feature navigation and `aria-current`, selection through reload,
+no-query entry and query override, exclusive Robinhood/Vanguard forms, disabled
+unready preview, and no import forms on Overview. Both viewports run all cases.
+The fixture checks console errors, uncaught page errors, failed requests, API HTTP
+errors and MSW bypass, and requires actual service-worker-backed reads. Only
+`net::ERR_ABORTED` request failures are ignored for navigation/unmount cancellation.
+Headed Chromium additionally requests the app's missing `/favicon.ico`: only that
+exact same-origin resource URL plus the exact 404 console message is recorded as
+`knownResourceErrors` instead of failing. The retained trace established its source;
+no generic console/HTTP error filter or network stub is used. Console warnings are
+not suppressed or treated as console errors. No extra API stubs or financial
+calculations are added.
+
+HTML report: `playwright-report/`. Failed tests retain screenshot, video and trace
+under `test-results/`; browser-health JSON records errors and mocked reads. Use
+`npm run test:e2e:report` or `npx playwright show-trace test-results/<case>/trace.zip`.
+Artifacts, worker and caches are git-ignored; generated report scripts are excluded
+from ESLint. No screenshot baselines or dialog clipping assertions are introduced;
+production dialog repair is the next slice. Run `npm test`, `npm run lint` and
+`npm run typecheck` alongside browser tests.
+
+The Vitest runner now caps jsdom/MSW fan-out at **four workers**. The original
+unbounded pool passed initially, then repeatedly exceeded unchanged five-second
+whole-test budgets in existing dashboard/refetch workflows; focused tests passed.
+A four-worker experiment passed all 270 tests and reduced cumulative test execution
+from roughly 170s to 61s. File isolation and parallelism remain enabled; no existing
+test, assertion, wait budget, retry policy or financial behavior was changed.
+
+**Slice 2 evidence (read-only):** open `/` in the mock app and click **New Portfolio**,
+then dismiss with Escape without submitting. At 1280×720, its overlay measures only
+108px high and its panel starts at y = −109px; at 390×844, those values are 224px
+and −61px. The title and Close Dialog sit above the viewport. The inline fixed
+modal is inside the sticky header with `backdrop-filter: blur(8px)`, which establishes
+its containing block. Local ignored evidence: `playwright/.cache/layout-investigation/`
+contains `create-1280.png`, `create-390.png` and `create-geometry.json`. This bug is
+not repaired or asserted by slice 1; slice 2 must ship the targeted browser regression.

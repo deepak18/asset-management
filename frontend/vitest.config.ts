@@ -19,6 +19,8 @@ export default defineConfig({
     },
   },
   test: {
+    // Each jsdom/MSW worker is expensive; unbounded CPU fan-out starves UI waits.
+    maxWorkers: 4,
     environment: "jsdom",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
