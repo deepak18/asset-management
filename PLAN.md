@@ -358,9 +358,10 @@ integration time. Open-source server licence does not grant rights to upstream d
 | [stefanoamorelli/fred-mcp-server](https://github.com/stefanoamorelli/fred-mcp-server) | `fred_browse`, `fred_search`, `fred_get_series` for macro series | Self-hosted AGPL-3.0; FRED API key required; stdio or HTTP. Free-access candidate, not live validated. FRED official key-doc request timed out during research, so upstream key terms were not independently revalidated. Not a constituent provider. |
 | [Alex2Yang97/yahoo-finance-mcp](https://github.com/Alex2Yang97/yahoo-finance-mcp) | Prices, statements, corporate actions and news | MIT; README showed local process configuration. `get_holder_info` describes OWNERS of a security, not investments inside a fund; do not confuse institutional ownership with fund constituents. Secondary candidate, not the primary look-through source. |
 
-**Recommended source strategy:** verify existing AlphaVantage ETF free entitlement/MCP
-capability first; for mutual funds, evaluate free self-hosted EdgarTools N-PORT plus
-issuer holdings files behind the same typed provider. Use yfinance MCP as explicitly
+**Recommended source strategy (updated 2026-10-24):** prioritize the self-hosted
+EdgarTools stock/ETF capability spike described below, retaining AlphaVantage for
+quotes. Evaluate EdgarTools N-PORT plus issuer holdings files behind the same typed
+provider; verify AlphaVantage ETF free entitlement/MCP as a complementary source. Use yfinance MCP as explicitly
 partial composition/metadata fallback, and retain manual issuer-file upload. Add FRED
 only when macro workflows need it. No researched source establishes full coverage of
 all plan-specific investments. Do not substitute ETFs for unresolved mutual funds/CITs.
@@ -405,3 +406,23 @@ behind providers and citations durable. No MCP installation is needed for slices
 - Live browser/API integration and external MCP tool calls were not exercised.
   Post-import identity amendment remains the separate future backend seam already
   identified by slice 2a.
+
+### EdgarTools stock and ETF integration plan (2026-10-24)
+
+Planning only: no dependency, server, configuration or live tool validation is delivered.
+This prioritizes self-hosted EdgarTools as the next SEC-data capability spike;
+AlphaVantage remains the existing quote provider, not a dependency to replace first.
+Existing research links above are background evidence, not newly verified tool support.
+
+- [x] Record the stock/ETF integration scope and acceptance gates.
+- [ ] Pin and review the self-hosted EdgarTools release, licence and dependencies; configure an identified SEC user agent, fair-access throttling, timeouts and private HTTP binding. Discover actual MCP tools and schemas over streamable HTTP supported by the current client; do not assume stdio support in that client.
+- [ ] Stocks: expose typed filing discovery and period/unit/currency-aware XBRL facts behind SECProvider and, where normalized fundamentals are needed, MarketDataProvider. Retain CIK, accession, source URL, reporting period and retrieval time. Ratios stay deterministic, outside AI.
+- [ ] ETFs/funds: verify whether discovered tools expose N-PORT holdings. If not, design a narrow local MCP wrapper around the pinned library, behind a typed fund-holdings provider. Confirm fund series/share-class identity first; the separate post-import security amendment seam is a prerequisite for unresolved imported funds.
+- [ ] Persist dated constituent snapshots with exact decimal quantities/weights, source denominator, filing/report dates, accession, source URL and retrieval time. Distinguish FULL/PARTIAL/UNAVAILABLE/STALE, retain residuals, and never normalize a top-holdings subset to 100%. Filing-based holdings are delayed, not live ETF composition or quotes. Unsupported ETFs, CITs and plan products stay unavailable, never substituted.
+- [ ] Deliver schemas/migrations, pure normalization, provider/cache/service and mocked tests, then API/OpenAPI, then a separate typed frontend slice. No business logic or direct SEC I/O in AI/routes/browser components; no speculative endpoint is published by this plan.
+- [ ] Acceptance: mocked tool discovery/malformed results/timeouts/limits; cache hit/expiry/stale fallback; restated facts and units/periods; identity mismatch; partial weights/residuals; durable citations and null fidelity. Add opt-in live smoke tests using public stock and ETF examples only, plus route/MSW tests after the seam is published.
+
+This spike informs roadmap slices 4 (dated fund holdings) and 8 (fundamentals);
+it does not mark either implemented or claim complete ETF coverage. Reuse the
+existing quote provider and issuer-file/explicit-partial fallback strategy rather
+than treating SEC filings as a universal market-data replacement.

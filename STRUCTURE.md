@@ -17,7 +17,7 @@ asset-management/
 │       ├── backend-implementer.agent.md  # ✅ Backend-only implementation, typed API contract, pytest/ruff/mypy and exact commit handoff to the orchestrator
 │       └── frontend-implementer.agent.md # ✅ Frontend-only OpenAPI/UI implementation, MSW/RTL/lint/typecheck and exact commit handoff to the orchestrator
 ├── AGENTS.md                  # ✅ Agent operational protocol, default local slice commits and core design principles
-├── PLAN.md                    # ✅ Phased roadmap, delivered capabilities, resumable account/exposure slice contracts and sourced free-MCP research
+├── PLAN.md                    # ✅ Phased roadmap, delivered capabilities, resumable account/exposure contracts, sourced free-MCP research and gated EdgarTools stock/ETF integration plan
 ├── STRUCTURE.md               # ✅ This file — directory source of truth
 ├── README.md                  # ✅ Human runbook (setup, run, deploy)
 ├── .gitignore                 # ✅ Ignore rules (secrets, envs, build artifacts)
